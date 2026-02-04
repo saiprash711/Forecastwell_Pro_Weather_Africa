@@ -192,6 +192,9 @@ async function loadDashboardData() {
             updateCitiesGrid(weather.data);
             populateCitySelects(weather.data);
             
+            // Update historical city select with loaded data
+            populateHistoricalCitySelect();
+            
             // Initialize charts (deferred slightly for smoother UX)
             requestAnimationFrame(() => {
                 initializeDashboardCharts(weather.data);
@@ -2175,13 +2178,36 @@ function setupHistoricalEventListeners() {
     populateHistoricalCitySelect();
 }
 
+// Default cities list (fallback when API data not loaded yet)
+const DEFAULT_CITIES = [
+    { id: 'chennai', name: 'Chennai' },
+    { id: 'bangalore', name: 'Bangalore' },
+    { id: 'hyderabad', name: 'Hyderabad' },
+    { id: 'kochi', name: 'Kochi' },
+    { id: 'coimbatore', name: 'Coimbatore' },
+    { id: 'visakhapatnam', name: 'Visakhapatnam' },
+    { id: 'madurai', name: 'Madurai' },
+    { id: 'secunderabad', name: 'Secunderabad' }
+];
+
 function populateHistoricalCitySelect() {
     const select = document.getElementById('historicalCitySelect');
-    if (!select || !currentCityData) return;
+    if (!select) return;
+    
+    // Use currentCityData if available, otherwise use default cities
+    let cities = [];
+    if (currentCityData && currentCityData.length > 0) {
+        cities = currentCityData.map(city => ({
+            id: city.city_id,
+            name: city.city_name
+        }));
+    } else {
+        cities = DEFAULT_CITIES;
+    }
     
     select.innerHTML = '<option value="all">All Cities</option>' +
-        currentCityData.map(city => 
-            `<option value="${city.city_id}">${city.city_name}</option>`
+        cities.map(city => 
+            `<option value="${city.id}">${city.name}</option>`
         ).join('');
 }
 
