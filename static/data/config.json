@@ -1,0 +1,149 @@
+{
+  "dashboard_info": {
+    "name": "ForecastWell Dashboard",
+    "version": "1.0.0",
+    "description": "Weather-based demand forecasting for HVAC and consumer durables",
+    "developer": "Hansei Consultancy",
+    "data_source": "India Meteorological Department (IMD)"
+  },
+  "cities": [
+    {
+      "id": "chennai",
+      "name": "Chennai",
+      "state": "Tamil Nadu",
+      "coordinates": {
+        "latitude": 13.0827,
+        "longitude": 80.2707
+      },
+      "imd_station": "CHENNAI",
+      "importance": "Major HVAC market, coastal climate"
+    },
+    {
+      "id": "bangalore",
+      "name": "Bangalore",
+      "state": "Karnataka",
+      "coordinates": {
+        "latitude": 12.9716,
+        "longitude": 77.5946
+      },
+      "imd_station": "BANGALORE",
+      "importance": "IT hub, high purchasing power"
+    },
+    {
+      "id": "hyderabad",
+      "name": "Hyderabad",
+      "state": "Telangana",
+      "coordinates": {
+        "latitude": 17.3850,
+        "longitude": 78.4867
+      },
+      "imd_station": "HYDERABAD",
+      "importance": "Growing market, hot summers"
+    },
+    {
+      "id": "kochi",
+      "name": "Kochi",
+      "state": "Kerala",
+      "coordinates": {
+        "latitude": 9.9312,
+        "longitude": 76.2673
+      },
+      "imd_station": "KOCHI",
+      "importance": "Coastal high humidity region"
+    },
+    {
+      "id": "coimbatore",
+      "name": "Coimbatore",
+      "state": "Tamil Nadu",
+      "coordinates": {
+        "latitude": 11.0168,
+        "longitude": 76.9558
+      },
+      "imd_station": "COIMBATORE",
+      "importance": "Industrial city, textile hub"
+    },
+    {
+      "id": "visakhapatnam",
+      "name": "Visakhapatnam",
+      "state": "Andhra Pradesh",
+      "coordinates": {
+        "latitude": 17.6868,
+        "longitude": 83.2185
+      },
+      "imd_station": "VISAKHAPATNAM",
+      "importance": "Port city, emerging market"
+    }
+  ],
+  "thresholds": {
+    "critical_acceleration": {
+      "temperature": 40,
+      "action": "Increase inventory by 50-60%",
+      "priority": "CRITICAL"
+    },
+    "acceleration": {
+      "temperature": 35,
+      "action": "Increase inventory by 30-40%",
+      "priority": "HIGH"
+    },
+    "de_acceleration": {
+      "temperature": 28,
+      "action": "Reduce inventory replenishment",
+      "priority": "LOW"
+    }
+  },
+  "demand_index_calculation": {
+    "temperature_ranges": [
+      {"range": "≤25°C", "base_index": 10},
+      {"range": "26-30°C", "base_index": 30},
+      {"range": "31-35°C", "base_index": 60},
+      {"range": "36-40°C", "base_index": 85},
+      {"range": ">40°C", "base_index": 95}
+    ],
+    "humidity_adjustment": {
+      "high_humidity": ">70% → +15% to base index",
+      "low_humidity": "<40% → -10% to base index"
+    }
+  },
+  "api_endpoints": [
+    {
+      "path": "/api/cities",
+      "method": "GET",
+      "description": "Get list of all cities"
+    },
+    {
+      "path": "/api/weather/current",
+      "method": "GET",
+      "description": "Get current weather for all cities"
+    },
+    {
+      "path": "/api/weather/city/<city_id>",
+      "method": "GET",
+      "description": "Get detailed weather for specific city"
+    },
+    {
+      "path": "/api/alerts",
+      "method": "GET",
+      "description": "Get all active alerts"
+    },
+    {
+      "path": "/api/forecast/analysis/<city_id>",
+      "method": "GET",
+      "description": "Get forecast analysis and recommendations"
+    },
+    {
+      "path": "/api/dashboard/summary",
+      "method": "GET",
+      "description": "Get dashboard summary statistics"
+    }
+  ],
+  "features": [
+    "Interactive South India map with real-time temperature markers",
+    "Temperature trend charts (30-day historical + 7-day forecast)",
+    "Alert system with threshold-based triggers",
+    "Action recommendations for inventory and production",
+    "Demand index calculation (0-100 scale)",
+    "Auto-refresh every 5 minutes",
+    "Responsive design for mobile and desktop",
+    "IMD official data integration"
+  ]
+}
