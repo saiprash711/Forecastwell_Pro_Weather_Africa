@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 ForecastWell Pro Dashboard Initializing...');
     initializeDashboard();
     setupEventListeners();
+    setupHeatmapCitySelectListener();
     startClock();
     
     // Auto-refresh
@@ -2645,13 +2646,28 @@ function populateHeatmapCitySelect() {
         cities = DEFAULT_CITIES;
     }
     
+    // Preserve current selection
+    const currentValue = select.value;
+    
     select.innerHTML = '<option value="all">All Cities (Average)</option>' +
         cities.map(city => 
             `<option value="${city.id}">${city.name}</option>`
         ).join('');
     
-    // Add event listener for city change
-    select.addEventListener('change', (e) => {
+    // Restore selection if it still exists
+    if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
+        select.value = currentValue;
+    }
+}
+
+// Setup heatmap city select event listener (called once on init)
+function setupHeatmapCitySelectListener() {
+    const select = document.getElementById('heatmapCitySelect');
+    if (!select) return;
+    
+    // Remove any existing listener by replacing the element
+    select.addEventListener('change', function(e) {
+        console.log('Heatmap city changed to:', e.target.value);
         generateMonthlyHeatmap(e.target.value);
     });
 }
