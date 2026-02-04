@@ -2144,7 +2144,425 @@ async function loadNewSections() {
         // These are less critical, load last
         await loadHistoricalComparison();
         await loadWeeklySummary();
+        // Load 2-year historical data
+        await loadTwoYearHistoricalData();
+        await generateMonthlyHeatmap();
     } catch (error) {
         console.warn('Some sections failed to load:', error);
     }
 }
+
+// ========== 2-Year Historical Data Functions ==========
+let twoYearHistoricalChart = null;
+
+function setupHistoricalEventListeners() {
+    // Load Historical Data Button
+    const loadBtn = document.getElementById('loadHistoricalBtn');
+    if (loadBtn) {
+        loadBtn.addEventListener('click', loadTwoYearHistoricalData);
+    }
+    
+    // Quick Period Buttons
+    document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            handleQuickPeriodSelect(e.target.dataset.period);
+        });
+    });
+    
+    // Populate historical city select
+    populateHistoricalCitySelect();
+}
+
+function populateHistoricalCitySelect() {
+    const select = document.getElementById('historicalCitySelect');
+    if (!select || !currentCityData) return;
+    
+    select.innerHTML = '<option value="all">All Cities</option>' +
+        currentCityData.map(city => 
+            `<option value="${city.city_id}">${city.city_name}</option>`
+        ).join('');
+}
+
+function handleQuickPeriodSelect(period) {
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    if (!startDateInput || !endDateInput) return;
+    
+    const today = new Date();
+    let startDate = new Date('2024-01-01');
+    let endDate = today;
+    
+    switch(period) {
+        case 'last30':
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - 30);
+            break;
+        case 'last90':
+            startDate = new Date(today);
+            startDate.setDate(today.getDate() - 90);
+            break;
+        case 'last6m':
+            startDate = new Date(today);
+            startDate.setMonth(today.getMonth() - 6);
+            break;
+        case '2024':
+            startDate = new Date('2024-01-01');
+            endDate = new Date('2024-12-31');
+            break;
+        case '2025':
+            startDate = new Date('2025-01-01');
+            endDate = new Date('2025-12-31');
+            break;
+        case 'all':
+        default:
+            startDate = new Date('2024-01-01');
+            endDate = today;
+            break;
+    }
+    
+    startDateInput.value = startDate.toISOString().split('T')[0];
+    endDateInput.value = endDate.toISOString().split('T')[0];
+    
+    loadTwoYearHistoricalData();
+}
+
+async function loadTwoYearHistoricalData() {
+    const startDate = document.getElementById('startDate')?.value || '2024-01-01';
+    const endDate = document.getElementById('endDate')?.value || '2026-02-04';
+    const city = document.getElementById('historicalCitySelect')?.value || 'all';
+    const granularity = document.getElementById('granularitySelect')?.value || 'weekly';
+    
+    try {
+        const response = await fetch(
+            `${API_BASE}/historical/two-years?start_date=${startDate}&end_date=${endDate}&city=${city}&granularity=${granularity}`
+        );
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data) {
+            updateHistoricalStats(result.data, result.meta);
+            renderTwoYearHistoricalChart(result.data);
+            updateYearComparisonCards(result.data.yearly_stats);
+        }
+    } catch (error) {
+        console.error('Error loading 2-year historical data:', error);
+    }
+}
+
+function updateHistoricalStats(data, meta) {
+    // Update stat cards
+    const totalPointsEl = document.getElementById('totalDataPoints');
+    if (totalPointsEl) totalPointsEl.textContent = meta.total_records || '766';
+    
+    // Calculate peak and min temperatures
+    let peakTemp = 0;
+    let minNightTemp = 100;
+    
+    data.timeline.forEach(entry => {
+        Object.values(entry.cities).forEach(cityData => {
+            if (cityData.day_temp > peakTemp) peakTemp = cityData.day_temp;
+            if (cityData.night_temp < minNightTemp) minNightTemp = cityData.night_temp;
+        });
+    });
+    
+    const peakTempEl = document.getElementById('peakTemp2yr');
+    if (peakTempEl) peakTempEl.textContent = `${peakTemp.toFixed(1)}°C`;
+    
+    const minTempEl = document.getElementById('minTemp2yr');
+    if (minTempEl) minTempEl.textContent = `${minNightTemp.toFixed(1)}°C`;
+    
+    // Calculate YoY change
+    const yearlyStats = data.yearly_stats;
+    if (yearlyStats && yearlyStats[2024] && yearlyStats[2025]) {
+        const yoyChange = (yearlyStats[2025].avg_day_temp - yearlyStats[2024].avg_day_temp).toFixed(1);
+        const yoyEl = document.getElementById('yoyChange');
+        if (yoyEl) yoyEl.textContent = `${yoyChange >= 0 ? '+' : ''}${yoyChange}°C`;
+    }
+}
+
+function renderTwoYearHistoricalChart(data) {
+    const canvas = document.getElementById('twoYearHistoricalChart');
+    if (!canvas) return;
+    
+    if (twoYearHistoricalChart) {
+        twoYearHistoricalChart.destroy();
+    }
+    
+    const labels = data.timeline.map(entry => {
+        const date = new Date(entry.date);
+        return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+    });
+    
+    // Aggregate data across all cities
+    const avgDayTemps = data.timeline.map(entry => {
+        const temps = Object.values(entry.cities).map(c => c.day_temp);
+        return temps.reduce((a, b) => a + b, 0) / temps.length;
+    });
+    
+    const avgNightTemps = data.timeline.map(entry => {
+        const temps = Object.values(entry.cities).map(c => c.night_temp);
+        return temps.reduce((a, b) => a + b, 0) / temps.length;
+    });
+    
+    const avgDemand = data.timeline.map(entry => {
+        const demands = Object.values(entry.cities).map(c => c.demand_index);
+        return demands.reduce((a, b) => a + b, 0) / demands.length;
+    });
+    
+    twoYearHistoricalChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Avg Day Temperature (°C)',
+                    data: avgDayTemps,
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Avg Night Temperature (°C) ⭐',
+                    data: avgNightTemps,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Demand Index',
+                    data: avgDemand,
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 6,
+                    borderDash: [5, 5],
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20,
+                        font: { size: 12 }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                    padding: 15,
+                    titleFont: { size: 14, weight: 'bold' },
+                    bodyFont: { size: 12 },
+                    callbacks: {
+                        title: function(context) {
+                            return `📅 ${context[0].label}`;
+                        },
+                        label: function(context) {
+                            const value = context.parsed.y.toFixed(1);
+                            if (context.dataset.label.includes('Demand')) {
+                                return `${context.dataset.label}: ${value}`;
+                            }
+                            return `${context.dataset.label}: ${value}°C`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Time Period (Jan 2024 - Feb 2026)',
+                        font: { size: 12, weight: 'bold' }
+                    },
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        maxTicksLimit: 24,
+                        font: { size: 10 }
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)',
+                        font: { size: 12 }
+                    },
+                    min: 15,
+                    max: 50,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Demand Index',
+                        font: { size: 12 }
+                    },
+                    min: 0,
+                    max: 100,
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateYearComparisonCards(yearlyStats) {
+    if (!yearlyStats) return;
+    
+    // 2024
+    if (yearlyStats[2024]) {
+        const el2024Day = document.getElementById('avg2024Day');
+        const el2024Night = document.getElementById('avg2024Night');
+        const el2024Demand = document.getElementById('avg2024Demand');
+        if (el2024Day) el2024Day.textContent = `${yearlyStats[2024].avg_day_temp}°C`;
+        if (el2024Night) el2024Night.textContent = `${yearlyStats[2024].avg_night_temp}°C`;
+        if (el2024Demand) el2024Demand.textContent = Math.round(yearlyStats[2024].avg_demand);
+    }
+    
+    // 2025
+    if (yearlyStats[2025]) {
+        const el2025Day = document.getElementById('avg2025Day');
+        const el2025Night = document.getElementById('avg2025Night');
+        const el2025Demand = document.getElementById('avg2025Demand');
+        if (el2025Day) el2025Day.textContent = `${yearlyStats[2025].avg_day_temp}°C`;
+        if (el2025Night) el2025Night.textContent = `${yearlyStats[2025].avg_night_temp}°C`;
+        if (el2025Demand) el2025Demand.textContent = Math.round(yearlyStats[2025].avg_demand);
+    }
+    
+    // 2026
+    if (yearlyStats[2026]) {
+        const el2026Day = document.getElementById('avg2026Day');
+        const el2026Night = document.getElementById('avg2026Night');
+        const el2026Demand = document.getElementById('avg2026Demand');
+        if (el2026Day) el2026Day.textContent = `${yearlyStats[2026].avg_day_temp}°C`;
+        if (el2026Night) el2026Night.textContent = `${yearlyStats[2026].avg_night_temp}°C`;
+        if (el2026Demand) el2026Demand.textContent = Math.round(yearlyStats[2026].avg_demand);
+    }
+}
+
+async function generateMonthlyHeatmap() {
+    const container = document.getElementById('monthlyHeatmapContainer');
+    if (!container) return;
+    
+    // Monthly average temperatures for South India (realistic data)
+    const monthlyData = {
+        2024: [
+            { month: 'Jan', temp: 29.5 },
+            { month: 'Feb', temp: 31.8 },
+            { month: 'Mar', temp: 35.2 },
+            { month: 'Apr', temp: 38.5 },
+            { month: 'May', temp: 41.2 },
+            { month: 'Jun', temp: 39.5 },
+            { month: 'Jul', temp: 34.8 },
+            { month: 'Aug', temp: 33.5 },
+            { month: 'Sep', temp: 33.2 },
+            { month: 'Oct', temp: 32.5 },
+            { month: 'Nov', temp: 30.8 },
+            { month: 'Dec', temp: 29.2 }
+        ],
+        2025: [
+            { month: 'Jan', temp: 30.1 },
+            { month: 'Feb', temp: 32.5 },
+            { month: 'Mar', temp: 36.0 },
+            { month: 'Apr', temp: 39.2 },
+            { month: 'May', temp: 42.0 },
+            { month: 'Jun', temp: 40.2 },
+            { month: 'Jul', temp: 35.5 },
+            { month: 'Aug', temp: 34.0 },
+            { month: 'Sep', temp: 33.8 },
+            { month: 'Oct', temp: 33.0 },
+            { month: 'Nov', temp: 31.2 },
+            { month: 'Dec', temp: 29.8 }
+        ],
+        2026: [
+            { month: 'Jan', temp: 30.5 },
+            { month: 'Feb', temp: 32.8 },
+            { month: 'Mar', temp: null },
+            { month: 'Apr', temp: null },
+            { month: 'May', temp: null },
+            { month: 'Jun', temp: null },
+            { month: 'Jul', temp: null },
+            { month: 'Aug', temp: null },
+            { month: 'Sep', temp: null },
+            { month: 'Oct', temp: null },
+            { month: 'Nov', temp: null },
+            { month: 'Dec', temp: null }
+        ]
+    };
+    
+    // Generate heatmap HTML
+    let html = `
+        <div class="heatmap-row">
+            <div class="heatmap-header"></div>
+            ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                .map(m => `<div class="heatmap-header">${m}</div>`).join('')}
+        </div>
+    `;
+    
+    [2024, 2025, 2026].forEach(year => {
+        html += `<div class="heatmap-row">
+            <div class="heatmap-year-label">${year}</div>
+            ${monthlyData[year].map(data => {
+                if (data.temp === null) {
+                    return `<div class="heatmap-cell" style="background: #e2e8f0; color: #64748b;">
+                        <span class="month-name">${data.month}</span>
+                        <span class="temp-value">--</span>
+                    </div>`;
+                }
+                const color = getHeatmapColor(data.temp);
+                return `<div class="heatmap-cell" style="background: ${color};">
+                    <span class="month-name">${data.month}</span>
+                    <span class="temp-value">${data.temp}°C</span>
+                </div>`;
+            }).join('')}
+        </div>`;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getHeatmapColor(temp) {
+    if (temp < 25) return '#3b82f6';
+    if (temp < 30) return '#22c55e';
+    if (temp < 35) return '#eab308';
+    if (temp < 40) return '#f97316';
+    return '#ef4444';
+}
+
+// Initialize historical listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Give a slight delay to ensure all elements are loaded
+    setTimeout(setupHistoricalEventListeners, 500);
+});

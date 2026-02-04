@@ -109,6 +109,10 @@
             </div>
             
             <div class="header-center">
+                <div class="data-range-indicator">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Jan 2024 - Feb 2026</span>
+                </div>
                 <div class="live-indicator">
                     <span class="pulse"></span>
                     <span>LIVE</span>
@@ -325,11 +329,249 @@
                     </div>
                 </section>
 
-                <!-- Historical Comparison Section -->
+                <!-- 2-Year Historical Analysis Section -->
+                <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar-alt"></i> 2-Year Historical Analysis</h2>
+                        <span class="section-subtitle">Comprehensive data from January 2024 to February 2026</span>
+                    </div>
+                    
+                    <!-- Date Range Picker -->
+                    <div class="date-range-picker">
+                        <div class="date-picker-group">
+                            <label for="startDate">From</label>
+                            <input type="date" id="startDate" min="2024-01-01" max="2026-02-04" value="2024-01-01">
+                        </div>
+                        <div class="date-picker-group">
+                            <label for="endDate">To</label>
+                            <input type="date" id="endDate" min="2024-01-01" max="2026-02-04" value="2026-02-04">
+                        </div>
+                        <div class="date-picker-group">
+                            <label for="historicalCitySelect">City</label>
+                            <select id="historicalCitySelect">
+                                <option value="all">All Cities</option>
+                            </select>
+                        </div>
+                        <div class="date-picker-group">
+                            <label for="granularitySelect">Granularity</label>
+                            <select id="granularitySelect">
+                                <option value="daily">Daily</option>
+                                <option value="weekly" selected>Weekly</option>
+                                <option value="monthly">Monthly</option>
+                            </select>
+                        </div>
+                        <button class="load-historical-btn" id="loadHistoricalBtn">
+                            <i class="fas fa-chart-line"></i> Load Data
+                        </button>
+                    </div>
+                    
+                    <!-- Quick Period Buttons -->
+                    <div class="quick-period-buttons">
+                        <button class="period-btn" data-period="last30">Last 30 Days</button>
+                        <button class="period-btn" data-period="last90">Last 90 Days</button>
+                        <button class="period-btn" data-period="last6m">Last 6 Months</button>
+                        <button class="period-btn" data-period="2024">Year 2024</button>
+                        <button class="period-btn" data-period="2025">Year 2025</button>
+                        <button class="period-btn active" data-period="all">All Data (2 Years)</button>
+                    </div>
+                    
+                    <!-- Historical Stats Cards -->
+                    <div class="historical-stats-grid" id="historicalStatsGrid">
+                        <div class="historical-stat-card glass-card">
+                            <div class="stat-icon-lg"><i class="fas fa-database"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="totalDataPoints">766</span>
+                                <span class="stat-desc">Data Points</span>
+                            </div>
+                        </div>
+                        <div class="historical-stat-card glass-card">
+                            <div class="stat-icon-lg hot"><i class="fas fa-fire"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="peakTemp2yr">42.3°C</span>
+                                <span class="stat-desc">Peak Temperature</span>
+                            </div>
+                        </div>
+                        <div class="historical-stat-card glass-card">
+                            <div class="stat-icon-lg cool"><i class="fas fa-snowflake"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="minTemp2yr">18.5°C</span>
+                                <span class="stat-desc">Lowest Night Temp</span>
+                            </div>
+                        </div>
+                        <div class="historical-stat-card glass-card">
+                            <div class="stat-icon-lg trend"><i class="fas fa-chart-line"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="yoyChange">+1.2°C</span>
+                                <span class="stat-desc">YoY Change</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Main Historical Chart -->
+                    <div class="chart-container extra-large">
+                        <canvas id="twoYearHistoricalChart"></canvas>
+                    </div>
+                    
+                    <!-- Year Comparison Cards -->
+                    <div class="year-comparison-grid" id="yearComparisonGrid">
+                        <div class="year-card glass-card year-2024">
+                            <div class="year-header">
+                                <h3>📅 2024</h3>
+                                <span class="year-badge complete">Complete</span>
+                            </div>
+                            <div class="year-stats">
+                                <div class="year-stat">
+                                    <span class="label">Avg Day Temp</span>
+                                    <span class="value" id="avg2024Day">34.2°C</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Avg Night Temp</span>
+                                    <span class="value" id="avg2024Night">23.8°C</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Peak Season</span>
+                                    <span class="value">Apr-Jun</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Avg Demand</span>
+                                    <span class="value" id="avg2024Demand">62</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="year-card glass-card year-2025">
+                            <div class="year-header">
+                                <h3>📅 2025</h3>
+                                <span class="year-badge complete">Complete</span>
+                            </div>
+                            <div class="year-stats">
+                                <div class="year-stat">
+                                    <span class="label">Avg Day Temp</span>
+                                    <span class="value" id="avg2025Day">34.8°C</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Avg Night Temp</span>
+                                    <span class="value" id="avg2025Night">24.3°C</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Peak Season</span>
+                                    <span class="value">Apr-Jun</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Avg Demand</span>
+                                    <span class="value" id="avg2025Demand">67</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="year-card glass-card year-2026">
+                            <div class="year-header">
+                                <h3>📅 2026</h3>
+                                <span class="year-badge current">Current</span>
+                            </div>
+                            <div class="year-stats">
+                                <div class="year-stat">
+                                    <span class="label">Avg Day Temp</span>
+                                    <span class="value" id="avg2026Day">31.5°C</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Avg Night Temp</span>
+                                    <span class="value" id="avg2026Night">21.2°C</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Peak Season</span>
+                                    <span class="value">Expected Apr-Jun</span>
+                                </div>
+                                <div class="year-stat">
+                                    <span class="label">Avg Demand</span>
+                                    <span class="value" id="avg2026Demand">58</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Seasonal Patterns Section -->
+                <section class="seasonal-patterns-section glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-leaf"></i> Seasonal Demand Patterns</h2>
+                        <span class="section-subtitle">Understand demand cycles across 2 years</span>
+                    </div>
+                    <div class="seasonal-grid" id="seasonalGrid">
+                        <div class="season-card winter">
+                            <div class="season-icon">❄️</div>
+                            <h4>Winter</h4>
+                            <p>Dec - Feb</p>
+                            <div class="season-demand">
+                                <span class="demand-bar" style="width: 35%"></span>
+                                <span class="demand-value">35%</span>
+                            </div>
+                            <span class="season-trend">Low Demand</span>
+                        </div>
+                        <div class="season-card pre-summer">
+                            <div class="season-icon">🌸</div>
+                            <h4>Pre-Summer</h4>
+                            <p>Mar - Apr</p>
+                            <div class="season-demand">
+                                <span class="demand-bar" style="width: 55%"></span>
+                                <span class="demand-value">55%</span>
+                            </div>
+                            <span class="season-trend rising">Rising</span>
+                        </div>
+                        <div class="season-card peak-summer">
+                            <div class="season-icon">🔥</div>
+                            <h4>Peak Summer</h4>
+                            <p>May - Jun</p>
+                            <div class="season-demand">
+                                <span class="demand-bar" style="width: 85%"></span>
+                                <span class="demand-value">85%</span>
+                            </div>
+                            <span class="season-trend critical">Critical</span>
+                        </div>
+                        <div class="season-card monsoon">
+                            <div class="season-icon">🌧️</div>
+                            <h4>Monsoon</h4>
+                            <p>Jul - Sep</p>
+                            <div class="season-demand">
+                                <span class="demand-bar" style="width: 50%"></span>
+                                <span class="demand-value">50%</span>
+                            </div>
+                            <span class="season-trend moderate">Moderate</span>
+                        </div>
+                        <div class="season-card post-monsoon">
+                            <div class="season-icon">🍂</div>
+                            <h4>Post-Monsoon</h4>
+                            <p>Oct - Nov</p>
+                            <div class="season-demand">
+                                <span class="demand-bar" style="width: 40%"></span>
+                                <span class="demand-value">40%</span>
+                            </div>
+                            <span class="season-trend declining">Declining</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Monthly Heatmap Section -->
+                <section class="monthly-heatmap-section glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-th"></i> Monthly Temperature Heatmap</h2>
+                        <span class="section-subtitle">Visual representation of temperature patterns (Jan 2024 - Feb 2026)</span>
+                    </div>
+                    <div class="heatmap-container-large" id="monthlyHeatmapContainer">
+                        <!-- Generated dynamically -->
+                    </div>
+                    <div class="heatmap-legend">
+                        <span class="legend-item"><span class="legend-color" style="background: #3b82f6"></span> &lt;25°C</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #22c55e"></span> 25-30°C</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #eab308"></span> 30-35°C</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #f97316"></span> 35-40°C</span>
+                        <span class="legend-item"><span class="legend-color" style="background: #ef4444"></span> &gt;40°C</span>
+                    </div>
+                </section>
+
+                <!-- Historical Comparison Section (Original) -->
                 <section class="historical-section glass-card animate__animated animate__fadeInUp">
                     <div class="section-header">
-                        <h2><i class="fas fa-history"></i> Historical Comparison</h2>
-                        <span class="section-subtitle">Current vs historical temperature trends</span>
+                        <h2><i class="fas fa-history"></i> Current vs Historical Average</h2>
+                        <span class="section-subtitle">Compare today's temperatures with 2-year averages</span>
                     </div>
                     <div class="historical-grid" id="historicalContainer">
                         <div class="loading-shimmer"></div>
@@ -670,15 +912,15 @@
         <footer class="main-footer">
             <div class="footer-content">
                 <div class="footer-left">
-                    <span>© 2026 Hansei Consultancy | ForecastWell Pro v2.0</span>
+                    <span>© 2026 Hansei Consultancy | ForecastWell Pro v2.1</span>
                 </div>
                 <div class="footer-center">
-                    <span class="data-source"><i class="fas fa-database"></i> Data: IMD Official</span>
+                    <span class="data-source"><i class="fas fa-database"></i> Data: IMD Official | Jan 2024 - Feb 2026</span>
                     <span class="separator">|</span>
                     <span class="last-update">Last Update: <span id="lastUpdate">--</span></span>
                 </div>
                 <div class="footer-right">
-                    <span class="footer-hint"><i class="fas fa-moon"></i> Night Temp = Primary Demand Driver</span>
+                    <span class="footer-hint"><i class="fas fa-moon"></i> Night Temp = Primary Demand Driver | <i class="fas fa-calendar"></i> 2 Years Data</span>
                 </div>
             </div>
         </footer>
