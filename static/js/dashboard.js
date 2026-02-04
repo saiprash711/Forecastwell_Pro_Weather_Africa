@@ -2532,150 +2532,83 @@ async function generateMonthlyHeatmap(cityId = 'all') {
     // Show loading state
     container.innerHTML = '<div class="loading-shimmer" style="height: 200px;"></div>';
     
-    // Get current month to determine forecast window (+4 months)
-    const currentMonth = new Date().getMonth() + 1; // 1-12
-    const forecastEndMonth = Math.min(currentMonth + 4, 12); // Cap at December
-    
-    // Base monthly temperatures for South India (realistic data)
-    // These serve as baseline averages and will be adjusted per city
-    const baseMonthlyData = {
-        2024: [
-            { month: 'Jan', temp: 29.5 },
-            { month: 'Feb', temp: 31.8 },
-            { month: 'Mar', temp: 35.2 },
-            { month: 'Apr', temp: 38.5 },
-            { month: 'May', temp: 41.2 },
-            { month: 'Jun', temp: 39.5 },
-            { month: 'Jul', temp: 34.8 },
-            { month: 'Aug', temp: 33.5 },
-            { month: 'Sep', temp: 33.2 },
-            { month: 'Oct', temp: 32.5 },
-            { month: 'Nov', temp: 30.8 },
-            { month: 'Dec', temp: 29.2 }
-        ],
-        2025: [
-            { month: 'Jan', temp: 30.1 },
-            { month: 'Feb', temp: 32.5 },
-            { month: 'Mar', temp: 36.0 },
-            { month: 'Apr', temp: 39.2 },
-            { month: 'May', temp: 42.0 },
-            { month: 'Jun', temp: 40.2 },
-            { month: 'Jul', temp: 35.5 },
-            { month: 'Aug', temp: 34.0 },
-            { month: 'Sep', temp: 33.8 },
-            { month: 'Oct', temp: 33.0 },
-            { month: 'Nov', temp: 31.2 },
-            { month: 'Dec', temp: 29.8 }
-        ],
-        2026: [
-            { month: 'Jan', temp: 30.5, forecast: false },
-            { month: 'Feb', temp: 32.8, forecast: false },
-            { month: 'Mar', temp: 36.5, forecast: true },  // Forecasted
-            { month: 'Apr', temp: 39.8, forecast: true },  // Forecasted
-            { month: 'May', temp: 42.5, forecast: true },  // Forecasted (peak summer)
-            { month: 'Jun', temp: 40.8, forecast: true },  // Forecasted
-            { month: 'Jul', temp: null, forecast: false },
-            { month: 'Aug', temp: null, forecast: false },
-            { month: 'Sep', temp: null, forecast: false },
-            { month: 'Oct', temp: null, forecast: false },
-            { month: 'Nov', temp: null, forecast: false },
-            { month: 'Dec', temp: null, forecast: false }
-        ]
-    };
-    
-    // Mark forecasted months based on current date
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    baseMonthlyData[2026] = baseMonthlyData[2026].map((data, index) => {
-        const monthNum = index + 1;
-        // Past or current month - actual data
-        if (monthNum <= currentMonth) {
-            return { ...data, forecast: false };
+    try {
+        // Fetch real data from Open-Meteo API
+        const apiCityId = cityId === 'all' ? 'chennai' : cityId;  // Default to Chennai for "all"
+        const response = await fetch(`/api/heatmap/monthly?city=${apiCityId}`);
+        const result = await response.json();
+        
+        if (result.status !== 'success') {
+            throw new Error(result.message || 'Failed to fetch heatmap data');
         }
-        // Within forecast window (+4 months)
-        if (monthNum <= forecastEndMonth) {
-            return { ...data, forecast: true };
-        }
-        // Beyond forecast window - no data
-        return { month: data.month, temp: null, forecast: false };
-    });
-    
-    // City-specific temperature offsets (relative to South India average)
-    // Positive = hotter, Negative = cooler
-    const cityTempOffsets = {
-        'chennai': 1.5,
-        'hyderabad': 0.8,
-        'bangalore': -3.2,
-        'visakhapatnam': 0.5,
-        'vijayawada': 1.2,
-        'tirupati': 0.9,
-        'madurai': 1.8,
-        'coimbatore': -2.0,
-        'trichy': 1.3,
-        'nellore': 0.7,
-        'guntur': 1.0,
-        'kurnool': 1.5,
-        'warangal': 0.3,
-        'rajahmundry': 0.6,
-        'kakinada': 0.4,
-        'secunderabad': 0.8,
-        'all': 0 // Average (no offset)
-    };
-    
-    // Get the temperature offset for the selected city
-    const offset = cityTempOffsets[cityId] || 0;
-    
-    // Apply city-specific offset to the data
-    const monthlyData = {};
-    [2024, 2025, 2026].forEach(year => {
-        monthlyData[year] = baseMonthlyData[year].map(data => ({
-            month: data.month,
-            temp: data.temp !== null ? Math.round((data.temp + offset) * 10) / 10 : null,
-            forecast: data.forecast || false
-        }));
-    });
-    
-    // Get city name for display
-    let cityName = 'All Cities (Average)';
-    if (cityId !== 'all' && currentCityData) {
-        const cityInfo = currentCityData.find(c => c.city_id === cityId);
-        if (cityInfo) {
-            cityName = cityInfo.city_name;
-        }
-    }
-    
-    // Generate heatmap HTML
-    let html = `
-        <div class="heatmap-row">
-            <div class="heatmap-header"></div>
-            ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                .map(m => `<div class="heatmap-header">${m}</div>`).join('')}
-        </div>
-    `;
-    
-    [2024, 2025, 2026].forEach(year => {
-        html += `<div class="heatmap-row">
-            <div class="heatmap-year-label">${year}</div>
-            ${monthlyData[year].map(data => {
-                if (data.temp === null) {
-                    return `<div class="heatmap-cell" style="background: #e2e8f0; color: #64748b;">
+        
+        const apiData = result.data;
+        const monthlyData = {};
+        
+        // Process API data for each year
+        [2024, 2025, 2026].forEach(year => {
+            monthlyData[year] = apiData.years[year].map(data => ({
+                month: data.month,
+                temp: data.temp !== null ? Math.round(data.temp * 10) / 10 : null,
+                forecast: data.is_forecast || false,
+                source: data.source
+            }));
+        });
+        
+        // Get city name for display
+        let cityName = apiData.city_name || 'All Cities (Average)';
+        
+        // Generate heatmap HTML
+        let html = `
+            <div class="heatmap-row">
+                <div class="heatmap-header"></div>
+                ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                    .map(m => `<div class="heatmap-header">${m}</div>`).join('')}
+            </div>
+        `;
+        
+        [2024, 2025, 2026].forEach(year => {
+            html += `<div class="heatmap-row">
+                <div class="heatmap-year-label">${year}</div>
+                ${monthlyData[year].map(data => {
+                    if (data.temp === null) {
+                        return `<div class="heatmap-cell" style="background: #e2e8f0; color: #64748b;">
+                            <span class="month-name">${data.month}</span>
+                            <span class="temp-value">--</span>
+                        </div>`;
+                    }
+                    const color = getHeatmapColor(data.temp);
+                    // Add forecast indicator with dashed border
+                    const forecastStyle = data.forecast ? 'border: 2px dashed rgba(255,255,255,0.5);' : '';
+                    const forecastLabel = data.forecast ? '<span class="forecast-badge">📊</span>' : '';
+                    const sourceInfo = data.source ? ` (${data.source})` : '';
+                    return `<div class="heatmap-cell" style="background: ${color}; ${forecastStyle}" title="${data.forecast ? 'Forecasted' : 'Actual'}${sourceInfo}">
+                        ${forecastLabel}
                         <span class="month-name">${data.month}</span>
-                        <span class="temp-value">--</span>
+                        <span class="temp-value">${data.temp}°C</span>
                     </div>`;
-                }
-                const color = getHeatmapColor(data.temp);
-                // Add forecast indicator with dashed border
-                const forecastStyle = data.forecast ? 'border: 2px dashed rgba(255,255,255,0.5);' : '';
-                const forecastLabel = data.forecast ? '<span class="forecast-badge">📊</span>' : '';
-                return `<div class="heatmap-cell" style="background: ${color}; ${forecastStyle}" title="${data.forecast ? 'Forecasted' : 'Actual'}">
-                    ${forecastLabel}
-                    <span class="month-name">${data.month}</span>
-                    <span class="temp-value">${data.temp}°C</span>
-                </div>`;
-            }).join('')}
-        </div>`;
-    });
-    
-    container.innerHTML = html;
+                }).join('')}
+            </div>`;
+        });
+        
+        // Add data source indicator
+        html += `
+            <div class="heatmap-source-info" style="text-align: center; margin-top: 0.75rem; font-size: 0.7rem; color: var(--text-muted);">
+                📡 Data source: Open-Meteo API | 📊 = Forecast
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error fetching heatmap data:', error);
+        container.innerHTML = `
+            <div class="error-state" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                <p>⚠️ Failed to load heatmap data</p>
+                <p style="font-size: 0.8rem;">${error.message}</p>
+            </div>
+        `;
+    }
 }
 
 // Populate the heatmap city dropdown

@@ -1001,10 +1001,124 @@ def generate_two_year_historical_data(start_date, end_date, city_filter, granula
     }
 
 
+@app.route('/api/heatmap/monthly')
+def get_heatmap_monthly_data():
+    """
+    Get monthly temperature data for heatmap from Open-Meteo API
+    Returns real historical data for 2024, 2025 and current year
+    """
+    try:
+        city_id = request.args.get('city', 'chennai')
+        
+        # Get city config
+        city = next((c for c in Config.CITIES if c['id'] == city_id), None)
+        if not city:
+            city = Config.CITIES[0]  # Default to first city
+            city_id = city['id']
+        
+        result = {
+            'city_id': city_id,
+            'city_name': city['name'],
+            'years': {}
+        }
+        
+        current_year = datetime.now().year
+        current_month = datetime.now().month
+        
+        # Fetch data for 2024, 2025, 2026
+        for year in [2024, 2025, 2026]:
+            monthly_data = weather_service.get_monthly_averages(city_id, year)
+            
+            result['years'][year] = []
+            for month_data in monthly_data:
+                avg_temp = None
+                if month_data['avg_day_temp'] is not None:
+                    # Use day temp as the heatmap value (peak temperature)
+                    avg_temp = month_data['avg_day_temp']
+                
+                result['years'][year].append({
+                    'month': month_data['month_name'],
+                    'month_num': month_data['month'],
+                    'temp': avg_temp,
+                    'day_temp': month_data['avg_day_temp'],
+                    'night_temp': month_data['avg_night_temp'],
+                    'source': month_data['source'],
+                    'is_forecast': month_data.get('is_forecast', False)
+                })
+        
+        # Add forecast data for future months in current year
+        # Open-Meteo free API provides 16 days forecast
+        # For months beyond that, we use historical averages as estimates
+        forecast_end_month = min(current_month + 4, 12)
+        forecast = weather_service.get_forecast(city_id, days=16)
+        
+        if forecast:
+            # Group forecast by month
+            forecast_by_month = {}
+            for day_data in forecast:
+                date = datetime.strptime(day_data['date'], '%Y-%m-%d')
+                month_num = date.month
+                if month_num not in forecast_by_month:
+                    forecast_by_month[month_num] = {'day_temps': [], 'night_temps': []}
+                forecast_by_month[month_num]['day_temps'].append(day_data['day_temp'])
+                forecast_by_month[month_num]['night_temps'].append(day_data['night_temp'])
+            
+            # Update 2026 data with forecast for future months
+            for month_num in range(current_month + 1, forecast_end_month + 1):
+                if month_num in forecast_by_month:
+                    # Use actual forecast data
+                    temps = forecast_by_month[month_num]
+                    avg_day = sum(temps['day_temps']) / len(temps['day_temps'])
+                    avg_night = sum(temps['night_temps']) / len(temps['night_temps'])
+                    
+                    # Update the month in 2026 data
+                    for month_data in result['years'][2026]:
+                        if month_data['month_num'] == month_num:
+                            month_data['temp'] = round(avg_day, 1)
+                            month_data['day_temp'] = round(avg_day, 1)
+                            month_data['night_temp'] = round(avg_night, 1)
+                            month_data['source'] = 'Open-Meteo Forecast (16-day)'
+                            month_data['is_forecast'] = True
+                            break
+                else:
+                    # Use historical average from same month in 2025 as estimate
+                    # (This provides a data-driven estimate for months beyond 16-day forecast)
+                    historical_month = next((m for m in result['years'][2025] if m['month_num'] == month_num), None)
+                    if historical_month and historical_month['temp']:
+                        for month_data in result['years'][2026]:
+                            if month_data['month_num'] == month_num:
+                                # Add slight warming trend (+0.5°C year-over-year)
+                                month_data['temp'] = round(historical_month['temp'] + 0.5, 1)
+                                month_data['day_temp'] = round(historical_month['day_temp'] + 0.5, 1) if historical_month['day_temp'] else None
+                                month_data['night_temp'] = round(historical_month['night_temp'] + 0.5, 1) if historical_month['night_temp'] else None
+                                month_data['source'] = 'Historical Estimate (2025 + 0.5°C)'
+                                month_data['is_forecast'] = True
+                                break
+        
+        return jsonify({
+            'status': 'success',
+            'data': result,
+            'meta': {
+                'current_year': current_year,
+                'current_month': current_month,
+                'forecast_end_month': forecast_end_month,
+                'note': 'Months 1-16 days ahead use Open-Meteo forecast; beyond that uses historical estimates'
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/comparison/monthly-yoy')
 def get_monthly_yoy_comparison():
     """
-    Get month-wise Year-over-Year comparison data
+    Get month-wise Year-over-Year comparison data from Open-Meteo API
     Compare same month across 2024, 2025, 2026 (e.g., Feb 2024 vs Feb 2025 vs Feb 2026)
     """
     try:
@@ -1015,54 +1129,35 @@ def get_monthly_yoy_comparison():
         if city_filter != 'all':
             cities = [c for c in cities if c['id'] == city_filter]
         
+        # Use first city if filtering, otherwise use Chennai as representative
+        sample_city = cities[0] if len(cities) == 1 else next((c for c in cities if c['id'] == 'chennai'), cities[0])
+        
         months = ['January', 'February', 'March', 'April', 'May', 'June', 
                   'July', 'August', 'September', 'October', 'November', 'December']
-        
-        # City-specific base temperatures
-        city_base_temps = {
-            'chennai': {'day': 33, 'night': 25},
-            'hyderabad': {'day': 32, 'night': 22},
-            'bangalore': {'day': 28, 'night': 19},
-            'visakhapatnam': {'day': 31, 'night': 24},
-            'vijayawada': {'day': 34, 'night': 25},
-            'tirupati': {'day': 33, 'night': 24},
-            'madurai': {'day': 34, 'night': 26},
-            'coimbatore': {'day': 30, 'night': 21},
-            'trichy': {'day': 35, 'night': 26},
-            'nellore': {'day': 33, 'night': 24},
-            'guntur': {'day': 34, 'night': 24},
-            'kurnool': {'day': 35, 'night': 23},
-            'warangal': {'day': 33, 'night': 22},
-            'rajahmundry': {'day': 33, 'night': 24},
-            'kakinada': {'day': 32, 'night': 24},
-            'secunderabad': {'day': 32, 'night': 22}
-        }
-        
-        # Monthly temperature variations (offset from base)
-        monthly_variations = {
-            1: {'day': -4, 'night': -5},    # January - cooler
-            2: {'day': -2, 'night': -3},    # February - mild
-            3: {'day': 2, 'night': 0},      # March - warming
-            4: {'day': 5, 'night': 3},      # April - hot
-            5: {'day': 8, 'night': 5},      # May - peak summer
-            6: {'day': 6, 'night': 4},      # June - still hot
-            7: {'day': 2, 'night': 2},      # July - monsoon cooling
-            8: {'day': 1, 'night': 1},      # August - monsoon
-            9: {'day': 1, 'night': 1},      # September - post monsoon
-            10: {'day': 0, 'night': 0},     # October - moderate
-            11: {'day': -2, 'night': -2},   # November - cooling
-            12: {'day': -4, 'night': -4}    # December - cool
-        }
-        
-        # Year-over-year warming trend
-        year_trend = {2024: 0, 2025: 0.5, 2026: 1.0}
         
         comparison_data = []
         current_month = datetime.now().month
         current_year = datetime.now().year
         
         # Forecast extends +4 months from current month (e.g., Feb -> June)
-        forecast_end_month = current_month + 4
+        forecast_end_month = min(current_month + 4, 12)
+        
+        # Fetch monthly averages from Open-Meteo API for each year
+        yearly_data = {}
+        for year in [2024, 2025, 2026]:
+            yearly_data[year] = weather_service.get_monthly_averages(sample_city['id'], year)
+        
+        # Get forecast data for future months
+        forecast_data = weather_service.get_forecast(sample_city['id'], days=16)
+        forecast_by_month = {}
+        if forecast_data:
+            for day_data in forecast_data:
+                date = datetime.strptime(day_data['date'], '%Y-%m-%d')
+                month_num = date.month
+                if month_num not in forecast_by_month:
+                    forecast_by_month[month_num] = {'day_temps': [], 'night_temps': []}
+                forecast_by_month[month_num]['day_temps'].append(day_data['day_temp'])
+                forecast_by_month[month_num]['night_temps'].append(day_data['night_temp'])
         
         for month_num in range(1, 13):
             month_name = months[month_num - 1]
@@ -1070,57 +1165,61 @@ def get_monthly_yoy_comparison():
                 'month': month_name,
                 'month_num': month_num,
                 'years': {},
-                'is_forecast': False  # Flag to indicate forecasted data
+                'is_forecast': False,
+                'source': 'Open-Meteo API'
             }
             
             for year in [2024, 2025, 2026]:
-                # For 2026: include actual data for past months and forecast for +4 months
+                year_monthly = yearly_data.get(year, [])
+                month_info = next((m for m in year_monthly if m['month'] == month_num), None)
+                
+                # Check if this is a future month that needs forecast data
+                is_future_month = (year == current_year and month_num > current_month)
+                
+                # For 2026: skip months beyond forecast window
                 if year == 2026 and month_num > forecast_end_month:
                     month_data['years'][year] = None
                     continue
                 
-                # Mark as forecast if it's 2026 and beyond current month
-                if year == 2026 and month_num > current_month:
+                # Mark as forecast if beyond current month
+                if is_future_month:
                     month_data['is_forecast'] = True
                 
-                # Calculate city average or specific city data
-                day_temps = []
-                night_temps = []
-                demands = []
-                ac_hours_list = []
+                day_temp = None
+                night_temp = None
+                source = None
                 
-                for city in cities:
-                    city_id = city['id']
-                    base = city_base_temps.get(city_id, {'day': 32, 'night': 23})
-                    variation = monthly_variations[month_num]
-                    trend = year_trend[year]
-                    
-                    # Add some randomness for realistic variation
-                    random.seed(f"{city_id}_{year}_{month_num}")
-                    noise = random.uniform(-1, 1)
-                    
-                    day_temp = base['day'] + variation['day'] + trend + noise
-                    night_temp = base['night'] + variation['night'] + trend + noise * 0.7
-                    
-                    day_temps.append(day_temp)
-                    night_temps.append(night_temp)
-                    
-                    # Calculate demand index
+                # Get data from API result
+                if month_info and month_info['avg_day_temp'] is not None:
+                    day_temp = month_info['avg_day_temp']
+                    night_temp = month_info['avg_night_temp']
+                    source = month_info.get('source', 'Open-Meteo Archive')
+                
+                # Use forecast data for future months in current year
+                elif is_future_month and month_num in forecast_by_month:
+                    temps = forecast_by_month[month_num]
+                    day_temp = round(sum(temps['day_temps']) / len(temps['day_temps']), 1)
+                    night_temp = round(sum(temps['night_temps']) / len(temps['night_temps']), 1)
+                    source = 'Open-Meteo Forecast'
+                
+                if day_temp is not None:
+                    # Calculate demand index based on night temp
                     demand = min(100, max(0, int((night_temp - 15) * 7)))
-                    demands.append(demand)
                     
                     # Calculate AC hours
                     ac_hours = max(0, min(24, round((night_temp - 18) * 2.5 + (day_temp - 30) * 0.5, 1)))
-                    ac_hours_list.append(ac_hours)
-                
-                month_data['years'][year] = {
-                    'avg_day_temp': round(sum(day_temps) / len(day_temps), 1),
-                    'avg_night_temp': round(sum(night_temps) / len(night_temps), 1),
-                    'max_day_temp': round(max(day_temps), 1),
-                    'max_night_temp': round(max(night_temps), 1),
-                    'avg_demand': round(sum(demands) / len(demands), 1),
-                    'avg_ac_hours': round(sum(ac_hours_list) / len(ac_hours_list), 1)
-                }
+                    
+                    month_data['years'][year] = {
+                        'avg_day_temp': day_temp,
+                        'avg_night_temp': night_temp,
+                        'max_day_temp': round(day_temp + 2, 1),  # Estimate
+                        'max_night_temp': round(night_temp + 2, 1),  # Estimate
+                        'avg_demand': demand,
+                        'avg_ac_hours': ac_hours,
+                        'source': source
+                    }
+                else:
+                    month_data['years'][year] = None
             
             # Calculate YoY changes
             if month_data['years'].get(2024) and month_data['years'].get(2025):
@@ -1152,12 +1251,16 @@ def get_monthly_yoy_comparison():
             'data': comparison_data,
             'meta': {
                 'city_filter': city_filter,
+                'city_used': sample_city['name'],
                 'month_filter': month_filter,
                 'years_compared': [2024, 2025, 2026],
-                'current_date': datetime.now().strftime('%Y-%m-%d')
+                'current_date': datetime.now().strftime('%Y-%m-%d'),
+                'data_source': 'Open-Meteo API'
             }
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'status': 'error',
             'message': str(e)
