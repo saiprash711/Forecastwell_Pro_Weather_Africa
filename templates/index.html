@@ -77,6 +77,11 @@
                 <span>Alerts</span>
                 <span class="nav-badge" id="alertBadge">0</span>
             </a>
+            <a href="#" class="nav-item" data-page="insights">
+                <i class="fas fa-lightbulb"></i>
+                <span>Insights</span>
+                <span class="nav-badge new">NEW</span>
+            </a>
             <a href="#" class="nav-item" data-page="reports">
                 <i class="fas fa-file-alt"></i>
                 <span>Reports</span>
@@ -229,35 +234,6 @@
                         </div>
                         <div id="alertsContainer" class="alerts-list">
                             <div class="loading-shimmer"></div>
-                        </div>
-                    </section>
-                </div>
-
-                <!-- Charts Row -->
-                <div class="charts-grid">
-                    <!-- Day vs Night Comparison -->
-                    <section class="chart-section glass-card">
-                        <div class="section-header">
-                            <h2><i class="fas fa-exchange-alt"></i> Day vs Night Comparison</h2>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="dayNightChart"></canvas>
-                        </div>
-                        <div class="insight-banner">
-                            <i class="fas fa-lightbulb"></i>
-                            <span><strong>Key Insight:</strong> Night temp 25°C = 12-16hr AC vs Day 35°C = 4-6hr AC only!</span>
-                        </div>
-                    </section>
-
-                    <!-- Demand Index Gauge -->
-                    <section class="chart-section glass-card">
-                        <div class="section-header">
-                            <h2><i class="fas fa-tachometer-alt"></i> Overall Demand Index</h2>
-                        </div>
-                        <div class="gauge-container">
-                            <canvas id="demandGauge"></canvas>
-                            <div class="gauge-value" id="gaugeValue">--</div>
-                            <div class="gauge-label">Avg. Demand Score</div>
                         </div>
                     </section>
                 </div>
@@ -882,6 +858,124 @@
                     </div>
                     <div class="alert-timeline" id="alertTimeline">
                         <!-- Generated dynamically -->
+                    </div>
+                </section>
+            </div>
+
+            <!-- ========== INSIGHTS PAGE ========== -->
+            <div class="page" id="insightsPage">
+                <div class="page-header">
+                    <h1><i class="fas fa-lightbulb"></i> Business Insights & Recommendations</h1>
+                    <p>AI-powered actionable insights based on historical trends and 4-month forecast</p>
+                </div>
+
+                <!-- Key Business Metrics -->
+                <div class="insights-hero-cards">
+                    <div class="insight-hero-card glass-card gradient-red">
+                        <div class="hero-icon"><i class="fas fa-fire"></i></div>
+                        <div class="hero-content">
+                            <h3>Peak Season Alert</h3>
+                            <div class="hero-value" id="daysToPeakValue">--</div>
+                            <p>Days until peak demand</p>
+                        </div>
+                        <span class="trend-badge up" id="peakTrendBadge">Heating Fast</span>
+                    </div>
+                    
+                    <div class="insight-hero-card glass-card gradient-blue">
+                        <div class="hero-icon"><i class="fas fa-chart-line"></i></div>
+                        <div class="hero-content">
+                            <h3>YoY Temperature Change</h3>
+                            <div class="hero-value" id="yoyChangeValue">--°C</div>
+                            <p>vs same period last year</p>
+                        </div>
+                        <span class="trend-badge neutral" id="yoyTrendBadge">Stable</span>
+                    </div>
+                    
+                    <div class="insight-hero-card glass-card gradient-green">
+                        <div class="hero-icon"><i class="fas fa-percentage"></i></div>
+                        <div class="hero-content">
+                            <h3>Demand Potential</h3>
+                            <div class="hero-value" id="demandPotentialValue">--%</div>
+                            <p>Next 4 months avg</p>
+                        </div>
+                        <span class="trend-badge up" id="demandTrendBadge">High</span>
+                    </div>
+                    
+                    <div class="insight-hero-card glass-card gradient-purple">
+                        <div class="hero-icon"><i class="fas fa-map-marked-alt"></i></div>
+                        <div class="hero-content">
+                            <h3>Top Priority Market</h3>
+                            <div class="hero-value" id="topMarketValue">--</div>
+                            <p>Highest demand potential</p>
+                        </div>
+                        <span class="trend-badge" id="topMarketReason">Hot nights</span>
+                    </div>
+                </div>
+
+                <!-- Strategic Recommendations Section -->
+                <section class="insights-recommendations glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-chess"></i> Strategic Recommendations</h2>
+                        <span class="section-subtitle">Data-driven actions for maximum impact</span>
+                    </div>
+                    <div class="recommendations-grid">
+                        <div class="loading-shimmer"></div>
+                    </div>
+                </section>
+
+                <!-- Market Opportunity Matrix -->
+                <section class="insights-matrix glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-th"></i> Market Opportunity Matrix</h2>
+                        <span class="section-subtitle">City-wise demand forecast for next 4 months</span>
+                    </div>
+                    <div class="matrix-container">
+                        <div class="matrix-chart-wrapper">
+                            <canvas id="marketMatrixChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Monthly Forecast Breakdown -->
+                <div class="insights-two-col">
+                    <section class="insights-forecast glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-calendar-alt"></i> 4-Month Demand Forecast</h2>
+                        </div>
+                        <div class="forecast-timeline">
+                            <div class="loading-shimmer"></div>
+                        </div>
+                    </section>
+
+                    <section class="insights-actions glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-tasks"></i> Action Checklist</h2>
+                        </div>
+                        <div class="action-checklist">
+                            <div class="loading-shimmer"></div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Historical vs Forecast Comparison -->
+                <section class="insights-comparison glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-balance-scale-right"></i> Temperature & Demand Trend</h2>
+                        <span class="section-subtitle">4-month forecast visualization</span>
+                    </div>
+                    <div class="comparison-container">
+                        <canvas id="insightsComparisonChart"></canvas>
+                    </div>
+                </section>
+
+                <!-- City-wise Insights Cards -->
+                <section class="insights-cities">
+                    <div class="section-header standalone">
+                        <h2><i class="fas fa-city"></i> City-wise Business Insights</h2>
+                        <span class="section-subtitle">Specific recommendations for each market</span>
+                    </div>
+                    <div class="city-insights-grid">
+                        <div class="loading-shimmer"></div>
                     </div>
                 </section>
             </div>

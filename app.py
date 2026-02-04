@@ -27,9 +27,47 @@ cache = {
     'weather_data': None,
     'weather_timestamp': 0,
     'alerts_data': None,
-    'alerts_timestamp': 0
+    'alerts_timestamp': 0,
+    'monthly_data': {},  # Cache monthly data by city_id and year
+    'monthly_timestamp': {},
+    'forecast_data': {},  # Cache forecast data by city_id
+    'forecast_timestamp': {}
 }
 CACHE_TTL = 300  # 5 minutes cache
+MONTHLY_CACHE_TTL = 3600  # 1 hour cache for monthly data (changes rarely)
+FORECAST_CACHE_TTL = 1800  # 30 minutes cache for seasonal forecast
+
+
+def get_cached_monthly_data(city_id, year):
+    """Get monthly data with caching (1 hour TTL)"""
+    cache_key = f"{city_id}_{year}"
+    now = time.time()
+    
+    if (cache_key in cache['monthly_data'] and 
+        cache_key in cache['monthly_timestamp'] and
+        (now - cache['monthly_timestamp'].get(cache_key, 0)) < MONTHLY_CACHE_TTL):
+        return cache['monthly_data'][cache_key]
+    
+    data = weather_service.get_monthly_averages(city_id, year)
+    cache['monthly_data'][cache_key] = data
+    cache['monthly_timestamp'][cache_key] = now
+    return data
+
+
+def get_cached_forecast(city_id, days=120):
+    """Get forecast data with caching (30 min TTL)"""
+    cache_key = f"{city_id}_{days}"
+    now = time.time()
+    
+    if (cache_key in cache['forecast_data'] and 
+        cache_key in cache['forecast_timestamp'] and
+        (now - cache['forecast_timestamp'].get(cache_key, 0)) < FORECAST_CACHE_TTL):
+        return cache['forecast_data'][cache_key]
+    
+    data = weather_service.get_forecast(city_id, days)
+    cache['forecast_data'][cache_key] = data
+    cache['forecast_timestamp'][cache_key] = now
+    return data
 
 
 def get_cached_weather():
@@ -176,8 +214,8 @@ def get_kpis():
         season_status = data_processor.get_season_status(avg_day_temp, avg_night_temp)
         
         # Get forecast to calculate days to peak (extended to +4 months)
-        # Use Chennai as reference city
-        chennai_forecast = weather_service.get_forecast('chennai', days=150)  # ~5 months forecast
+        # Use Chennai as reference city - Open-Meteo Seasonal API provides up to 7 months
+        chennai_forecast = weather_service.get_forecast('chennai', days=120)  # 4 months forecast
         days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
         
         kpis = {
@@ -217,10 +255,10 @@ def get_wave_sequence():
     Lead indicators → Building markets → Lag markets
     """
     try:
-        # Get forecasts for all cities
+        # Get forecasts for all cities using Open-Meteo Seasonal API (up to 7 months)
         all_forecasts = {}
         for city in Config.CITIES:
-            forecast = weather_service.get_forecast(city['id'], days=150)  # ~5 months (+4 from current)
+            forecast = weather_service.get_forecast(city['id'], days=120)  # 4 months forecast
             all_forecasts[city['id']] = forecast
         
         # Analyze wave sequence
@@ -247,7 +285,7 @@ def export_excel():
         # Get wave sequence
         all_forecasts = {}
         for city in Config.CITIES:
-            forecast = weather_service.get_forecast(city['id'], days=150)  # ~5 months
+            forecast = weather_service.get_forecast(city['id'], days=120)  # 4 months forecast
             all_forecasts[city['id']] = forecast
         wave_data = alert_engine.analyze_wave_sequence(all_forecasts)
 
@@ -464,9 +502,9 @@ def health_check():
     })
 
 
-@app.route('/api/insights')
-def get_insights():
-    """Get AI-powered insights and recommendations"""
+@app.route('/api/insights/simple')
+def get_simple_insights():
+    """Get basic AI-powered insights and recommendations"""
     try:
         cities_weather = get_cached_weather()
         alerts = get_cached_alerts(cities_weather)
@@ -549,6 +587,159 @@ def get_insights():
             }
         })
     except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/insights')
+def get_business_insights_page():
+    """
+    Get comprehensive business insights based on historical and forecast data
+    Returns actionable recommendations, market analysis, and demand predictions
+    """
+    try:
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year = current_date.year
+        
+        # Get cached weather data for all cities
+        cities_weather = get_cached_weather()
+        
+        # Get 4-month forecast for analysis
+        forecast_by_city = {}
+        for city in Config.CITIES:
+            forecast = get_cached_forecast(city['id'], days=120)
+            forecast_by_city[city['id']] = forecast
+        
+        # Get historical data for YoY comparison
+        historical_by_city = {}
+        for city in Config.CITIES:
+            historical_by_city[city['id']] = {
+                2024: get_cached_monthly_data(city['id'], 2024),
+                2025: get_cached_monthly_data(city['id'], 2025)
+            }
+        
+        # Calculate key metrics
+        # 1. Days to peak (from Chennai as reference)
+        chennai_forecast = forecast_by_city.get('chennai', [])
+        days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
+        
+        # 2. YoY Temperature Change (current month comparison)
+        yoy_temp_change = 0
+        if current_month <= 12:
+            prev_year_avg = []
+            curr_year_avg = []
+            for city_id, hist in historical_by_city.items():
+                last_year_month = next((m for m in hist.get(2025, []) if m['month'] == current_month), None)
+                if last_year_month and last_year_month.get('avg_night_temp'):
+                    prev_year_avg.append(last_year_month['avg_night_temp'])
+            
+            for city in cities_weather:
+                curr_year_avg.append(city.get('night_temp', city['temperature'] - 5))
+            
+            if prev_year_avg and curr_year_avg:
+                yoy_temp_change = round((sum(curr_year_avg) / len(curr_year_avg)) - (sum(prev_year_avg) / len(prev_year_avg)), 1)
+        
+        # 3. Calculate 4-month demand potential
+        month_demands = []
+        for month_offset in range(4):
+            target_month = current_month + month_offset + 1
+            if target_month > 12:
+                break
+            
+            for city_id, forecast in forecast_by_city.items():
+                month_data = [d for d in forecast if datetime.strptime(d['date'], '%Y-%m-%d').month == target_month]
+                if month_data:
+                    avg_night = sum(d['night_temp'] for d in month_data) / len(month_data)
+                    demand = min(100, max(0, int((avg_night - 15) * 7)))
+                    month_demands.append(demand)
+        
+        avg_demand_potential = round(sum(month_demands) / len(month_demands)) if month_demands else 50
+        
+        # 4. Find top priority market
+        city_scores = []
+        for city in cities_weather:
+            forecast = forecast_by_city.get(city['city_id'], [])
+            future_nights = [d['night_temp'] for d in forecast[:60]]  # Next 2 months
+            avg_future_night = sum(future_nights) / len(future_nights) if future_nights else 20
+            score = min(100, (avg_future_night - 15) * 6)
+            city_scores.append({
+                'city': city['city_name'],
+                'score': score,
+                'night_temp': round(avg_future_night, 1)
+            })
+        
+        city_scores.sort(key=lambda x: x['score'], reverse=True)
+        top_market = city_scores[0] if city_scores else {'city': 'Chennai', 'score': 70, 'night_temp': 25}
+        
+        # Generate strategic recommendations
+        recommendations = generate_strategic_recommendations(
+            cities_weather, forecast_by_city, historical_by_city, current_month
+        )
+        
+        # Generate monthly forecast breakdown
+        monthly_forecast = generate_monthly_forecast_breakdown(forecast_by_city, current_month)
+        
+        # Generate action checklist
+        action_checklist = generate_action_checklist(
+            days_to_peak, avg_demand_potential, city_scores, current_month
+        )
+        
+        # Generate city-wise insights
+        city_insights = generate_city_insights(cities_weather, forecast_by_city, historical_by_city)
+        
+        # Market matrix data
+        market_matrix = []
+        months = ['Feb', 'Mar', 'Apr', 'May', 'Jun']
+        for city in Config.CITIES[:8]:  # Limit to 8 cities
+            city_forecast = forecast_by_city.get(city['id'], [])
+            monthly_demands = []
+            for i, month_name in enumerate(months):
+                target_month = current_month + i
+                if target_month > 12:
+                    break
+                month_data = [d for d in city_forecast if datetime.strptime(d['date'], '%Y-%m-%d').month == target_month]
+                if month_data:
+                    avg_night = sum(d['night_temp'] for d in month_data) / len(month_data)
+                    demand = min(100, max(0, int((avg_night - 15) * 7)))
+                    monthly_demands.append(demand)
+                else:
+                    monthly_demands.append(50)
+            
+            market_matrix.append({
+                'city': city['name'],
+                'city_id': city['id'],
+                'demands': monthly_demands,
+                'avg_demand': round(sum(monthly_demands) / len(monthly_demands)) if monthly_demands else 50
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'hero_metrics': {
+                    'days_to_peak': days_to_peak,
+                    'peak_trend': 'heating' if days_to_peak < 60 else 'building',
+                    'yoy_temp_change': yoy_temp_change,
+                    'yoy_trend': 'up' if yoy_temp_change > 0.5 else ('down' if yoy_temp_change < -0.5 else 'stable'),
+                    'demand_potential': avg_demand_potential,
+                    'top_market': top_market['city'],
+                    'top_market_reason': f"{top_market['night_temp']}°C nights"
+                },
+                'recommendations': recommendations,
+                'monthly_forecast': monthly_forecast,
+                'action_checklist': action_checklist,
+                'city_insights': city_insights,
+                'market_matrix': {
+                    'months': months[:len(monthly_forecast)],
+                    'cities': market_matrix
+                }
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -1025,9 +1216,9 @@ def get_heatmap_monthly_data():
         current_year = datetime.now().year
         current_month = datetime.now().month
         
-        # Fetch data for 2024, 2025, 2026
+        # Fetch data for 2024, 2025, 2026 (using cache for faster loading)
         for year in [2024, 2025, 2026]:
-            monthly_data = weather_service.get_monthly_averages(city_id, year)
+            monthly_data = get_cached_monthly_data(city_id, year)
             
             result['years'][year] = []
             for month_data in monthly_data:
@@ -1047,10 +1238,10 @@ def get_heatmap_monthly_data():
                 })
         
         # Add forecast data for future months in current year
-        # Open-Meteo free API provides 16 days forecast
-        # For months beyond that, we use historical averages as estimates
+        # Open-Meteo Seasonal API provides up to 7 months forecast (using ECMWF SEAS5)
+        # We request 4 months (120 days) of forecast data (cached for 30 mins)
         forecast_end_month = min(current_month + 4, 12)
-        forecast = weather_service.get_forecast(city_id, days=16)
+        forecast = get_cached_forecast(city_id, days=120)  # 4 months forecast from Seasonal API
         
         if forecast:
             # Group forecast by month
@@ -1066,7 +1257,7 @@ def get_heatmap_monthly_data():
             # Update 2026 data with forecast for future months
             for month_num in range(current_month + 1, forecast_end_month + 1):
                 if month_num in forecast_by_month:
-                    # Use actual forecast data
+                    # Use actual forecast data from Seasonal API
                     temps = forecast_by_month[month_num]
                     avg_day = sum(temps['day_temps']) / len(temps['day_temps'])
                     avg_night = sum(temps['night_temps']) / len(temps['night_temps'])
@@ -1077,7 +1268,7 @@ def get_heatmap_monthly_data():
                             month_data['temp'] = round(avg_day, 1)
                             month_data['day_temp'] = round(avg_day, 1)
                             month_data['night_temp'] = round(avg_night, 1)
-                            month_data['source'] = 'Open-Meteo Forecast (16-day)'
+                            month_data['source'] = 'Open-Meteo Seasonal (ECMWF SEAS5)'
                             month_data['is_forecast'] = True
                             break
                 else:
@@ -1142,13 +1333,13 @@ def get_monthly_yoy_comparison():
         # Forecast extends +4 months from current month (e.g., Feb -> June)
         forecast_end_month = min(current_month + 4, 12)
         
-        # Fetch monthly averages from Open-Meteo API for each year
+        # Fetch monthly averages from Open-Meteo API for each year (cached for 1 hour)
         yearly_data = {}
         for year in [2024, 2025, 2026]:
-            yearly_data[year] = weather_service.get_monthly_averages(sample_city['id'], year)
+            yearly_data[year] = get_cached_monthly_data(sample_city['id'], year)
         
-        # Get forecast data for future months
-        forecast_data = weather_service.get_forecast(sample_city['id'], days=16)
+        # Get forecast data for future months (up to 4 months, cached for 30 mins)
+        forecast_data = get_cached_forecast(sample_city['id'], days=120)  # 4 months from Seasonal API
         forecast_by_month = {}
         if forecast_data:
             for day_data in forecast_data:
@@ -1200,7 +1391,7 @@ def get_monthly_yoy_comparison():
                     temps = forecast_by_month[month_num]
                     day_temp = round(sum(temps['day_temps']) / len(temps['day_temps']), 1)
                     night_temp = round(sum(temps['night_temps']) / len(temps['night_temps']), 1)
-                    source = 'Open-Meteo Forecast'
+                    source = 'Open-Meteo Seasonal (ECMWF SEAS5)'
                 
                 if day_temp is not None:
                     # Calculate demand index based on night temp
@@ -1265,6 +1456,291 @@ def get_monthly_yoy_comparison():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+def generate_strategic_recommendations(cities_weather, forecast_by_city, historical_by_city, current_month):
+    """Generate strategic business recommendations"""
+    recommendations = []
+    
+    # High priority: Peak season preparation
+    hot_cities = [c for c in cities_weather if c.get('night_temp', 20) >= 22]
+    if len(hot_cities) >= 3 or current_month in [3, 4, 5]:
+        recommendations.append({
+            'priority': 'high',
+            'icon': 'fire',
+            'title': 'Peak Season Approaching',
+            'description': f'{len(hot_cities)} cities showing elevated night temperatures. Accelerate inventory positioning for AC and cooling products.',
+            'metrics': [
+                {'value': f'{len(hot_cities)}', 'label': 'Hot Markets'},
+                {'value': 'Next 6 weeks', 'label': 'Action Window'}
+            ]
+        })
+    
+    # Identify fastest heating markets
+    heating_markets = []
+    for city in Config.CITIES:
+        forecast = forecast_by_city.get(city['id'], [])
+        if len(forecast) >= 30:
+            first_week = sum(d['night_temp'] for d in forecast[:7]) / 7
+            fourth_week = sum(d['night_temp'] for d in forecast[21:28]) / 7 if len(forecast) >= 28 else first_week
+            if fourth_week - first_week > 2:
+                heating_markets.append(city['name'])
+    
+    if heating_markets:
+        recommendations.append({
+            'priority': 'high',
+            'icon': 'chart-line',
+            'title': 'Rapid Temperature Rise Detected',
+            'description': f'{", ".join(heating_markets[:3])} showing rapid heating trend. Priority markets for immediate stock deployment.',
+            'metrics': [
+                {'value': f'+2-4°C', 'label': 'Expected Rise'},
+                {'value': '4 weeks', 'label': 'Timeline'}
+            ]
+        })
+    
+    # Night temperature opportunity
+    night_opportunity = [c for c in cities_weather if 20 <= c.get('night_temp', 18) < 24]
+    if night_opportunity:
+        recommendations.append({
+            'priority': 'medium',
+            'icon': 'moon',
+            'title': 'Night Temperature Sweet Spot',
+            'description': f'{len(night_opportunity)} markets in 20-24°C night range. Optimal for premium AC positioning - consumers actively seeking comfort.',
+            'metrics': [
+                {'value': '12-16 hrs', 'label': 'AC Usage'},
+                {'value': 'Premium', 'label': 'Segment Focus'}
+            ]
+        })
+    
+    # Regional strategy based on data
+    south_cities = ['chennai', 'bangalore', 'hyderabad', 'kochi', 'coimbatore']
+    south_avg_night = []
+    for city_id in south_cities:
+        city_weather = next((c for c in cities_weather if c['city_id'] == city_id), None)
+        if city_weather:
+            south_avg_night.append(city_weather.get('night_temp', 20))
+    
+    if south_avg_night:
+        avg = sum(south_avg_night) / len(south_avg_night)
+        if avg >= 22:
+            recommendations.append({
+                'priority': 'medium',
+                'icon': 'map-marker-alt',
+                'title': 'South India Demand Surge',
+                'description': f'Average night temp {avg:.1f}°C across South India. Allocate 60-70% inventory to southern markets.',
+                'metrics': [
+                    {'value': f'{avg:.1f}°C', 'label': 'Avg Night'},
+                    {'value': '60-70%', 'label': 'Recommended Allocation'}
+                ]
+            })
+    
+    # Inventory timing recommendation
+    recommendations.append({
+        'priority': 'low',
+        'icon': 'warehouse',
+        'title': 'Inventory Timing Optimal',
+        'description': 'Based on 4-month forecast, current period ideal for channel loading. Distributor stock-up recommended before March price increases.',
+        'metrics': [
+            {'value': '2-3 weeks', 'label': 'Lead Time'},
+            {'value': 'Feb-Mar', 'label': 'Optimal Window'}
+        ]
+    })
+    
+    # Promotional timing
+    if current_month in [2, 3]:
+        recommendations.append({
+            'priority': 'low',
+            'icon': 'bullhorn',
+            'title': 'Pre-Season Promotion Window',
+            'description': 'Consumer awareness campaigns effective now. Digital marketing ROI highest 4-6 weeks before peak.',
+            'metrics': [
+                {'value': '4-6 weeks', 'label': 'Before Peak'},
+                {'value': '2x', 'label': 'Conversion Rate'}
+            ]
+        })
+    
+    return recommendations[:6]  # Return top 6
+
+
+def generate_monthly_forecast_breakdown(forecast_by_city, current_month):
+    """Generate monthly forecast breakdown with demand levels"""
+    months_data = []
+    month_names = ['January', 'February', 'March', 'April', 'May', 'June', 
+                   'July', 'August', 'September', 'October', 'November', 'December']
+    
+    for i in range(4):  # Next 4 months
+        target_month = current_month + i
+        if target_month > 12:
+            break
+        
+        all_day_temps = []
+        all_night_temps = []
+        
+        for city_id, forecast in forecast_by_city.items():
+            month_data = [d for d in forecast if datetime.strptime(d['date'], '%Y-%m-%d').month == target_month]
+            for d in month_data:
+                all_day_temps.append(d['day_temp'])
+                all_night_temps.append(d['night_temp'])
+        
+        if all_day_temps and all_night_temps:
+            avg_day = sum(all_day_temps) / len(all_day_temps)
+            avg_night = sum(all_night_temps) / len(all_night_temps)
+            demand = min(100, max(0, int((avg_night - 15) * 7)))
+            
+            # Determine demand level
+            if demand >= 80:
+                level = 'extreme'
+            elif demand >= 60:
+                level = 'high'
+            elif demand >= 40:
+                level = 'moderate'
+            else:
+                level = 'normal'
+            
+            months_data.append({
+                'month': month_names[target_month - 1],
+                'month_num': target_month,
+                'avg_day': round(avg_day, 1),
+                'avg_night': round(avg_night, 1),
+                'demand': demand,
+                'level': level
+            })
+    
+    return months_data
+
+
+def generate_action_checklist(days_to_peak, demand_potential, city_scores, current_month):
+    """Generate prioritized action checklist"""
+    actions = []
+    
+    # Urgency based on days to peak
+    if days_to_peak <= 30:
+        actions.append({
+            'urgency': 'urgent',
+            'title': 'Emergency Stock Deployment',
+            'detail': 'Peak season imminent. Prioritize logistics and retailer stock levels.',
+            'timeline': 'This week'
+        })
+    elif days_to_peak <= 60:
+        actions.append({
+            'urgency': 'urgent',
+            'title': 'Accelerate Channel Loading',
+            'detail': 'Push inventory to distributors in top 5 priority markets.',
+            'timeline': 'Next 2 weeks'
+        })
+    
+    # High demand potential actions
+    if demand_potential >= 70:
+        actions.append({
+            'urgency': 'important',
+            'title': 'Premium Product Push',
+            'detail': 'High-margin inverter AC models should lead portfolio mix.',
+            'timeline': 'Ongoing'
+        })
+    
+    # Top market specific
+    if city_scores and city_scores[0]['score'] >= 70:
+        top = city_scores[0]
+        actions.append({
+            'urgency': 'important',
+            'title': f'Focus on {top["city"]}',
+            'detail': f'Highest potential market with {top["night_temp"]}°C nights. Increase retail presence.',
+            'timeline': 'Next 4 weeks'
+        })
+    
+    # Seasonal actions
+    if current_month == 2:
+        actions.append({
+            'urgency': 'important',
+            'title': 'Trade Scheme Launch',
+            'detail': 'Announce dealer incentives for pre-season orders.',
+            'timeline': 'Feb 15-28'
+        })
+    
+    if current_month in [2, 3]:
+        actions.append({
+            'urgency': 'normal',
+            'title': 'Consumer Financing Tie-ups',
+            'detail': 'Finalize EMI partnerships with banks for peak season.',
+            'timeline': 'Before March end'
+        })
+    
+    actions.append({
+        'urgency': 'normal',
+        'title': 'Service Network Readiness',
+        'detail': 'Ensure installation capacity scaled up for anticipated demand.',
+        'timeline': 'Next 6 weeks'
+    })
+    
+    actions.append({
+        'urgency': 'normal',
+        'title': 'Digital Marketing Campaign',
+        'detail': 'Launch awareness campaigns targeting AC research keywords.',
+        'timeline': 'Ongoing'
+    })
+    
+    return actions[:8]
+
+
+def generate_city_insights(cities_weather, forecast_by_city, historical_by_city):
+    """Generate insights for each city"""
+    city_insights = []
+    
+    for city in cities_weather:
+        city_id = city['city_id']
+        forecast = forecast_by_city.get(city_id, [])
+        
+        # Calculate metrics
+        current_night = city.get('night_temp', 20)
+        current_day = city.get('day_temp', 32)
+        
+        # Future projection
+        future_nights = [d['night_temp'] for d in forecast[:60]]
+        future_days = [d['day_temp'] for d in forecast[:60]]
+        
+        avg_future_night = sum(future_nights) / len(future_nights) if future_nights else current_night
+        avg_future_day = sum(future_days) / len(future_days) if future_days else current_day
+        
+        # Calculate demand score
+        demand_score = min(100, max(0, int((avg_future_night - 15) * 7)))
+        
+        # Determine priority
+        if demand_score >= 70:
+            priority = 'high'
+            badge = 'High Priority'
+        elif demand_score >= 50:
+            priority = 'medium'
+            badge = 'Medium Priority'
+        else:
+            priority = 'low'
+            badge = 'Monitor'
+        
+        # Generate recommendation
+        if avg_future_night >= 24:
+            recommendation = f"<strong>Peak demand territory.</strong> Night temps above 24°C drive 14-16 hr AC usage. Prioritize premium models and installation capacity."
+        elif avg_future_night >= 22:
+            recommendation = f"<strong>Strong demand zone.</strong> Current {current_night}°C nights rising to {avg_future_night:.1f}°C. Accelerate inventory deployment."
+        elif avg_future_night >= 20:
+            recommendation = f"<strong>Building demand.</strong> Position stock now for upcoming surge. Focus on mid-range segment."
+        else:
+            recommendation = f"<strong>Moderate demand.</strong> Maintain baseline inventory. Monitor for temperature changes."
+        
+        city_insights.append({
+            'city': city['city_name'],
+            'city_id': city_id,
+            'priority': priority,
+            'badge': badge,
+            'current_day': round(current_day, 1),
+            'current_night': round(current_night, 1),
+            'forecast_night': round(avg_future_night, 1),
+            'demand_score': demand_score,
+            'recommendation': recommendation
+        })
+    
+    # Sort by demand score
+    city_insights.sort(key=lambda x: x['demand_score'], reverse=True)
+    
+    return city_insights
 
 
 if __name__ == '__main__':

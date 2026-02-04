@@ -170,6 +170,9 @@ function loadPageData(pageId) {
         case 'alerts':
             loadAlertsPage();
             break;
+        case 'insights':
+            loadInsightsPage();
+            break;
     }
 }
 
@@ -3080,3 +3083,415 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(setupHistoricalEventListeners, 500);
     setTimeout(setupYoYEventListeners, 600);
 });
+
+
+// ========== INSIGHTS PAGE FUNCTIONALITY ==========
+
+let insightsCharts = {
+    marketMatrix: null,
+    comparison: null
+};
+
+async function loadInsightsPage() {
+    console.log('📊 Loading Insights Page...');
+    showInsightsLoading();
+    
+    try {
+        const response = await fetch(`${API_BASE}/insights`);
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data) {
+            renderInsightsPage(result.data);
+            hideInsightsLoading();
+            console.log('✅ Insights page loaded successfully');
+        } else {
+            throw new Error(result.message || 'Failed to load insights');
+        }
+    } catch (error) {
+        console.error('❌ Error loading insights:', error);
+        hideInsightsLoading();
+        showToast('Failed to load insights data', 'error');
+    }
+}
+
+function showInsightsLoading() {
+    const containers = document.querySelectorAll('#insightsPage .recommendations-grid, #insightsPage .city-insights-grid, #insightsPage .action-checklist');
+    containers.forEach(container => {
+        if (container) {
+            container.innerHTML = '<div class="loading-placeholder" style="text-align:center; padding:40px;"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Loading insights...</p></div>';
+        }
+    });
+}
+
+function hideInsightsLoading() {
+    // Loading placeholders will be replaced by actual content
+}
+
+function renderInsightsPage(data) {
+    // 1. Update Hero Cards
+    updateInsightsHeroCards(data.hero_metrics);
+    
+    // 2. Render Recommendations
+    renderRecommendations(data.recommendations);
+    
+    // 3. Render Market Matrix Chart
+    renderMarketMatrixChart(data.market_matrix);
+    
+    // 4. Render Monthly Forecast Timeline
+    renderForecastTimeline(data.monthly_forecast);
+    
+    // 5. Render Action Checklist
+    renderActionChecklist(data.action_checklist);
+    
+    // 6. Render Comparison Chart
+    renderInsightsComparisonChart(data.monthly_forecast);
+    
+    // 7. Render City Insights
+    renderCityInsights(data.city_insights);
+}
+
+function updateInsightsHeroCards(metrics) {
+    // Days to Peak
+    const daysToPeak = document.getElementById('daysToPeakValue');
+    const peakTrend = document.getElementById('peakTrendBadge');
+    if (daysToPeak) daysToPeak.textContent = metrics.days_to_peak;
+    if (peakTrend) {
+        peakTrend.textContent = metrics.peak_trend === 'heating' ? 'Heating Fast' : 'Building Up';
+        peakTrend.className = `trend-badge ${metrics.peak_trend === 'heating' ? 'up' : 'neutral'}`;
+    }
+    
+    // YoY Change
+    const yoyChange = document.getElementById('yoyChangeValue');
+    const yoyTrend = document.getElementById('yoyTrendBadge');
+    if (yoyChange) {
+        const prefix = metrics.yoy_temp_change > 0 ? '+' : '';
+        yoyChange.textContent = `${prefix}${metrics.yoy_temp_change}°C`;
+    }
+    if (yoyTrend) {
+        const trendText = metrics.yoy_trend === 'up' ? 'Hotter Year' : (metrics.yoy_trend === 'down' ? 'Cooler Year' : 'Similar');
+        yoyTrend.textContent = trendText;
+        yoyTrend.className = `trend-badge ${metrics.yoy_trend}`;
+    }
+    
+    // Demand Potential
+    const demandPotential = document.getElementById('demandPotentialValue');
+    const demandTrend = document.getElementById('demandTrendBadge');
+    if (demandPotential) demandPotential.textContent = `${metrics.demand_potential}%`;
+    if (demandTrend) {
+        const level = metrics.demand_potential >= 70 ? 'High' : (metrics.demand_potential >= 50 ? 'Moderate' : 'Building');
+        demandTrend.textContent = level;
+        demandTrend.className = `trend-badge ${metrics.demand_potential >= 70 ? 'up' : 'neutral'}`;
+    }
+    
+    // Top Market
+    const topMarket = document.getElementById('topMarketValue');
+    const topMarketReason = document.getElementById('topMarketReason');
+    if (topMarket) topMarket.textContent = metrics.top_market;
+    if (topMarketReason) topMarketReason.textContent = metrics.top_market_reason;
+}
+
+function renderRecommendations(recommendations) {
+    const container = document.querySelector('#insightsPage .recommendations-grid');
+    if (!container || !recommendations) return;
+    
+    const iconMap = {
+        'fire': 'fa-fire',
+        'chart-line': 'fa-chart-line',
+        'moon': 'fa-moon',
+        'map-marker-alt': 'fa-map-marker-alt',
+        'warehouse': 'fa-warehouse',
+        'bullhorn': 'fa-bullhorn'
+    };
+    
+    container.innerHTML = recommendations.map(rec => `
+        <div class="recommendation-card ${rec.priority}">
+            <div class="rec-header">
+                <div class="rec-icon">
+                    <i class="fas ${iconMap[rec.icon] || 'fa-lightbulb'}"></i>
+                </div>
+                <span class="rec-priority ${rec.priority}">${rec.priority.toUpperCase()}</span>
+            </div>
+            <h4 class="rec-title">${rec.title}</h4>
+            <p class="rec-description">${rec.description}</p>
+            <div class="rec-metrics">
+                ${rec.metrics.map(m => `
+                    <div class="rec-metric">
+                        <span class="metric-value">${m.value}</span>
+                        <span class="metric-label">${m.label}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderMarketMatrixChart(matrixData) {
+    const canvas = document.getElementById('marketMatrixChart');
+    if (!canvas || !matrixData) return;
+    
+    if (insightsCharts.marketMatrix) {
+        insightsCharts.marketMatrix.destroy();
+    }
+    
+    const colors = [
+        '#ef4444', '#f97316', '#eab308', '#22c55e', 
+        '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'
+    ];
+    
+    const datasets = matrixData.cities.map((city, idx) => ({
+        label: city.city,
+        data: city.demands,
+        backgroundColor: colors[idx % colors.length],
+        borderColor: colors[idx % colors.length],
+        borderWidth: 2,
+        borderRadius: 4,
+        barPercentage: 0.8
+    }));
+    
+    insightsCharts.marketMatrix = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: matrixData.months,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 15,
+                        font: { size: 11 }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.raw}% demand`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Demand Index (%)'
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderForecastTimeline(monthlyForecast) {
+    const container = document.querySelector('#insightsPage .forecast-timeline');
+    if (!container || !monthlyForecast) return;
+    
+    container.innerHTML = monthlyForecast.map(month => `
+        <div class="timeline-month ${month.level}">
+            <div class="month-header">
+                <span class="month-name">${month.month}</span>
+                <span class="demand-badge ${month.level}">${month.level.toUpperCase()}</span>
+            </div>
+            <div class="temp-display">
+                <div class="temp-item">
+                    <i class="fas fa-sun"></i>
+                    <span>${month.avg_day}°C</span>
+                </div>
+                <div class="temp-item">
+                    <i class="fas fa-moon"></i>
+                    <span>${month.avg_night}°C</span>
+                </div>
+            </div>
+            <div class="demand-bar-container">
+                <div class="demand-bar ${month.level}" style="width: ${month.demand}%"></div>
+                <span class="demand-value">${month.demand}%</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderActionChecklist(actions) {
+    const container = document.querySelector('#insightsPage .action-checklist');
+    if (!container || !actions) return;
+    
+    const urgencyIcons = {
+        'urgent': 'fa-exclamation-circle',
+        'important': 'fa-flag',
+        'normal': 'fa-check-circle'
+    };
+    
+    container.innerHTML = actions.map((action, idx) => `
+        <div class="action-item ${action.urgency}">
+            <div class="action-checkbox">
+                <input type="checkbox" id="action${idx}">
+                <label for="action${idx}"></label>
+            </div>
+            <div class="action-content">
+                <div class="action-header">
+                    <i class="fas ${urgencyIcons[action.urgency] || 'fa-tasks'}"></i>
+                    <span class="action-title">${action.title}</span>
+                    <span class="action-urgency ${action.urgency}">${action.urgency}</span>
+                </div>
+                <p class="action-detail">${action.detail}</p>
+                <span class="action-timeline"><i class="far fa-clock"></i> ${action.timeline}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderInsightsComparisonChart(monthlyForecast) {
+    const canvas = document.getElementById('insightsComparisonChart');
+    if (!canvas || !monthlyForecast) return;
+    
+    if (insightsCharts.comparison) {
+        insightsCharts.comparison.destroy();
+    }
+    
+    const labels = monthlyForecast.map(m => m.month);
+    const dayTemps = monthlyForecast.map(m => m.avg_day);
+    const nightTemps = monthlyForecast.map(m => m.avg_night);
+    const demands = monthlyForecast.map(m => m.demand);
+    
+    insightsCharts.comparison = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Day Temp (°C)',
+                    data: dayTemps,
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Night Temp (°C)',
+                    data: nightTemps,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Demand Index (%)',
+                    data: demands,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    borderWidth: 3,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.4,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    padding: 12
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)'
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Demand Index (%)'
+                    },
+                    min: 0,
+                    max: 100,
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderCityInsights(cityInsights) {
+    const container = document.querySelector('#insightsPage .city-insights-grid');
+    if (!container || !cityInsights) return;
+    
+    container.innerHTML = cityInsights.slice(0, 8).map(city => `
+        <div class="city-insight-card ${city.priority}">
+            <div class="city-insight-header">
+                <h4 class="city-name">${city.city}</h4>
+                <span class="priority-badge ${city.priority}">${city.badge}</span>
+            </div>
+            <div class="city-temps">
+                <div class="temp-block">
+                    <span class="temp-label">Current Day</span>
+                    <span class="temp-value">${city.current_day}°C</span>
+                </div>
+                <div class="temp-block">
+                    <span class="temp-label">Current Night</span>
+                    <span class="temp-value highlight">${city.current_night}°C</span>
+                </div>
+                <div class="temp-block forecast">
+                    <span class="temp-label">60-Day Forecast</span>
+                    <span class="temp-value">${city.forecast_night}°C</span>
+                </div>
+            </div>
+            <div class="demand-meter">
+                <div class="demand-fill ${city.priority}" style="width: ${city.demand_score}%"></div>
+                <span class="demand-score">${city.demand_score}%</span>
+            </div>
+            <p class="city-recommendation">${city.recommendation}</p>
+        </div>
+    `).join('');
+}

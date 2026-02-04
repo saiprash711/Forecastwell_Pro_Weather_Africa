@@ -18,8 +18,8 @@ class WeatherService:
         self.openweather_api_key = Config.OPENWEATHER_API_KEY
         self.imd_base_url = "https://api.imd.gov.in/v1"  # IMD API endpoint
         self.openweather_base_url = "https://api.openweathermap.org/data/2.5"  # OpenWeatherMap API
-        self.openmeteo_base_url = "https://api.open-meteo.com/v1"  # Open-Meteo (FREE, no key!)
         self.openmeteo_base_url = "https://api.open-meteo.com/v1"  # Open-Meteo (FREE, no key needed!)
+        self.openmeteo_seasonal_url = "https://seasonal-api.open-meteo.com/v1/seasonal"  # Seasonal forecast (up to 7 months!)
         
     def get_current_weather(self, city_id):
         """
@@ -105,7 +105,9 @@ class WeatherService:
         
         Args:
             city_id: City identifier
-            days: Number of days to forecast (Open-Meteo supports up to 16 days free)
+            days: Number of days to forecast
+                  - Up to 16 days: Uses standard Open-Meteo forecast API
+                  - Up to 210 days (~7 months): Uses Open-Meteo Seasonal Forecast API
             
         Returns:
             list: Forecast data from API
@@ -114,13 +116,94 @@ class WeatherService:
         if not city:
             return []
         
-        # Try Open-Meteo Forecast API (FREE, up to 16 days)
-        forecast = self._fetch_openmeteo_forecast(city, min(days, 16))
-        if forecast:
-            return forecast
+        # For short-term forecasts (up to 16 days), use standard forecast API
+        if days <= 16:
+            forecast = self._fetch_openmeteo_forecast(city, days)
+            if forecast:
+                return forecast
+        else:
+            # For longer forecasts (up to 4+ months), use Seasonal Forecast API
+            forecast = self._fetch_openmeteo_seasonal_forecast(city, days)
+            if forecast:
+                return forecast
         
         # Fallback to simulated data only if API fails
         return self._generate_fallback_forecast(city_id, days)
+    
+    def _fetch_openmeteo_seasonal_forecast(self, city, days):
+        """
+        Fetch long-range seasonal forecast from Open-Meteo Seasonal Forecast API
+        FREE - No API key required!
+        Provides up to 7 months (210 days) forecast using ECMWF SEAS5 model
+        """
+        try:
+            # Calculate forecast months needed (4 months = ~120 days)
+            forecast_days = min(days, 210)  # Max 7 months (210 days)
+            
+            params = {
+                'latitude': city['lat'],
+                'longitude': city['lon'],
+                'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,wind_speed_10m_max',
+                'timezone': 'Asia/Kolkata',
+                'forecast_days': forecast_days
+            }
+            
+            response = requests.get(
+                self.openmeteo_seasonal_url,
+                params=params,
+                timeout=30  # Longer timeout for seasonal data
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                daily = data.get('daily', {})
+                
+                if not daily or 'time' not in daily:
+                    print(f"Seasonal API returned no daily data")
+                    return None
+                
+                forecast = []
+                for i, date_str in enumerate(daily['time']):
+                    date = datetime.strptime(date_str, '%Y-%m-%d')
+                    
+                    # Get temperature values (may be None for some ensemble members)
+                    day_temp = daily.get('temperature_2m_max', [None])[i] if i < len(daily.get('temperature_2m_max', [])) else None
+                    night_temp = daily.get('temperature_2m_min', [None])[i] if i < len(daily.get('temperature_2m_min', [])) else None
+                    
+                    # Skip days with no data
+                    if day_temp is None or night_temp is None:
+                        continue
+                    
+                    humidity = daily.get('relative_humidity_2m_mean', [65])[i] if i < len(daily.get('relative_humidity_2m_mean', [])) else 65
+                    wind = daily.get('wind_speed_10m_max', [10])[i] if i < len(daily.get('wind_speed_10m_max', [])) else 10
+                    
+                    forecast.append({
+                        'date': date_str,
+                        'day': date.strftime('%A'),
+                        'temperature': round((day_temp + night_temp) / 2, 1),
+                        'day_temp': round(day_temp, 1),
+                        'night_temp': round(night_temp, 1),
+                        'min_temp': round(night_temp, 1),
+                        'max_temp': round(day_temp, 1),
+                        'humidity': round(humidity, 1) if humidity else 65,
+                        'wind_speed': round(wind, 1) if wind else 10,
+                        'source': 'Open-Meteo Seasonal (ECMWF SEAS5)',
+                        'is_forecast': True
+                    })
+                
+                if forecast:
+                    print(f"Seasonal forecast: {len(forecast)} days fetched for {city['name']}")
+                    return forecast
+                else:
+                    print(f"Seasonal API returned empty forecast")
+                    return None
+            else:
+                print(f"Open-Meteo Seasonal API Error: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"Error fetching Open-Meteo seasonal forecast: {str(e)}")
+            return None
     
     def _fetch_openmeteo_forecast(self, city, days):
         """
@@ -347,6 +430,7 @@ class WeatherService:
     def get_monthly_averages(self, city_id, year):
         """
         Get monthly temperature averages for a specific year from Open-Meteo Archive API
+        OPTIMIZED: Fetches entire year's data in a single API call
         
         Args:
             city_id: City identifier
@@ -363,10 +447,120 @@ class WeatherService:
         current_year = current_date.year
         current_month = current_date.month
         
-        monthly_data = []
+        # For future years, return empty data
+        if year > current_year:
+            return [{
+                'month': month,
+                'month_name': datetime(year, month, 1).strftime('%b'),
+                'avg_day_temp': None,
+                'avg_night_temp': None,
+                'source': None,
+                'is_forecast': False
+            } for month in range(1, 13)]
         
+        # Calculate date range for the year
+        start_date = f"{year}-01-01"
+        if year == current_year:
+            # For current year, fetch up to yesterday
+            end_date = (current_date - timedelta(days=1)).strftime('%Y-%m-%d')
+        else:
+            end_date = f"{year}-12-31"
+        
+        # Fetch entire year's data in ONE API call
+        try:
+            params = {
+                'latitude': city['lat'],
+                'longitude': city['lon'],
+                'start_date': start_date,
+                'end_date': end_date,
+                'daily': 'temperature_2m_max,temperature_2m_min',
+                'timezone': 'Asia/Kolkata'
+            }
+            
+            response = requests.get(
+                "https://archive-api.open-meteo.com/v1/archive",
+                params=params,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                daily = data.get('daily', {})
+                
+                if not daily or 'time' not in daily:
+                    return self._generate_fallback_monthly(year, current_year, current_month)
+                
+                # Group data by month
+                monthly_temps = {}
+                for i, date_str in enumerate(daily['time']):
+                    month = int(date_str.split('-')[1])
+                    if month not in monthly_temps:
+                        monthly_temps[month] = {'day_temps': [], 'night_temps': []}
+                    
+                    day_temp = daily['temperature_2m_max'][i]
+                    night_temp = daily['temperature_2m_min'][i]
+                    
+                    if day_temp is not None:
+                        monthly_temps[month]['day_temps'].append(day_temp)
+                    if night_temp is not None:
+                        monthly_temps[month]['night_temps'].append(night_temp)
+                
+                # Build monthly data
+                monthly_data = []
+                for month in range(1, 13):
+                    if year == current_year and month > current_month:
+                        # Future month in current year
+                        monthly_data.append({
+                            'month': month,
+                            'month_name': datetime(year, month, 1).strftime('%b'),
+                            'avg_day_temp': None,
+                            'avg_night_temp': None,
+                            'source': None,
+                            'is_forecast': False
+                        })
+                    elif month in monthly_temps and monthly_temps[month]['day_temps']:
+                        temps = monthly_temps[month]
+                        monthly_data.append({
+                            'month': month,
+                            'month_name': datetime(year, month, 1).strftime('%b'),
+                            'avg_day_temp': round(sum(temps['day_temps']) / len(temps['day_temps']), 1),
+                            'avg_night_temp': round(sum(temps['night_temps']) / len(temps['night_temps']), 1),
+                            'source': 'Open-Meteo Archive',
+                            'is_forecast': False
+                        })
+                    else:
+                        monthly_data.append({
+                            'month': month,
+                            'month_name': datetime(year, month, 1).strftime('%b'),
+                            'avg_day_temp': None,
+                            'avg_night_temp': None,
+                            'source': None,
+                            'is_forecast': False
+                        })
+                
+                return monthly_data
+            else:
+                print(f"Open-Meteo Archive API Error for {year}: {response.status_code}")
+                return self._generate_fallback_monthly(year, current_year, current_month)
+                
+        except Exception as e:
+            print(f"Error fetching yearly data for {year}: {str(e)}")
+            return self._generate_fallback_monthly(year, current_year, current_month)
+    
+    def _generate_fallback_monthly(self, year, current_year, current_month):
+        """Generate fallback monthly data when API fails"""
+        # South India climate-based estimates
+        base_temps = {
+            1: {'day': 29, 'night': 21}, 2: {'day': 31, 'night': 22},
+            3: {'day': 33, 'night': 24}, 4: {'day': 35, 'night': 26},
+            5: {'day': 38, 'night': 28}, 6: {'day': 36, 'night': 27},
+            7: {'day': 34, 'night': 25}, 8: {'day': 33, 'night': 25},
+            9: {'day': 33, 'night': 24}, 10: {'day': 32, 'night': 24},
+            11: {'day': 30, 'night': 23}, 12: {'day': 29, 'night': 21}
+        }
+        
+        monthly_data = []
         for month in range(1, 13):
-            # For current year, only fetch past and current months
             if year == current_year and month > current_month:
                 monthly_data.append({
                     'month': month,
@@ -376,92 +570,16 @@ class WeatherService:
                     'source': None,
                     'is_forecast': False
                 })
-                continue
-            
-            # For future years, skip entirely
-            if year > current_year:
+            else:
+                temps = base_temps[month]
                 monthly_data.append({
                     'month': month,
                     'month_name': datetime(year, month, 1).strftime('%b'),
-                    'avg_day_temp': None,
-                    'avg_night_temp': None,
-                    'source': None,
+                    'avg_day_temp': temps['day'],
+                    'avg_night_temp': temps['night'],
+                    'source': 'Climate Estimate',
                     'is_forecast': False
                 })
-                continue
-            
-            # Fetch from Open-Meteo Archive API
-            try:
-                start_date = f"{year}-{month:02d}-01"
-                # Calculate end of month
-                if month == 12:
-                    end_date = f"{year}-12-31"
-                else:
-                    next_month = datetime(year, month + 1, 1) - timedelta(days=1)
-                    end_date = next_month.strftime('%Y-%m-%d')
-                
-                # For current month, use yesterday as end date
-                if year == current_year and month == current_month:
-                    end_date = (current_date - timedelta(days=1)).strftime('%Y-%m-%d')
-                
-                params = {
-                    'latitude': city['lat'],
-                    'longitude': city['lon'],
-                    'start_date': start_date,
-                    'end_date': end_date,
-                    'daily': 'temperature_2m_max,temperature_2m_min',
-                    'timezone': 'Asia/Kolkata'
-                }
-                
-                response = requests.get(
-                    "https://archive-api.open-meteo.com/v1/archive",
-                    params=params,
-                    timeout=15
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    daily = data['daily']
-                    
-                    if daily['temperature_2m_max'] and daily['temperature_2m_min']:
-                        valid_max = [t for t in daily['temperature_2m_max'] if t is not None]
-                        valid_min = [t for t in daily['temperature_2m_min'] if t is not None]
-                        
-                        if valid_max and valid_min:
-                            avg_day = sum(valid_max) / len(valid_max)
-                            avg_night = sum(valid_min) / len(valid_min)
-                            
-                            monthly_data.append({
-                                'month': month,
-                                'month_name': datetime(year, month, 1).strftime('%b'),
-                                'avg_day_temp': round(avg_day, 1),
-                                'avg_night_temp': round(avg_night, 1),
-                                'source': 'Open-Meteo Archive',
-                                'is_forecast': False
-                            })
-                            continue
-                
-                # If API fails for this month, append null
-                monthly_data.append({
-                    'month': month,
-                    'month_name': datetime(year, month, 1).strftime('%b'),
-                    'avg_day_temp': None,
-                    'avg_night_temp': None,
-                    'source': 'API Error',
-                    'is_forecast': False
-                })
-                
-            except Exception as e:
-                print(f"Error fetching monthly data for {year}-{month}: {str(e)}")
-                monthly_data.append({
-                    'month': month,
-                    'month_name': datetime(year, month, 1).strftime('%b'),
-                    'avg_day_temp': None,
-                    'avg_night_temp': None,
-                    'source': 'Error',
-                    'is_forecast': False
-                })
-        
         return monthly_data
     
     def get_all_cities_current(self):
