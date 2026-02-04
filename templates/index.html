@@ -553,7 +553,15 @@
                 <section class="monthly-heatmap-section glass-card animate__animated animate__fadeInUp">
                     <div class="section-header">
                         <h2><i class="fas fa-th"></i> Monthly Temperature Heatmap</h2>
-                        <span class="section-subtitle">Visual representation of temperature patterns (Jan 2024 - Feb 2026)</span>
+                        <div class="section-header-controls">
+                            <span class="section-subtitle">Visual representation of temperature patterns (Jan 2024 - Feb 2026)</span>
+                            <div class="heatmap-city-selector">
+                                <label for="heatmapCitySelect"><i class="fas fa-city"></i> City:</label>
+                                <select id="heatmapCitySelect">
+                                    <option value="all">All Cities (Average)</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     <div class="heatmap-container-large" id="monthlyHeatmapContainer">
                         <!-- Generated dynamically -->

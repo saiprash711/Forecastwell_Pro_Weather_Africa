@@ -195,6 +195,9 @@ async function loadDashboardData() {
             // Update historical city select with loaded data
             populateHistoricalCitySelect();
             
+            // Update heatmap city select with loaded data
+            populateHeatmapCitySelect();
+            
             // Initialize charts (deferred slightly for smoother UX)
             requestAnimationFrame(() => {
                 initializeDashboardCharts(weather.data);
@@ -2498,12 +2501,16 @@ function updateYearComparisonCards(yearlyStats) {
     }
 }
 
-async function generateMonthlyHeatmap() {
+async function generateMonthlyHeatmap(cityId = 'all') {
     const container = document.getElementById('monthlyHeatmapContainer');
     if (!container) return;
     
-    // Monthly average temperatures for South India (realistic data)
-    const monthlyData = {
+    // Show loading state
+    container.innerHTML = '<div class="loading-shimmer" style="height: 200px;"></div>';
+    
+    // Base monthly temperatures for South India (realistic data)
+    // These serve as baseline averages and will be adjusted per city
+    const baseMonthlyData = {
         2024: [
             { month: 'Jan', temp: 29.5 },
             { month: 'Feb', temp: 31.8 },
@@ -2548,6 +2555,49 @@ async function generateMonthlyHeatmap() {
         ]
     };
     
+    // City-specific temperature offsets (relative to South India average)
+    // Positive = hotter, Negative = cooler
+    const cityTempOffsets = {
+        'chennai': 1.5,
+        'hyderabad': 0.8,
+        'bangalore': -3.2,
+        'visakhapatnam': 0.5,
+        'vijayawada': 1.2,
+        'tirupati': 0.9,
+        'madurai': 1.8,
+        'coimbatore': -2.0,
+        'trichy': 1.3,
+        'nellore': 0.7,
+        'guntur': 1.0,
+        'kurnool': 1.5,
+        'warangal': 0.3,
+        'rajahmundry': 0.6,
+        'kakinada': 0.4,
+        'secunderabad': 0.8,
+        'all': 0 // Average (no offset)
+    };
+    
+    // Get the temperature offset for the selected city
+    const offset = cityTempOffsets[cityId] || 0;
+    
+    // Apply city-specific offset to the data
+    const monthlyData = {};
+    [2024, 2025, 2026].forEach(year => {
+        monthlyData[year] = baseMonthlyData[year].map(data => ({
+            month: data.month,
+            temp: data.temp !== null ? Math.round((data.temp + offset) * 10) / 10 : null
+        }));
+    });
+    
+    // Get city name for display
+    let cityName = 'All Cities (Average)';
+    if (cityId !== 'all' && currentCityData) {
+        const cityInfo = currentCityData.find(c => c.city_id === cityId);
+        if (cityInfo) {
+            cityName = cityInfo.city_name;
+        }
+    }
+    
     // Generate heatmap HTML
     let html = `
         <div class="heatmap-row">
@@ -2577,6 +2627,33 @@ async function generateMonthlyHeatmap() {
     });
     
     container.innerHTML = html;
+}
+
+// Populate the heatmap city dropdown
+function populateHeatmapCitySelect() {
+    const select = document.getElementById('heatmapCitySelect');
+    if (!select) return;
+    
+    // Use currentCityData if available, otherwise use default cities
+    let cities = [];
+    if (currentCityData && currentCityData.length > 0) {
+        cities = currentCityData.map(city => ({
+            id: city.city_id,
+            name: city.city_name
+        }));
+    } else {
+        cities = DEFAULT_CITIES;
+    }
+    
+    select.innerHTML = '<option value="all">All Cities (Average)</option>' +
+        cities.map(city => 
+            `<option value="${city.id}">${city.name}</option>`
+        ).join('');
+    
+    // Add event listener for city change
+    select.addEventListener('change', (e) => {
+        generateMonthlyHeatmap(e.target.value);
+    });
 }
 
 function getHeatmapColor(temp) {

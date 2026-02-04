@@ -3302,6 +3302,62 @@ body {
     padding: 2rem;
 }
 
+.monthly-heatmap-section .section-header {
+    flex-wrap: wrap;
+}
+
+.section-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.heatmap-city-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    padding: 0.5rem 1rem;
+}
+
+.heatmap-city-selector label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.heatmap-city-selector label i {
+    color: var(--accent-primary);
+}
+
+.heatmap-city-selector select {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    outline: none;
+    min-width: 150px;
+}
+
+.heatmap-city-selector select:focus {
+    outline: none;
+}
+
+.heatmap-city-selector select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
 .heatmap-container-large {
     display: grid;
     grid-template-columns: 100px repeat(12, 1fr);
