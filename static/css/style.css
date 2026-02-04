@@ -3411,6 +3411,19 @@ body {
     font-weight: 700;
 }
 
+/* Forecast badge for forecasted months in heatmap */
+.heatmap-cell .forecast-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.55rem;
+    opacity: 0.9;
+}
+
+.heatmap-cell {
+    position: relative;
+}
+
 .heatmap-header {
     font-size: 0.7rem;
     font-weight: 600;
@@ -3599,6 +3612,37 @@ body {
 .yoy-table .year-2024 { color: #3b82f6; }
 .yoy-table .year-2025 { color: #22c55e; }
 .yoy-table .year-2026 { color: #f97316; }
+
+/* Forecast row styling */
+.yoy-table .forecast-row {
+    background: rgba(147, 51, 234, 0.05);
+}
+
+.yoy-table .forecast-data {
+    font-style: italic;
+    border-left: 2px dashed rgba(147, 51, 234, 0.5);
+}
+
+.forecast-indicator {
+    font-size: 0.7rem;
+    margin-left: 0.3rem;
+    vertical-align: super;
+}
+
+.forecast-legend {
+    margin-top: 1rem;
+    padding: 0.5rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--glass-border);
+}
+
+.forecast-legend .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
 
 .yoy-change {
     font-size: 0.75rem;

@@ -175,9 +175,9 @@ def get_kpis():
         # Get season status
         season_status = data_processor.get_season_status(avg_day_temp, avg_night_temp)
         
-        # Get forecast to calculate days to peak
+        # Get forecast to calculate days to peak (extended to +4 months)
         # Use Chennai as reference city
-        chennai_forecast = weather_service.get_forecast('chennai', days=30)
+        chennai_forecast = weather_service.get_forecast('chennai', days=150)  # ~5 months forecast
         days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
         
         kpis = {
@@ -220,7 +220,7 @@ def get_wave_sequence():
         # Get forecasts for all cities
         all_forecasts = {}
         for city in Config.CITIES:
-            forecast = weather_service.get_forecast(city['id'], days=45)  # 6+ weeks
+            forecast = weather_service.get_forecast(city['id'], days=150)  # ~5 months (+4 from current)
             all_forecasts[city['id']] = forecast
         
         # Analyze wave sequence
@@ -247,7 +247,7 @@ def export_excel():
         # Get wave sequence
         all_forecasts = {}
         for city in Config.CITIES:
-            forecast = weather_service.get_forecast(city['id'], days=30)
+            forecast = weather_service.get_forecast(city['id'], days=150)  # ~5 months
             all_forecasts[city['id']] = forecast
         wave_data = alert_engine.analyze_wave_sequence(all_forecasts)
 
@@ -1061,19 +1061,27 @@ def get_monthly_yoy_comparison():
         current_month = datetime.now().month
         current_year = datetime.now().year
         
+        # Forecast extends +4 months from current month (e.g., Feb -> June)
+        forecast_end_month = current_month + 4
+        
         for month_num in range(1, 13):
             month_name = months[month_num - 1]
             month_data = {
                 'month': month_name,
                 'month_num': month_num,
-                'years': {}
+                'years': {},
+                'is_forecast': False  # Flag to indicate forecasted data
             }
             
             for year in [2024, 2025, 2026]:
-                # Skip future months for 2026
-                if year == 2026 and month_num > current_month:
+                # For 2026: include actual data for past months and forecast for +4 months
+                if year == 2026 and month_num > forecast_end_month:
                     month_data['years'][year] = None
                     continue
+                
+                # Mark as forecast if it's 2026 and beyond current month
+                if year == 2026 and month_num > current_month:
+                    month_data['is_forecast'] = True
                 
                 # Calculate city average or specific city data
                 day_temps = []

@@ -2532,6 +2532,10 @@ async function generateMonthlyHeatmap(cityId = 'all') {
     // Show loading state
     container.innerHTML = '<div class="loading-shimmer" style="height: 200px;"></div>';
     
+    // Get current month to determine forecast window (+4 months)
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    const forecastEndMonth = Math.min(currentMonth + 4, 12); // Cap at December
+    
     // Base monthly temperatures for South India (realistic data)
     // These serve as baseline averages and will be adjusted per city
     const baseMonthlyData = {
@@ -2564,20 +2568,36 @@ async function generateMonthlyHeatmap(cityId = 'all') {
             { month: 'Dec', temp: 29.8 }
         ],
         2026: [
-            { month: 'Jan', temp: 30.5 },
-            { month: 'Feb', temp: 32.8 },
-            { month: 'Mar', temp: null },
-            { month: 'Apr', temp: null },
-            { month: 'May', temp: null },
-            { month: 'Jun', temp: null },
-            { month: 'Jul', temp: null },
-            { month: 'Aug', temp: null },
-            { month: 'Sep', temp: null },
-            { month: 'Oct', temp: null },
-            { month: 'Nov', temp: null },
-            { month: 'Dec', temp: null }
+            { month: 'Jan', temp: 30.5, forecast: false },
+            { month: 'Feb', temp: 32.8, forecast: false },
+            { month: 'Mar', temp: 36.5, forecast: true },  // Forecasted
+            { month: 'Apr', temp: 39.8, forecast: true },  // Forecasted
+            { month: 'May', temp: 42.5, forecast: true },  // Forecasted (peak summer)
+            { month: 'Jun', temp: 40.8, forecast: true },  // Forecasted
+            { month: 'Jul', temp: null, forecast: false },
+            { month: 'Aug', temp: null, forecast: false },
+            { month: 'Sep', temp: null, forecast: false },
+            { month: 'Oct', temp: null, forecast: false },
+            { month: 'Nov', temp: null, forecast: false },
+            { month: 'Dec', temp: null, forecast: false }
         ]
     };
+    
+    // Mark forecasted months based on current date
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    baseMonthlyData[2026] = baseMonthlyData[2026].map((data, index) => {
+        const monthNum = index + 1;
+        // Past or current month - actual data
+        if (monthNum <= currentMonth) {
+            return { ...data, forecast: false };
+        }
+        // Within forecast window (+4 months)
+        if (monthNum <= forecastEndMonth) {
+            return { ...data, forecast: true };
+        }
+        // Beyond forecast window - no data
+        return { month: data.month, temp: null, forecast: false };
+    });
     
     // City-specific temperature offsets (relative to South India average)
     // Positive = hotter, Negative = cooler
@@ -2609,7 +2629,8 @@ async function generateMonthlyHeatmap(cityId = 'all') {
     [2024, 2025, 2026].forEach(year => {
         monthlyData[year] = baseMonthlyData[year].map(data => ({
             month: data.month,
-            temp: data.temp !== null ? Math.round((data.temp + offset) * 10) / 10 : null
+            temp: data.temp !== null ? Math.round((data.temp + offset) * 10) / 10 : null,
+            forecast: data.forecast || false
         }));
     });
     
@@ -2642,7 +2663,11 @@ async function generateMonthlyHeatmap(cityId = 'all') {
                     </div>`;
                 }
                 const color = getHeatmapColor(data.temp);
-                return `<div class="heatmap-cell" style="background: ${color};">
+                // Add forecast indicator with dashed border
+                const forecastStyle = data.forecast ? 'border: 2px dashed rgba(255,255,255,0.5);' : '';
+                const forecastLabel = data.forecast ? '<span class="forecast-badge">📊</span>' : '';
+                return `<div class="heatmap-cell" style="background: ${color}; ${forecastStyle}" title="${data.forecast ? 'Forecasted' : 'Actual'}">
+                    ${forecastLabel}
                     <span class="month-name">${data.month}</span>
                     <span class="temp-value">${data.temp}°C</span>
                 </div>`;
@@ -2870,16 +2895,20 @@ function renderYoYTable(data, selectedMonth) {
         const change2425 = month.yoy_2024_2025;
         const change2526 = month.yoy_2025_2026;
         
+        // Check if this month is forecasted
+        const isForecast = month.is_forecast || false;
+        const forecastBadge = isForecast ? '<span class="forecast-indicator" title="Forecasted">📊</span>' : '';
+        
         html += `
-            <tr>
-                <td><strong>${month.month}</strong></td>
+            <tr class="${isForecast ? 'forecast-row' : ''}">
+                <td><strong>${month.month}</strong>${forecastBadge}</td>
                 <td class="year-2024">
                     ${y2024 ? `${y2024.avg_day_temp}°C / ${y2024.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
                 </td>
                 <td class="year-2025">
                     ${y2025 ? `${y2025.avg_day_temp}°C / ${y2025.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
                 </td>
-                <td class="year-2026">
+                <td class="year-2026 ${isForecast ? 'forecast-data' : ''}">
                     ${y2026 ? `${y2026.avg_day_temp}°C / ${y2026.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
                 </td>
                 <td>
@@ -2901,6 +2930,14 @@ function renderYoYTable(data, selectedMonth) {
     });
     
     html += '</tbody></table>';
+    
+    // Add legend for forecast data
+    html += `
+        <div class="forecast-legend">
+            <span class="legend-item"><span class="forecast-indicator">📊</span> = Forecasted Data (+4 months from current month)</span>
+        </div>
+    `;
+    
     container.innerHTML = html;
 }
 

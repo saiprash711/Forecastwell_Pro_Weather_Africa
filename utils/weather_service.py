@@ -105,7 +105,7 @@ class WeatherService:
         
         Args:
             city_id: City identifier
-            days: Number of days to forecast
+            days: Number of days to forecast (supports up to 150 days / ~5 months)
             
         Returns:
             list: Forecast data
@@ -113,28 +113,73 @@ class WeatherService:
         city = self._get_city_config(city_id)
         if not city:
             return []
-            
+        
+        # City-specific base temperatures
+        city_base_temps = {
+            'chennai': {'day': 33, 'night': 25},
+            'hyderabad': {'day': 32, 'night': 22},
+            'bangalore': {'day': 28, 'night': 19},
+            'visakhapatnam': {'day': 31, 'night': 24},
+            'vijayawada': {'day': 34, 'night': 25},
+            'tirupati': {'day': 33, 'night': 24},
+            'madurai': {'day': 34, 'night': 26},
+            'coimbatore': {'day': 30, 'night': 21},
+            'trichy': {'day': 35, 'night': 26},
+            'nellore': {'day': 33, 'night': 24},
+            'guntur': {'day': 34, 'night': 24},
+            'kurnool': {'day': 35, 'night': 23},
+            'warangal': {'day': 33, 'night': 22},
+            'rajahmundry': {'day': 33, 'night': 24},
+            'kakinada': {'day': 32, 'night': 24},
+            'secunderabad': {'day': 32, 'night': 22}
+        }
+        
+        # Monthly temperature variations (offset from base)
+        monthly_variations = {
+            1: {'day': -4, 'night': -5},    # January - cooler
+            2: {'day': -2, 'night': -3},    # February - mild
+            3: {'day': 2, 'night': 0},      # March - warming
+            4: {'day': 5, 'night': 3},      # April - hot
+            5: {'day': 8, 'night': 5},      # May - peak summer
+            6: {'day': 6, 'night': 4},      # June - still hot
+            7: {'day': 2, 'night': 2},      # July - monsoon cooling
+            8: {'day': 1, 'night': 1},      # August - monsoon
+            9: {'day': 1, 'night': 1},      # September - post monsoon
+            10: {'day': 0, 'night': 0},     # October - moderate
+            11: {'day': -2, 'night': -2},   # November - cooling
+            12: {'day': -4, 'night': -4}    # December - cool
+        }
+        
+        base = city_base_temps.get(city_id, {'day': 32, 'night': 23})
         forecast = []
-        base_temp = random.uniform(30, 38)
         
         for i in range(days):
             date = datetime.now() + timedelta(days=i)
-            temp_variation = random.uniform(-3, 3)
-            day_temp = base_temp + temp_variation + random.uniform(2, 4)
-            night_temp = base_temp + temp_variation - random.uniform(3, 5)
+            month = date.month
+            variation = monthly_variations[month]
+            
+            # Add some daily randomness but keep it consistent per date
+            random.seed(f"{city_id}_{date.strftime('%Y%m%d')}")
+            daily_noise = random.uniform(-1.5, 1.5)
+            
+            day_temp = base['day'] + variation['day'] + daily_noise
+            night_temp = base['night'] + variation['night'] + daily_noise * 0.7
             
             forecast.append({
                 'date': date.strftime('%Y-%m-%d'),
                 'day': date.strftime('%A'),
-                'temperature': round(base_temp + temp_variation, 1),
+                'temperature': round((day_temp + night_temp) / 2, 1),
                 'day_temp': round(day_temp, 1),
                 'night_temp': round(night_temp, 1),
                 'min_temp': round(night_temp - 1, 1),
                 'max_temp': round(day_temp + 2, 1),
                 'humidity': round(random.uniform(50, 80), 1),
-                'source': 'IMD'
+                'source': 'IMD Forecast',
+                'is_forecast': i > 7  # Mark extended forecasts
             })
-            
+        
+        # Reset random seed
+        random.seed()
         return forecast
     
     def get_historical_data(self, city_id, days=30):
