@@ -5,8 +5,9 @@ Enhanced per ForecastWell Guide - Night Temperature Priority!
 """
 from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
+import time
 from config import Config
 from utils.weather_service import WeatherService
 from utils.alert_engine import AlertEngine
@@ -20,6 +21,47 @@ CORS(app)
 weather_service = WeatherService()
 alert_engine = AlertEngine()
 data_processor = DataProcessor()
+
+# Simple in-memory cache for faster responses
+cache = {
+    'weather_data': None,
+    'weather_timestamp': 0,
+    'alerts_data': None,
+    'alerts_timestamp': 0
+}
+CACHE_TTL = 300  # 5 minutes cache
+
+
+def get_cached_weather():
+    """Get weather data with caching"""
+    now = time.time()
+    if cache['weather_data'] and (now - cache['weather_timestamp']) < CACHE_TTL:
+        return cache['weather_data']
+    
+    cities_weather = weather_service.get_all_cities_current()
+    for city in cities_weather:
+        day_temp = city.get('day_temp', city['temperature'])
+        night_temp = city.get('night_temp', city['temperature'] - 5)
+        city['demand_index'] = data_processor.calculate_demand_index(
+            day_temp, night_temp, city.get('humidity')
+        )
+        city['ac_hours'] = data_processor.calculate_ac_hours(day_temp, night_temp)
+    
+    cache['weather_data'] = cities_weather
+    cache['weather_timestamp'] = now
+    return cities_weather
+
+
+def get_cached_alerts(cities_weather):
+    """Get alerts data with caching"""
+    now = time.time()
+    if cache['alerts_data'] and (now - cache['alerts_timestamp']) < CACHE_TTL:
+        return cache['alerts_data']
+    
+    alerts = alert_engine.get_all_alerts(cities_weather)
+    cache['alerts_data'] = alerts
+    cache['alerts_timestamp'] = now
+    return alerts
 
 
 @app.route('/')
@@ -39,26 +81,15 @@ def get_cities():
 
 @app.route('/api/weather/current')
 def get_current_weather():
-    """Get current weather for all cities"""
+    """Get current weather for all cities (with caching)"""
     try:
-        cities_weather = weather_service.get_all_cities_current()
-        
-        # Add demand index and AC hours to each city
-        for city in cities_weather:
-            day_temp = city.get('day_temp', city['temperature'])
-            night_temp = city.get('night_temp', city['temperature'] - 5)
-            
-            city['demand_index'] = data_processor.calculate_demand_index(
-                day_temp,
-                night_temp,
-                city.get('humidity')
-            )
-            city['ac_hours'] = data_processor.calculate_ac_hours(day_temp, night_temp)
+        cities_weather = get_cached_weather()
         
         return jsonify({
             'status': 'success',
             'data': cities_weather,
-            'timestamp': cities_weather[0]['timestamp'] if cities_weather else None
+            'timestamp': cities_weather[0]['timestamp'] if cities_weather else None,
+            'cached': cache['weather_timestamp'] > 0
         })
     except Exception as e:
         return jsonify({
@@ -104,10 +135,10 @@ def get_city_weather(city_id):
 
 @app.route('/api/alerts')
 def get_alerts():
-    """Get alerts for all cities"""
+    """Get alerts for all cities (with caching)"""
     try:
-        cities_weather = weather_service.get_all_cities_current()
-        alerts = alert_engine.get_all_alerts(cities_weather)
+        cities_weather = get_cached_weather()
+        alerts = get_cached_alerts(cities_weather)
         
         return jsonify({
             'status': 'success',

@@ -175,24 +175,28 @@ function loadPageData(pageId) {
 // ========== Data Loading ==========
 async function loadDashboardData() {
     try {
-        const [summaryRes, weatherRes, alertsRes] = await Promise.all([
-            fetch(`${API_BASE}/dashboard/summary`),
+        // Load critical data first (weather + alerts in parallel)
+        const [weatherRes, alertsRes] = await Promise.all([
             fetch(`${API_BASE}/weather/current`),
             fetch(`${API_BASE}/alerts`)
         ]);
 
-        const summary = await summaryRes.json();
         const weather = await weatherRes.json();
         const alerts = await alertsRes.json();
 
         if (weather.status === 'success' && weather.data) {
             currentCityData = weather.data;
+            // Update UI immediately
             updateHeaderStats(weather.data);
             updateMapMarkers(weather.data);
-            updateWaveSequence(weather.data);
             updateCitiesGrid(weather.data);
-            initializeDashboardCharts(weather.data);
             populateCitySelects(weather.data);
+            
+            // Initialize charts (deferred slightly for smoother UX)
+            requestAnimationFrame(() => {
+                initializeDashboardCharts(weather.data);
+                updateWaveSequence(weather.data);
+            });
         }
 
         if (alerts.status === 'success' && alerts.data) {
@@ -201,10 +205,11 @@ async function loadDashboardData() {
             updateAlertBadge(alerts.data.length);
         }
 
-        // Load new sections
-        await loadNewSections();
-
         updateLastUpdate();
+        
+        // Load additional sections in background (non-blocking)
+        loadNewSections().catch(err => console.warn('Background sections error:', err));
+        
     } catch (error) {
         console.error('Error loading dashboard data:', error);
         throw error;
@@ -2129,13 +2134,17 @@ async function loadWeeklySummary() {
     }
 }
 
-// Load all new sections
+// Load all new sections (in background, non-blocking)
 async function loadNewSections() {
-    await Promise.all([
-        loadInsights(),
-        loadDemandPredictions(),
-        loadEnergyEstimates(),
-        loadHistoricalComparison(),
-        loadWeeklySummary()
-    ]);
+    // Load sections sequentially to reduce server load
+    try {
+        await loadInsights();
+        await loadDemandPredictions();
+        await loadEnergyEstimates();
+        // These are less critical, load last
+        await loadHistoricalComparison();
+        await loadWeeklySummary();
+    } catch (error) {
+        console.warn('Some sections failed to load:', error);
+    }
 }
