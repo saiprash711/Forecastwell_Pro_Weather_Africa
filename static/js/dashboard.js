@@ -213,7 +213,22 @@ async function loadDashboardData() {
         }
 
         updateLastUpdate();
-        
+
+        // Fetch server-side KPIs (use server-calculated days_to_peak to avoid heuristic mismatch)
+        try {
+            const kpisRes = await fetch(`${API_BASE}/kpis`);
+            const kpisJson = await kpisRes.json();
+            if (kpisJson.status === 'success' && kpisJson.data) {
+                const days = kpisJson.data.days_to_peak;
+                const daysEl = document.getElementById('daysToPeak');
+                if (daysEl) daysEl.textContent = days === 0 ? '🎯 NOW!' : `~${days} days`;
+                const seasonEl = document.getElementById('seasonStatus');
+                if (seasonEl) seasonEl.textContent = kpisJson.data.season_status || seasonEl.textContent;
+            }
+        } catch (err) {
+            console.warn('Failed to fetch KPIs:', err);
+        }
+
         // Load additional sections in background (non-blocking)
         loadNewSections().catch(err => console.warn('Background sections error:', err));
         
