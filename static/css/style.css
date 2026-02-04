@@ -3491,3 +3491,238 @@ body {
         height: 300px;
     }
 }
+
+/* ========== Year-over-Year Comparison Section ========== */
+.yoy-comparison-section {
+    margin-top: 2rem;
+    padding: 2rem;
+}
+
+.yoy-comparison-section .section-header {
+    flex-wrap: wrap;
+}
+
+.yoy-controls {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.yoy-city-selector,
+.yoy-month-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    padding: 0.5rem 1rem;
+}
+
+.yoy-city-selector label,
+.yoy-month-selector label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.yoy-city-selector label i,
+.yoy-month-selector label i {
+    color: var(--accent-primary);
+}
+
+.yoy-city-selector select,
+.yoy-month-selector select {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    outline: none;
+    min-width: 120px;
+}
+
+.yoy-city-selector select option,
+.yoy-month-selector select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.yoy-chart-container {
+    height: 350px;
+    margin: 1.5rem 0;
+    position: relative;
+}
+
+.yoy-table-container {
+    margin-top: 1.5rem;
+    overflow-x: auto;
+}
+
+.yoy-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.yoy-table th,
+.yoy-table td {
+    padding: 0.75rem 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.yoy-table th {
+    background: var(--glass-bg);
+    font-weight: 600;
+    color: var(--text-primary);
+    position: sticky;
+    top: 0;
+}
+
+.yoy-table th:first-child,
+.yoy-table td:first-child {
+    text-align: left;
+    font-weight: 600;
+}
+
+.yoy-table tr:hover {
+    background: var(--glass-bg);
+}
+
+.yoy-table .year-2024 { color: #3b82f6; }
+.yoy-table .year-2025 { color: #22c55e; }
+.yoy-table .year-2026 { color: #f97316; }
+
+.yoy-change {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    margin-left: 0.5rem;
+}
+
+.yoy-change.positive {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.yoy-change.negative {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.yoy-change.neutral {
+    background: rgba(100, 116, 139, 0.15);
+    color: #64748b;
+}
+
+/* Analytics YoY Controls */
+.analytics-yoy-controls {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.analytics-yoy-controls select {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-xs);
+    padding: 0.5rem 1rem;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.analytics-yoy-controls select option {
+    background: var(--bg-secondary);
+}
+
+/* YoY Month Cards */
+.yoy-month-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.yoy-month-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    padding: 1rem;
+}
+
+.yoy-month-card .month-header {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.yoy-month-card .month-header i {
+    color: var(--accent-primary);
+}
+
+.yoy-year-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    font-size: 0.85rem;
+}
+
+.yoy-year-row .year-label {
+    font-weight: 600;
+    min-width: 50px;
+}
+
+.yoy-year-row .year-values {
+    display: flex;
+    gap: 1rem;
+}
+
+.yoy-year-row .temp-day {
+    color: var(--color-high);
+}
+
+.yoy-year-row .temp-night {
+    color: var(--accent-primary);
+}
+
+.yoy-year-row.year-2024 .year-label { color: #3b82f6; }
+.yoy-year-row.year-2025 .year-label { color: #22c55e; }
+.yoy-year-row.year-2026 .year-label { color: #f97316; }
+
+.yoy-no-data {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .yoy-controls {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .yoy-city-selector,
+    .yoy-month-selector {
+        width: 100%;
+    }
+    
+    .analytics-yoy-controls {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .analytics-yoy-controls select {
+        width: 100%;
+    }
+}

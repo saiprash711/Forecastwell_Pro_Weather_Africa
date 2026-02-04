@@ -575,6 +575,48 @@
                     </div>
                 </section>
 
+                <!-- Year-over-Year Monthly Comparison Section -->
+                <section class="yoy-comparison-section glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-balance-scale"></i> Year-over-Year Monthly Comparison</h2>
+                        <div class="section-header-controls">
+                            <span class="section-subtitle">Compare same month across 2024 vs 2025 vs 2026</span>
+                            <div class="yoy-controls">
+                                <div class="yoy-city-selector">
+                                    <label for="yoyCitySelect"><i class="fas fa-city"></i> City:</label>
+                                    <select id="yoyCitySelect">
+                                        <option value="all">All Cities (Average)</option>
+                                    </select>
+                                </div>
+                                <div class="yoy-month-selector">
+                                    <label for="yoyMonthSelect"><i class="fas fa-calendar"></i> Month:</label>
+                                    <select id="yoyMonthSelect">
+                                        <option value="all">All Months</option>
+                                        <option value="1">January</option>
+                                        <option value="2">February</option>
+                                        <option value="3">March</option>
+                                        <option value="4">April</option>
+                                        <option value="5">May</option>
+                                        <option value="6">June</option>
+                                        <option value="7">July</option>
+                                        <option value="8">August</option>
+                                        <option value="9">September</option>
+                                        <option value="10">October</option>
+                                        <option value="11">November</option>
+                                        <option value="12">December</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="yoy-chart-container">
+                        <canvas id="yoyComparisonChart"></canvas>
+                    </div>
+                    <div class="yoy-table-container" id="yoyTableContainer">
+                        <!-- Generated dynamically -->
+                    </div>
+                </section>
+
                 <!-- Historical Comparison Section (Original) -->
                 <section class="historical-section glass-card animate__animated animate__fadeInUp">
                     <div class="section-header">
@@ -701,6 +743,27 @@
                         </div>
                         <div class="chart-container">
                             <canvas id="acHoursChart"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- YoY Comparison Chart (Analytics) -->
+                    <section class="glass-card full-width">
+                        <div class="section-header">
+                            <h2><i class="fas fa-balance-scale"></i> Monthly YoY Comparison (2024 vs 2025 vs 2026)</h2>
+                            <div class="analytics-yoy-controls">
+                                <select id="analyticsYoyCitySelect">
+                                    <option value="all">All Cities</option>
+                                </select>
+                                <select id="analyticsYoyMetricSelect">
+                                    <option value="day_temp">Day Temperature</option>
+                                    <option value="night_temp">Night Temperature</option>
+                                    <option value="demand">Demand Index</option>
+                                    <option value="ac_hours">AC Hours</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container large">
+                            <canvas id="analyticsYoyChart"></canvas>
                         </div>
                     </section>
                 </div>

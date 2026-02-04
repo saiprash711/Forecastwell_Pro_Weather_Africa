@@ -1001,6 +1001,161 @@ def generate_two_year_historical_data(start_date, end_date, city_filter, granula
     }
 
 
+@app.route('/api/comparison/monthly-yoy')
+def get_monthly_yoy_comparison():
+    """
+    Get month-wise Year-over-Year comparison data
+    Compare same month across 2024, 2025, 2026 (e.g., Feb 2024 vs Feb 2025 vs Feb 2026)
+    """
+    try:
+        city_filter = request.args.get('city', 'all')
+        month_filter = request.args.get('month', None)  # 1-12, or None for all months
+        
+        cities = Config.CITIES
+        if city_filter != 'all':
+            cities = [c for c in cities if c['id'] == city_filter]
+        
+        months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                  'July', 'August', 'September', 'October', 'November', 'December']
+        
+        # City-specific base temperatures
+        city_base_temps = {
+            'chennai': {'day': 33, 'night': 25},
+            'hyderabad': {'day': 32, 'night': 22},
+            'bangalore': {'day': 28, 'night': 19},
+            'visakhapatnam': {'day': 31, 'night': 24},
+            'vijayawada': {'day': 34, 'night': 25},
+            'tirupati': {'day': 33, 'night': 24},
+            'madurai': {'day': 34, 'night': 26},
+            'coimbatore': {'day': 30, 'night': 21},
+            'trichy': {'day': 35, 'night': 26},
+            'nellore': {'day': 33, 'night': 24},
+            'guntur': {'day': 34, 'night': 24},
+            'kurnool': {'day': 35, 'night': 23},
+            'warangal': {'day': 33, 'night': 22},
+            'rajahmundry': {'day': 33, 'night': 24},
+            'kakinada': {'day': 32, 'night': 24},
+            'secunderabad': {'day': 32, 'night': 22}
+        }
+        
+        # Monthly temperature variations (offset from base)
+        monthly_variations = {
+            1: {'day': -4, 'night': -5},    # January - cooler
+            2: {'day': -2, 'night': -3},    # February - mild
+            3: {'day': 2, 'night': 0},      # March - warming
+            4: {'day': 5, 'night': 3},      # April - hot
+            5: {'day': 8, 'night': 5},      # May - peak summer
+            6: {'day': 6, 'night': 4},      # June - still hot
+            7: {'day': 2, 'night': 2},      # July - monsoon cooling
+            8: {'day': 1, 'night': 1},      # August - monsoon
+            9: {'day': 1, 'night': 1},      # September - post monsoon
+            10: {'day': 0, 'night': 0},     # October - moderate
+            11: {'day': -2, 'night': -2},   # November - cooling
+            12: {'day': -4, 'night': -4}    # December - cool
+        }
+        
+        # Year-over-year warming trend
+        year_trend = {2024: 0, 2025: 0.5, 2026: 1.0}
+        
+        comparison_data = []
+        current_month = datetime.now().month
+        current_year = datetime.now().year
+        
+        for month_num in range(1, 13):
+            month_name = months[month_num - 1]
+            month_data = {
+                'month': month_name,
+                'month_num': month_num,
+                'years': {}
+            }
+            
+            for year in [2024, 2025, 2026]:
+                # Skip future months for 2026
+                if year == 2026 and month_num > current_month:
+                    month_data['years'][year] = None
+                    continue
+                
+                # Calculate city average or specific city data
+                day_temps = []
+                night_temps = []
+                demands = []
+                ac_hours_list = []
+                
+                for city in cities:
+                    city_id = city['id']
+                    base = city_base_temps.get(city_id, {'day': 32, 'night': 23})
+                    variation = monthly_variations[month_num]
+                    trend = year_trend[year]
+                    
+                    # Add some randomness for realistic variation
+                    random.seed(f"{city_id}_{year}_{month_num}")
+                    noise = random.uniform(-1, 1)
+                    
+                    day_temp = base['day'] + variation['day'] + trend + noise
+                    night_temp = base['night'] + variation['night'] + trend + noise * 0.7
+                    
+                    day_temps.append(day_temp)
+                    night_temps.append(night_temp)
+                    
+                    # Calculate demand index
+                    demand = min(100, max(0, int((night_temp - 15) * 7)))
+                    demands.append(demand)
+                    
+                    # Calculate AC hours
+                    ac_hours = max(0, min(24, round((night_temp - 18) * 2.5 + (day_temp - 30) * 0.5, 1)))
+                    ac_hours_list.append(ac_hours)
+                
+                month_data['years'][year] = {
+                    'avg_day_temp': round(sum(day_temps) / len(day_temps), 1),
+                    'avg_night_temp': round(sum(night_temps) / len(night_temps), 1),
+                    'max_day_temp': round(max(day_temps), 1),
+                    'max_night_temp': round(max(night_temps), 1),
+                    'avg_demand': round(sum(demands) / len(demands), 1),
+                    'avg_ac_hours': round(sum(ac_hours_list) / len(ac_hours_list), 1)
+                }
+            
+            # Calculate YoY changes
+            if month_data['years'].get(2024) and month_data['years'].get(2025):
+                month_data['yoy_2024_2025'] = {
+                    'day_temp_change': round(month_data['years'][2025]['avg_day_temp'] - month_data['years'][2024]['avg_day_temp'], 1),
+                    'night_temp_change': round(month_data['years'][2025]['avg_night_temp'] - month_data['years'][2024]['avg_night_temp'], 1),
+                    'demand_change': round(month_data['years'][2025]['avg_demand'] - month_data['years'][2024]['avg_demand'], 1)
+                }
+            
+            if month_data['years'].get(2025) and month_data['years'].get(2026):
+                month_data['yoy_2025_2026'] = {
+                    'day_temp_change': round(month_data['years'][2026]['avg_day_temp'] - month_data['years'][2025]['avg_day_temp'], 1),
+                    'night_temp_change': round(month_data['years'][2026]['avg_night_temp'] - month_data['years'][2025]['avg_night_temp'], 1),
+                    'demand_change': round(month_data['years'][2026]['avg_demand'] - month_data['years'][2025]['avg_demand'], 1)
+                }
+            
+            comparison_data.append(month_data)
+        
+        # Filter by specific month if requested
+        if month_filter:
+            try:
+                month_num = int(month_filter)
+                comparison_data = [m for m in comparison_data if m['month_num'] == month_num]
+            except ValueError:
+                pass
+        
+        return jsonify({
+            'status': 'success',
+            'data': comparison_data,
+            'meta': {
+                'city_filter': city_filter,
+                'month_filter': month_filter,
+                'years_compared': [2024, 2025, 2026],
+                'current_date': datetime.now().strftime('%Y-%m-%d')
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     app.run(
         host='0.0.0.0',

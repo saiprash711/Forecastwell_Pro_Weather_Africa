@@ -199,6 +199,9 @@ async function loadDashboardData() {
             // Update heatmap city select with loaded data
             populateHeatmapCitySelect();
             
+            // Update YoY city selects with loaded data
+            populateYoYCitySelect();
+            
             // Initialize charts (deferred slightly for smoother UX)
             requestAnimationFrame(() => {
                 initializeDashboardCharts(weather.data);
@@ -1026,6 +1029,9 @@ function initializeAnalyticsCharts() {
             }
         });
     }
+    
+    // Load YoY Comparison Chart for Analytics page
+    loadAnalyticsYoYChart();
 }
 
 function updateStatRings() {
@@ -2169,6 +2175,8 @@ async function loadNewSections() {
         // Load 2-year historical data
         await loadTwoYearHistoricalData();
         await generateMonthlyHeatmap();
+        // Load Year-over-Year comparison
+        await loadYoYComparison();
     } catch (error) {
         console.warn('Some sections failed to load:', error);
     }
@@ -2695,8 +2703,410 @@ function getHeatmapColor(temp) {
     return '#ef4444';
 }
 
+// ========== Year-over-Year Comparison Functions ==========
+let yoyComparisonChart = null;
+let analyticsYoyChart = null;
+
+// Load YoY comparison data and render
+async function loadYoYComparison(cityId = 'all', monthNum = 'all') {
+    try {
+        const params = new URLSearchParams();
+        if (cityId !== 'all') params.append('city', cityId);
+        if (monthNum !== 'all') params.append('month', monthNum);
+        
+        const response = await fetch(`${API_BASE}/comparison/monthly-yoy?${params}`);
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data) {
+            renderYoYChart(result.data, monthNum);
+            renderYoYTable(result.data, monthNum);
+        }
+    } catch (error) {
+        console.error('Error loading YoY comparison:', error);
+    }
+}
+
+// Render YoY comparison chart
+function renderYoYChart(data, selectedMonth) {
+    const ctx = document.getElementById('yoyComparisonChart');
+    if (!ctx) return;
+    
+    // Destroy existing chart
+    if (yoyComparisonChart) {
+        yoyComparisonChart.destroy();
+    }
+    
+    const months = data.map(d => d.month.substring(0, 3));
+    const data2024 = data.map(d => d.years[2024]?.avg_day_temp || null);
+    const data2025 = data.map(d => d.years[2025]?.avg_day_temp || null);
+    const data2026 = data.map(d => d.years[2026]?.avg_day_temp || null);
+    
+    const night2024 = data.map(d => d.years[2024]?.avg_night_temp || null);
+    const night2025 = data.map(d => d.years[2025]?.avg_night_temp || null);
+    const night2026 = data.map(d => d.years[2026]?.avg_night_temp || null);
+    
+    yoyComparisonChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: '2024 Day',
+                    data: data2024,
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: '#3b82f6',
+                    borderWidth: 1
+                },
+                {
+                    label: '2025 Day',
+                    data: data2025,
+                    backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                    borderColor: '#22c55e',
+                    borderWidth: 1
+                },
+                {
+                    label: '2026 Day',
+                    data: data2026,
+                    backgroundColor: 'rgba(249, 115, 22, 0.7)',
+                    borderColor: '#f97316',
+                    borderWidth: 1
+                },
+                {
+                    label: '2024 Night',
+                    data: night2024,
+                    type: 'line',
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 3,
+                    tension: 0.3
+                },
+                {
+                    label: '2025 Night',
+                    data: night2025,
+                    type: 'line',
+                    borderColor: '#22c55e',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 3,
+                    tension: 0.3
+                },
+                {
+                    label: '2026 Night',
+                    data: night2026,
+                    type: 'line',
+                    borderColor: '#f97316',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 3,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.raw}°C`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: 15,
+                    max: 50,
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Render YoY comparison table
+function renderYoYTable(data, selectedMonth) {
+    const container = document.getElementById('yoyTableContainer');
+    if (!container) return;
+    
+    let html = `
+        <table class="yoy-table">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>2024 Day/Night</th>
+                    <th>2025 Day/Night</th>
+                    <th>2026 Day/Night</th>
+                    <th>YoY Change (24→25)</th>
+                    <th>YoY Change (25→26)</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    data.forEach(month => {
+        const y2024 = month.years[2024];
+        const y2025 = month.years[2025];
+        const y2026 = month.years[2026];
+        
+        const change2425 = month.yoy_2024_2025;
+        const change2526 = month.yoy_2025_2026;
+        
+        html += `
+            <tr>
+                <td><strong>${month.month}</strong></td>
+                <td class="year-2024">
+                    ${y2024 ? `${y2024.avg_day_temp}°C / ${y2024.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
+                </td>
+                <td class="year-2025">
+                    ${y2025 ? `${y2025.avg_day_temp}°C / ${y2025.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
+                </td>
+                <td class="year-2026">
+                    ${y2026 ? `${y2026.avg_day_temp}°C / ${y2026.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
+                </td>
+                <td>
+                    ${change2425 ? `
+                        <span class="yoy-change ${change2425.day_temp_change > 0 ? 'positive' : change2425.day_temp_change < 0 ? 'negative' : 'neutral'}">
+                            ${change2425.day_temp_change > 0 ? '+' : ''}${change2425.day_temp_change}°C
+                        </span>
+                    ` : '--'}
+                </td>
+                <td>
+                    ${change2526 ? `
+                        <span class="yoy-change ${change2526.day_temp_change > 0 ? 'positive' : change2526.day_temp_change < 0 ? 'negative' : 'neutral'}">
+                            ${change2526.day_temp_change > 0 ? '+' : ''}${change2526.day_temp_change}°C
+                        </span>
+                    ` : '<span class="yoy-no-data">Future</span>'}
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// Populate YoY city select dropdown
+function populateYoYCitySelect() {
+    const selects = [
+        document.getElementById('yoyCitySelect'),
+        document.getElementById('analyticsYoyCitySelect')
+    ];
+    
+    selects.forEach(select => {
+        if (!select) return;
+        
+        let cities = [];
+        if (currentCityData && currentCityData.length > 0) {
+            cities = currentCityData.map(city => ({
+                id: city.city_id,
+                name: city.city_name
+            }));
+        } else {
+            cities = DEFAULT_CITIES;
+        }
+        
+        const currentValue = select.value;
+        select.innerHTML = '<option value="all">All Cities (Average)</option>' +
+            cities.map(city => 
+                `<option value="${city.id}">${city.name}</option>`
+            ).join('');
+        
+        if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
+            select.value = currentValue;
+        }
+    });
+}
+
+// Setup YoY event listeners
+function setupYoYEventListeners() {
+    // Dashboard YoY controls
+    const yoyCitySelect = document.getElementById('yoyCitySelect');
+    const yoyMonthSelect = document.getElementById('yoyMonthSelect');
+    
+    if (yoyCitySelect) {
+        yoyCitySelect.addEventListener('change', () => {
+            loadYoYComparison(yoyCitySelect.value, yoyMonthSelect?.value || 'all');
+        });
+    }
+    
+    if (yoyMonthSelect) {
+        yoyMonthSelect.addEventListener('change', () => {
+            loadYoYComparison(yoyCitySelect?.value || 'all', yoyMonthSelect.value);
+        });
+    }
+    
+    // Analytics YoY controls
+    const analyticsYoyCitySelect = document.getElementById('analyticsYoyCitySelect');
+    const analyticsYoyMetricSelect = document.getElementById('analyticsYoyMetricSelect');
+    
+    if (analyticsYoyCitySelect) {
+        analyticsYoyCitySelect.addEventListener('change', () => {
+            loadAnalyticsYoYChart(analyticsYoyCitySelect.value, analyticsYoyMetricSelect?.value || 'day_temp');
+        });
+    }
+    
+    if (analyticsYoyMetricSelect) {
+        analyticsYoyMetricSelect.addEventListener('change', () => {
+            loadAnalyticsYoYChart(analyticsYoyCitySelect?.value || 'all', analyticsYoyMetricSelect.value);
+        });
+    }
+}
+
+// Load and render Analytics page YoY chart
+async function loadAnalyticsYoYChart(cityId = 'all', metric = 'day_temp') {
+    try {
+        const params = new URLSearchParams();
+        if (cityId !== 'all') params.append('city', cityId);
+        
+        const response = await fetch(`${API_BASE}/comparison/monthly-yoy?${params}`);
+        const result = await response.json();
+        
+        if (result.status === 'success' && result.data) {
+            renderAnalyticsYoYChart(result.data, metric);
+        }
+    } catch (error) {
+        console.error('Error loading Analytics YoY chart:', error);
+    }
+}
+
+// Render Analytics YoY chart with selected metric
+function renderAnalyticsYoYChart(data, metric) {
+    const ctx = document.getElementById('analyticsYoyChart');
+    if (!ctx) return;
+    
+    if (analyticsYoyChart) {
+        analyticsYoyChart.destroy();
+    }
+    
+    const months = data.map(d => d.month.substring(0, 3));
+    
+    // Get data based on selected metric
+    const metricMap = {
+        'day_temp': { key: 'avg_day_temp', label: 'Day Temperature (°C)' },
+        'night_temp': { key: 'avg_night_temp', label: 'Night Temperature (°C)' },
+        'demand': { key: 'avg_demand', label: 'Demand Index' },
+        'ac_hours': { key: 'avg_ac_hours', label: 'AC Hours' }
+    };
+    
+    const selectedMetric = metricMap[metric] || metricMap['day_temp'];
+    
+    const data2024 = data.map(d => d.years[2024]?.[selectedMetric.key] || null);
+    const data2025 = data.map(d => d.years[2025]?.[selectedMetric.key] || null);
+    const data2026 = data.map(d => d.years[2026]?.[selectedMetric.key] || null);
+    
+    analyticsYoyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: '2024',
+                    data: data2024,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                },
+                {
+                    label: '2025',
+                    data: data2025,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                },
+                {
+                    label: '2026',
+                    data: data2026,
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20,
+                        font: { size: 12, weight: 'bold' }
+                    }
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            const suffix = metric.includes('temp') ? '°C' : (metric === 'ac_hours' ? 'h' : '');
+                            return `${context.dataset.label}: ${context.raw}${suffix}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: metric === 'demand' || metric === 'ac_hours',
+                    title: {
+                        display: true,
+                        text: selectedMetric.label
+                    },
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+}
+
 // Initialize historical listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     // Give a slight delay to ensure all elements are loaded
     setTimeout(setupHistoricalEventListeners, 500);
+    setTimeout(setupYoYEventListeners, 600);
 });
