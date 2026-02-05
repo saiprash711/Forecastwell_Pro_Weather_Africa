@@ -129,11 +129,47 @@ function setupEventListeners() {
         });
     });
     
+    // Dashboard Sub-Tabs
+    setupDashboardSubTabs();
+    
     // Global Search
     const globalSearch = document.getElementById('globalSearch');
     if (globalSearch) {
         globalSearch.addEventListener('input', handleSearch);
     }
+}
+
+// ========== Dashboard Sub-Tabs ==========
+function setupDashboardSubTabs() {
+    const tabs = document.querySelectorAll('.dashboard-tab');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.subtab;
+            
+            // Update tab buttons
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.dashboard-subtab').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            const targetContent = document.getElementById(`${targetTab}-subtab`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+                
+                // Trigger chart resize for visible charts
+                if (targetTab === 'trends' && charts.temperature) {
+                    setTimeout(() => charts.temperature.resize(), 100);
+                }
+                if (targetTab === 'historical' && charts.twoYearHistorical) {
+                    setTimeout(() => charts.twoYearHistorical.resize(), 100);
+                }
+            }
+        });
+    });
 }
 
 // ========== Navigation ==========

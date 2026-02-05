@@ -152,158 +152,263 @@
             
             <!-- ========== DASHBOARD PAGE ========== -->
             <div class="page active" id="dashboardPage">
-                <!-- Hero Stats Section -->
-                <section class="hero-stats animate__animated animate__fadeIn">
-                    <div class="stat-card glass-card primary">
-                        <div class="stat-icon">
-                            <i class="fas fa-sun"></i>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Hottest Day City</span>
-                            <span class="stat-value" id="hottestDayCity">--</span>
-                        </div>
-                        <div class="stat-trend up">
-                            <i class="fas fa-arrow-up"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="stat-card glass-card highlight">
-                        <div class="stat-icon pulse-glow">
-                            <i class="fas fa-moon"></i>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">⭐ Hottest Night</span>
-                            <span class="stat-value" id="hottestNightCity">--</span>
-                        </div>
-                        <div class="stat-badge">PRIORITY</div>
-                    </div>
-                    
-                    <div class="stat-card glass-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-leaf"></i>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Season Status</span>
-                            <span class="stat-value" id="seasonStatus">--</span>
-                        </div>
-                    </div>
-                    
-                    <div class="stat-card glass-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-calendar-alt"></i>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Days to Peak</span>
-                            <span class="stat-value" id="daysToPeak">--</span>
-                        </div>
-                        <div class="countdown-ring" id="countdownRing"></div>
-                    </div>
-                </section>
+                <!-- Dashboard Sub-Tabs Navigation -->
+                <div class="dashboard-tabs-container">
+                    <nav class="dashboard-tabs">
+                        <button class="dashboard-tab active" data-subtab="overview">
+                            <i class="fas fa-home"></i>
+                            <span>Overview</span>
+                        </button>
+                        <button class="dashboard-tab" data-subtab="trends">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Trends & Cities</span>
+                        </button>
+                        <button class="dashboard-tab" data-subtab="historical">
+                            <i class="fas fa-history"></i>
+                            <span>Historical Data</span>
+                        </button>
+                        <button class="dashboard-tab" data-subtab="predictions">
+                            <i class="fas fa-brain"></i>
+                            <span>AI Predictions</span>
+                        </button>
+                    </nav>
+                </div>
 
-                <!-- Wave Sequence Section -->
-                <section class="wave-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-water"></i> Market Wave Sequence</h2>
-                        <span class="section-subtitle">Wave 1 (NOW) → Wave 2 (+2 Weeks) → Wave 3 (+6 Weeks)</span>
-                    </div>
-                    <div class="wave-grid" id="waveSequence">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
-
-                <!-- Main Grid -->
-                <div class="dashboard-grid">
-                    <!-- Map Section -->
-                    <section class="map-section glass-card">
-                        <div class="section-header">
-                            <h2><i class="fas fa-map-marked-alt"></i> Temperature Map</h2>
-                            <div class="map-controls">
-                                <button class="map-btn active" data-view="temp">Temperature</button>
-                                <button class="map-btn" data-view="demand">Demand</button>
-                                <button class="map-btn" data-view="ac">AC Hours</button>
+                <!-- ===== OVERVIEW SUB-TAB ===== -->
+                <div class="dashboard-subtab active" id="overview-subtab">
+                    <!-- Hero Stats Section -->
+                    <section class="hero-stats animate__animated animate__fadeIn">
+                        <div class="stat-card glass-card primary">
+                            <div class="stat-icon">
+                                <i class="fas fa-sun"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Hottest Day City</span>
+                                <span class="stat-value" id="hottestDayCity">--</span>
+                            </div>
+                            <div class="stat-trend up">
+                                <i class="fas fa-arrow-up"></i>
                             </div>
                         </div>
-                        <div id="map"></div>
+                        
+                        <div class="stat-card glass-card highlight">
+                            <div class="stat-icon pulse-glow">
+                                <i class="fas fa-moon"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">⭐ Hottest Night</span>
+                                <span class="stat-value" id="hottestNightCity">--</span>
+                            </div>
+                            <div class="stat-badge">PRIORITY</div>
+                        </div>
+                        
+                        <div class="stat-card glass-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-leaf"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Season Status</span>
+                                <span class="stat-value" id="seasonStatus">--</span>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card glass-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Days to Peak</span>
+                                <span class="stat-value" id="daysToPeak">--</span>
+                            </div>
+                            <div class="countdown-ring" id="countdownRing"></div>
+                        </div>
                     </section>
 
-                    <!-- Alerts Panel -->
-                    <section class="alerts-section glass-card">
+                    <!-- Wave Sequence Section -->
+                    <section class="wave-section glass-card animate__animated animate__fadeInUp">
                         <div class="section-header">
-                            <h2><i class="fas fa-exclamation-triangle"></i> Active Alerts</h2>
-                            <span class="alert-count" id="totalAlerts">0</span>
+                            <h2><i class="fas fa-water"></i> Market Wave Sequence</h2>
+                            <span class="section-subtitle">Wave 1 (NOW) → Wave 2 (+2 Weeks) → Wave 3 (+6 Weeks)</span>
                         </div>
-                        <div id="alertsContainer" class="alerts-list">
+                        <div class="wave-grid" id="waveSequence">
+                            <div class="loading-shimmer"></div>
+                        </div>
+                    </section>
+
+                    <!-- Main Grid - Map and Alerts -->
+                    <div class="dashboard-grid">
+                        <!-- Map Section -->
+                        <section class="map-section glass-card">
+                            <div class="section-header">
+                                <h2><i class="fas fa-map-marked-alt"></i> Temperature Map</h2>
+                                <div class="map-controls">
+                                    <button class="map-btn active" data-view="temp">Temperature</button>
+                                    <button class="map-btn" data-view="demand">Demand</button>
+                                    <button class="map-btn" data-view="ac">AC Hours</button>
+                                </div>
+                            </div>
+                            <div id="map"></div>
+                        </section>
+
+                        <!-- Alerts Panel -->
+                        <section class="alerts-section glass-card">
+                            <div class="section-header">
+                                <h2><i class="fas fa-exclamation-triangle"></i> Active Alerts</h2>
+                                <span class="alert-count" id="totalAlerts">0</span>
+                            </div>
+                            <div id="alertsContainer" class="alerts-list">
+                                <div class="loading-shimmer"></div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- ===== TRENDS & CITIES SUB-TAB ===== -->
+                <div class="dashboard-subtab" id="trends-subtab">
+                    <!-- Temperature Trends -->
+                    <section class="trends-section glass-card">
+                        <div class="section-header">
+                            <h2><i class="fas fa-chart-area"></i> Temperature Trends</h2>
+                            <div class="trend-controls">
+                                <select id="trendCity">
+                                    <option value="all">All Cities</option>
+                                </select>
+                                <select id="trendPeriod">
+                                    <option value="7">7 Days</option>
+                                    <option value="14">14 Days</option>
+                                    <option value="30" selected>30 Days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container large">
+                            <canvas id="temperatureChart"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- Cities Overview Grid -->
+                    <section class="cities-section">
+                        <div class="section-header standalone">
+                            <h2><i class="fas fa-city"></i> Cities Overview</h2>
+                            <div class="view-controls">
+                                <button class="view-btn active" data-view="grid"><i class="fas fa-th-large"></i></button>
+                                <button class="view-btn" data-view="list"><i class="fas fa-list"></i></button>
+                            </div>
+                        </div>
+                        <div id="citiesGrid" class="cities-grid">
+                            <div class="loading-shimmer"></div>
+                        </div>
+                    </section>
+
+                    <!-- Weekly Summary Section -->
+                    <section class="weekly-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-calendar-week"></i> 7-Day Outlook</h2>
+                            <span class="section-subtitle">Weekly forecast summary by city</span>
+                        </div>
+                        <div class="weekly-grid" id="weeklyContainer">
                             <div class="loading-shimmer"></div>
                         </div>
                     </section>
                 </div>
 
-                <!-- Temperature Trends -->
-                <section class="trends-section glass-card">
-                    <div class="section-header">
-                        <h2><i class="fas fa-chart-area"></i> Temperature Trends</h2>
-                        <div class="trend-controls">
-                            <select id="trendCity">
-                                <option value="all">All Cities</option>
-                            </select>
-                            <select id="trendPeriod">
-                                <option value="7">7 Days</option>
-                                <option value="14">14 Days</option>
-                                <option value="30" selected>30 Days</option>
-                            </select>
+                <!-- ===== PREDICTIONS SUB-TAB ===== -->
+                <div class="dashboard-subtab" id="predictions-subtab">
+                    <!-- AI Insights Section -->
+                    <section class="insights-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
+                            <span class="section-subtitle">Smart recommendations based on current conditions</span>
                         </div>
-                    </div>
-                    <div class="chart-container large">
-                        <canvas id="temperatureChart"></canvas>
-                    </div>
-                </section>
-
-                <!-- Cities Overview Grid -->
-                <section class="cities-section">
-                    <div class="section-header standalone">
-                        <h2><i class="fas fa-city"></i> Cities Overview</h2>
-                        <div class="view-controls">
-                            <button class="view-btn active" data-view="grid"><i class="fas fa-th-large"></i></button>
-                            <button class="view-btn" data-view="list"><i class="fas fa-list"></i></button>
+                        <div class="insights-grid" id="insightsContainer">
+                            <div class="loading-shimmer"></div>
                         </div>
-                    </div>
-                    <div id="citiesGrid" class="cities-grid">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
+                    </section>
 
-                <!-- AI Insights Section -->
-                <section class="insights-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
-                        <span class="section-subtitle">Smart recommendations based on current conditions</span>
-                    </div>
-                    <div class="insights-grid" id="insightsContainer">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
+                    <!-- Demand Prediction Section -->
+                    <section class="prediction-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-chart-bar"></i> Demand Prediction by City</h2>
+                            <span class="section-subtitle">Confidence-based demand forecasting</span>
+                        </div>
+                        <div class="demand-prediction-grid" id="demandPredictionContainer">
+                            <div class="loading-shimmer"></div>
+                        </div>
+                    </section>
 
-                <!-- Demand Prediction Section -->
-                <section class="prediction-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-chart-bar"></i> Demand Prediction by City</h2>
-                        <span class="section-subtitle">Confidence-based demand forecasting</span>
-                    </div>
-                    <div class="demand-prediction-grid" id="demandPredictionContainer">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
+                    <!-- Energy Estimates Section -->
+                    <section class="energy-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-bolt"></i> Energy Consumption Estimates</h2>
+                            <span class="section-subtitle">AC usage and electricity cost projections</span>
+                        </div>
+                        <div class="energy-grid" id="energyContainer">
+                            <div class="loading-shimmer"></div>
+                        </div>
+                    </section>
 
-                <!-- Energy Estimates Section -->
-                <section class="energy-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-bolt"></i> Energy Consumption Estimates</h2>
-                        <span class="section-subtitle">AC usage and electricity cost projections</span>
-                    </div>
-                    <div class="energy-grid" id="energyContainer">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
+                    <!-- Seasonal Patterns Section -->
+                    <section class="seasonal-patterns-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-leaf"></i> Seasonal Demand Patterns</h2>
+                            <span class="section-subtitle">Understand demand cycles across 2 years</span>
+                        </div>
+                        <div class="seasonal-grid" id="seasonalGrid">
+                            <div class="season-card winter">
+                                <div class="season-icon">❄️</div>
+                                <h4>Winter</h4>
+                                <p>Dec - Feb</p>
+                                <div class="season-demand">
+                                    <span class="demand-bar" style="width: 35%"></span>
+                                    <span class="demand-value">35%</span>
+                                </div>
+                                <span class="season-trend">Low Demand</span>
+                            </div>
+                            <div class="season-card pre-summer">
+                                <div class="season-icon">🌸</div>
+                                <h4>Pre-Summer</h4>
+                                <p>Mar - Apr</p>
+                                <div class="season-demand">
+                                    <span class="demand-bar" style="width: 55%"></span>
+                                    <span class="demand-value">55%</span>
+                                </div>
+                                <span class="season-trend rising">Rising</span>
+                            </div>
+                            <div class="season-card peak-summer">
+                                <div class="season-icon">🔥</div>
+                                <h4>Peak Summer</h4>
+                                <p>May - Jun</p>
+                                <div class="season-demand">
+                                    <span class="demand-bar" style="width: 85%"></span>
+                                    <span class="demand-value">85%</span>
+                                </div>
+                                <span class="season-trend critical">Critical</span>
+                            </div>
+                            <div class="season-card monsoon">
+                                <div class="season-icon">🌧️</div>
+                                <h4>Monsoon</h4>
+                                <p>Jul - Sep</p>
+                                <div class="season-demand">
+                                    <span class="demand-bar" style="width: 50%"></span>
+                                    <span class="demand-value">50%</span>
+                                </div>
+                                <span class="season-trend moderate">Moderate</span>
+                            </div>
+                            <div class="season-card post-monsoon">
+                                <div class="season-icon">🍂</div>
+                                <h4>Post-Monsoon</h4>
+                                <p>Oct - Nov</p>
+                                <div class="season-demand">
+                                    <span class="demand-bar" style="width: 40%"></span>
+                                    <span class="demand-value">40%</span>
+                                </div>
+                                <span class="season-trend declining">Declining</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ===== HISTORICAL DATA SUB-TAB ===== -->
+                <div class="dashboard-subtab" id="historical-subtab">
 
                 <!-- 2-Year Historical Analysis Section -->
                 <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
@@ -465,66 +570,6 @@
                     </div>
                 </section>
 
-                <!-- Seasonal Patterns Section -->
-                <section class="seasonal-patterns-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-leaf"></i> Seasonal Demand Patterns</h2>
-                        <span class="section-subtitle">Understand demand cycles across 2 years</span>
-                    </div>
-                    <div class="seasonal-grid" id="seasonalGrid">
-                        <div class="season-card winter">
-                            <div class="season-icon">❄️</div>
-                            <h4>Winter</h4>
-                            <p>Dec - Feb</p>
-                            <div class="season-demand">
-                                <span class="demand-bar" style="width: 35%"></span>
-                                <span class="demand-value">35%</span>
-                            </div>
-                            <span class="season-trend">Low Demand</span>
-                        </div>
-                        <div class="season-card pre-summer">
-                            <div class="season-icon">🌸</div>
-                            <h4>Pre-Summer</h4>
-                            <p>Mar - Apr</p>
-                            <div class="season-demand">
-                                <span class="demand-bar" style="width: 55%"></span>
-                                <span class="demand-value">55%</span>
-                            </div>
-                            <span class="season-trend rising">Rising</span>
-                        </div>
-                        <div class="season-card peak-summer">
-                            <div class="season-icon">🔥</div>
-                            <h4>Peak Summer</h4>
-                            <p>May - Jun</p>
-                            <div class="season-demand">
-                                <span class="demand-bar" style="width: 85%"></span>
-                                <span class="demand-value">85%</span>
-                            </div>
-                            <span class="season-trend critical">Critical</span>
-                        </div>
-                        <div class="season-card monsoon">
-                            <div class="season-icon">🌧️</div>
-                            <h4>Monsoon</h4>
-                            <p>Jul - Sep</p>
-                            <div class="season-demand">
-                                <span class="demand-bar" style="width: 50%"></span>
-                                <span class="demand-value">50%</span>
-                            </div>
-                            <span class="season-trend moderate">Moderate</span>
-                        </div>
-                        <div class="season-card post-monsoon">
-                            <div class="season-icon">🍂</div>
-                            <h4>Post-Monsoon</h4>
-                            <p>Oct - Nov</p>
-                            <div class="season-demand">
-                                <span class="demand-bar" style="width: 40%"></span>
-                                <span class="demand-value">40%</span>
-                            </div>
-                            <span class="season-trend declining">Declining</span>
-                        </div>
-                    </div>
-                </section>
-
                 <!-- Monthly Heatmap Section -->
                 <section class="monthly-heatmap-section glass-card animate__animated animate__fadeInUp">
                     <div class="section-header">
@@ -592,28 +637,7 @@
                         <!-- Generated dynamically -->
                     </div>
                 </section>
-
-                <!-- Historical Comparison Section (Original) -->
-                <section class="historical-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-history"></i> Current vs Historical Average</h2>
-                        <span class="section-subtitle">Compare today's temperatures with 2-year averages</span>
-                    </div>
-                    <div class="historical-grid" id="historicalContainer">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
-
-                <!-- Weekly Summary Section -->
-                <section class="weekly-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-calendar-week"></i> 7-Day Outlook</h2>
-                        <span class="section-subtitle">Weekly forecast summary by city</span>
-                    </div>
-                    <div class="weekly-grid" id="weeklyContainer">
-                        <div class="loading-shimmer"></div>
-                    </div>
-                </section>
+                </div>
             </div>
 
             <!-- ========== ANALYTICS PAGE ========== -->
