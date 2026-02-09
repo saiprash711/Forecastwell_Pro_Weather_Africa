@@ -489,15 +489,47 @@ function updateHeaderStats(citiesData) {
         (city.night_temp || city.temperature - 5) > (max.night_temp || max.temperature - 5) ? city : max
     );
 
-    // Calculate season status
-    const avgNightTemp = citiesData.reduce((sum, c) => sum + (c.night_temp || c.temperature - 5), 0) / citiesData.length;
+    // Season status based on hottest city's night temp (not averaged across diverse cities)
+    const hottestNightTemp = hottestNight.night_temp || hottestNight.temperature - 5;
     let seasonStatus = '❄️ Off Season';
-    if (avgNightTemp >= 24) seasonStatus = '🔥 Peak Season';
-    else if (avgNightTemp >= 22) seasonStatus = '📈 High Season';
-    else if (avgNightTemp >= 20) seasonStatus = '🌤️ Building';
+    if (hottestNightTemp >= 24) seasonStatus = '🔥 Peak Season';
+    else if (hottestNightTemp >= 22) seasonStatus = '📈 High Season';
+    else if (hottestNightTemp >= 20) seasonStatus = '🌤️ Building';
 
-    // Days to peak
-    const daysToPeak = avgNightTemp >= 24 ? 0 : Math.round((24 - avgNightTemp) * 10);
+    // Days to peak - based on actual South India summer calendar
+    // Peak summer in South India is typically mid-April to mid-May
+    // We calculate days from today to April 20 (approximate peak)
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    // Peak summer target: April 20 of current year (or next year if already past)
+    let peakDate = new Date(currentYear, 3, 20); // Month is 0-indexed, so 3 = April
+    if (today > peakDate) {
+        // If we're already past April 20, check if we're still in peak (before June 1)
+        const peakEnd = new Date(currentYear, 5, 1); // June 1
+        if (today < peakEnd) {
+            // We're in peak season right now
+        } else {
+            // Past peak, point to next year
+            peakDate = new Date(currentYear + 1, 3, 20);
+        }
+    }
+    const daysToPeak = hottestNightTemp >= 24 ? 0 : Math.max(0, Math.round((peakDate - today) / (1000 * 60 * 60 * 24)));
+
+    // Refine season status using both temperature AND calendar
+    const month = today.getMonth() + 1; // 1-12
+    if (hottestNightTemp >= 24 || (month >= 4 && month <= 5)) {
+        seasonStatus = '🔥 Peak Season';
+    } else if (hottestNightTemp >= 22 || month === 3) {
+        seasonStatus = '📈 High Season';
+    } else if (hottestNightTemp >= 20 || (month === 2 && hottestNightTemp >= 18)) {
+        seasonStatus = '🌤️ Building';
+    } else if (month >= 6 && month <= 9) {
+        seasonStatus = '🌧️ Monsoon';
+    } else if (month >= 11 || month <= 1) {
+        seasonStatus = '❄️ Off Season';
+    } else {
+        seasonStatus = '🌡️ Moderate Season';
+    }
 
     // Update DOM
     const hottestDayEl = document.getElementById('hottestDayCity');
@@ -909,56 +941,65 @@ function initializeAnalyticsCharts() {
     // Heatmap
     generateHeatmap();
 
-    // Radar Chart
+    // City Performance Comparison (grouped bar chart)
     const radarCanvas = document.getElementById('radarChart');
     if (radarCanvas) {
         if (charts.radar) charts.radar.destroy();
         
-        // Colors for up to 6 cities
+        // Colors for up to 6 cities (kept from original)
         const radarColors = [
-            { border: '#667eea', bg: 'rgba(102, 126, 234, 0.2)' },
-            { border: '#f97316', bg: 'rgba(249, 115, 22, 0.2)' },
-            { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.2)' },
-            { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.2)' },
-            { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.2)' },
-            { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.2)' }
+            { border: '#667eea', bg: 'rgba(102, 126, 234, 0.8)' },
+            { border: '#f97316', bg: 'rgba(249, 115, 22, 0.8)' },
+            { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.8)' },
+            { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.8)' },
+            { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.8)' },
+            { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.8)' }
         ];
-        
+
+        // Metrics to compare across cities (normalized 0-100)
+        const metricLabels = ['Day Temp', 'Night Temp', 'Humidity', 'Wind', 'Demand', 'AC Hours'];
+
+        const datasets = currentCityData.slice(0, 6).map((city, i) => ({
+            label: city.city_name,
+            data: [
+                normalizeValue(city.day_temp || city.temperature, 20, 45),
+                normalizeValue(city.night_temp || (city.temperature ? city.temperature - 5 : 20), 15, 30),
+                city.humidity || 50,
+                normalizeValue(city.wind_speed || 10, 0, 30),
+                city.demand_index || 50,
+                normalizeValue(city.ac_hours || 8, 0, 24)
+            ],
+            backgroundColor: radarColors[i % radarColors.length].bg,
+            borderColor: radarColors[i % radarColors.length].border,
+            borderWidth: 1
+        }));
+
         charts.radar = new Chart(radarCanvas, {
-            type: 'radar',
+            type: 'bar',
             data: {
-                labels: ['Day Temp', 'Night Temp', 'Humidity', 'Wind', 'Demand', 'AC Hours'],
-                datasets: currentCityData.slice(0, 6).map((city, i) => ({
-                    label: city.city_name,
-                    data: [
-                        normalizeValue(city.day_temp || city.temperature, 20, 45),
-                        normalizeValue(city.night_temp || city.temperature - 5, 15, 30),
-                        city.humidity || 50,
-                        normalizeValue(city.wind_speed || 10, 0, 30),
-                        city.demand_index || 50,
-                        normalizeValue(city.ac_hours || 8, 0, 24) * 100 / 24
-                    ],
-                    borderColor: radarColors[i % radarColors.length].border,
-                    backgroundColor: radarColors[i % radarColors.length].bg,
-                    borderWidth: 2
-                }))
+                labels: metricLabels,
+                datasets: datasets
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'top'
-                    }
+                    legend: { position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
                 },
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
                 scales: {
-                    r: {
-                        beginAtZero: true,
-                        max: 100
-                    }
+                    x: { stacked: false },
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: 'Normalized (0-100)' } }
                 }
             }
         });
+
+        // Tweak default bar appearance for clarity
+        if (Chart && Chart.defaults && Chart.defaults.elements && Chart.defaults.elements.bar) {
+            Chart.defaults.elements.bar.borderRadius = 3;
+            Chart.defaults.elements.bar.maxBarThickness = 40;
+        }
     }
 
     // Distribution Chart
@@ -1074,22 +1115,23 @@ function initializeAnalyticsCharts() {
 }
 
 function updateStatRings() {
-    const avgTemp = currentCityData.reduce((sum, c) => sum + (c.day_temp || c.temperature || 30), 0) / currentCityData.length;
-    const avgHumidity = currentCityData.reduce((sum, c) => sum + (c.humidity || 50), 0) / currentCityData.length;
-    const avgDemand = currentCityData.reduce((sum, c) => sum + (c.demand_index || 50), 0) / currentCityData.length;
-    const avgAcHours = currentCityData.reduce((sum, c) => sum + (c.ac_hours || 8), 0) / currentCityData.length;
+    // Use day_temp + 1 to match the heatmap's simulated 3 PM peak
+    const peakTemp = Math.max(...currentCityData.map(c => (c.day_temp || c.temperature || 30) + 1));
+    const peakHumidity = Math.max(...currentCityData.map(c => c.humidity || 50));
+    const peakDemand = Math.max(...currentCityData.map(c => c.demand_index || 50));
+    const peakAcHours = Math.max(...currentCityData.map(c => c.ac_hours || 8));
 
     // Update values
-    document.getElementById('avgTempValue').textContent = `${Math.round(avgTemp)}°C`;
-    document.getElementById('avgHumidityValue').textContent = `${Math.round(avgHumidity)}%`;
-    document.getElementById('avgDemandValue').textContent = Math.round(avgDemand);
-    document.getElementById('avgAcHoursValue').textContent = `${Math.round(avgAcHours)}h`;
+    document.getElementById('avgTempValue').textContent = `${Math.round(peakTemp)}°C`;
+    document.getElementById('avgHumidityValue').textContent = `${Math.round(peakHumidity)}%`;
+    document.getElementById('avgDemandValue').textContent = Math.round(peakDemand);
+    document.getElementById('avgAcHoursValue').textContent = `${Math.round(peakAcHours)}h`;
 
     // Animate rings
-    animateRing('tempProgress', normalizeValue(avgTemp, 20, 45));
-    animateRing('humidityProgress', avgHumidity);
-    animateRing('demandProgress', avgDemand);
-    animateRing('acHoursProgress', (avgAcHours / 24) * 100);
+    animateRing('tempProgress', normalizeValue(peakTemp, 20, 45));
+    animateRing('humidityProgress', peakHumidity);
+    animateRing('demandProgress', peakDemand);
+    animateRing('acHoursProgress', (peakAcHours / 24) * 100);
 }
 
 function animateRing(id, percentage) {
@@ -1112,7 +1154,7 @@ function generateHeatmap() {
                 <div class="heatmap-header-row">
                     <div class="heatmap-city-label">City</div>
                     ${timeSlots.map(t => `<div class="heatmap-time-label">${t}</div>`).join('')}
-                    <div class="heatmap-avg-label">Avg</div>
+                    <div class="heatmap-avg-label">PEAK</div>
                 </div>
                 ${currentCityData.map(city => {
                     const baseTemp = city.day_temp || city.temperature || 30;
@@ -1127,7 +1169,7 @@ function generateHeatmap() {
                         nightTemp + 3,           // 9 PM - night
                         nightTemp                // 12 AM - midnight
                     ];
-                    const avgTemp = temps.reduce((a, b) => a + b, 0) / temps.length;
+                    const peakTemp = Math.max(...temps);
                     
                     return `
                         <div class="heatmap-data-row">
@@ -1142,8 +1184,8 @@ function generateHeatmap() {
                                 </div>
                             `).join('')}
                             <div class="heatmap-avg-cell">
-                                <span class="avg-value">${Math.round(avgTemp)}°</span>
-                                <span class="avg-indicator ${avgTemp >= 35 ? 'hot' : avgTemp >= 30 ? 'warm' : 'cool'}"></span>
+                                <span class="avg-value">${Math.round(peakTemp)}°</span>
+                                <span class="avg-indicator ${peakTemp >= 35 ? 'hot' : peakTemp >= 30 ? 'warm' : 'cool'}"></span>
                             </div>
                         </div>
                     `;
@@ -1224,27 +1266,22 @@ function populateForecastCitySelect() {
     const select = document.getElementById('forecastCitySelect');
     if (!select || !currentCityData) return;
 
-    select.innerHTML = '<option value="">All Cities (Average)</option>' + 
-        currentCityData.map(city => 
-            `<option value="${city.city_id}">${city.city_name}</option>`
+    select.innerHTML = 
+        currentCityData.map((city, i) => 
+            `<option value="${city.city_id}" ${i === 0 ? 'selected' : ''}>${city.city_name}</option>`
         ).join('');
     
-    selectedForecastCity = '';
+    selectedForecastCity = currentCityData.length > 0 ? currentCityData[0].city_id : '';
 }
 
 function getSelectedCityData() {
-    if (!selectedForecastCity || !currentCityData) {
-        // Return average of all cities
-        if (!currentCityData || currentCityData.length === 0) return null;
-        return {
-            city_name: 'All Cities',
-            day_temp: currentCityData.reduce((sum, c) => sum + (c.day_temp || c.temperature), 0) / currentCityData.length,
-            night_temp: currentCityData.reduce((sum, c) => sum + (c.night_temp || c.temperature - 5), 0) / currentCityData.length,
-            humidity: currentCityData.reduce((sum, c) => sum + (c.humidity || 50), 0) / currentCityData.length,
-            demand_index: currentCityData.reduce((sum, c) => sum + (c.demand_index || 50), 0) / currentCityData.length
-        };
+    if (!currentCityData || currentCityData.length === 0) return null;
+    if (selectedForecastCity) {
+        const found = currentCityData.find(c => c.city_id == selectedForecastCity);
+        if (found) return found;
     }
-    return currentCityData.find(c => c.city_id == selectedForecastCity);
+    // Default to first city (no combined averages)
+    return currentCityData[0];
 }
 
 function generateForecastCards() {
@@ -1419,17 +1456,14 @@ function generatePredictions() {
     if (!container) return;
 
     const cityData = getSelectedCityData();
-    const cityName = cityData ? cityData.city_name : 'All Cities';
+    const cityName = cityData ? cityData.city_name : 'Chennai';
     
-    // Calculate predictions based on selected city or average
-    const avgTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 
-        currentCityData.reduce((sum, c) => sum + (c.day_temp || c.temperature), 0) / currentCityData.length;
+    // Calculate predictions based on selected city
+    const avgTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 35;
     
-    const avgDemand = cityData ? (cityData.demand_index || 50) :
-        currentCityData.reduce((sum, c) => sum + (c.demand_index || 50), 0) / currentCityData.length;
+    const avgDemand = cityData ? (cityData.demand_index || 50) : 50;
     
-    const humidity = cityData ? (cityData.humidity || 50) :
-        currentCityData.reduce((sum, c) => sum + (c.humidity || 50), 0) / currentCityData.length;
+    const humidity = cityData ? (cityData.humidity || 50) : 50;
 
     // Calculate predictions
     const peakDays = avgTemp >= 38 ? Math.round(Math.random() * 5 + 2) : Math.round(30 - avgDemand / 3);
@@ -1644,8 +1678,8 @@ let trendEventListenersSet = false;
 function populateCitySelects(citiesData) {
     const trendCity = document.getElementById('trendCity');
     if (trendCity) {
-        trendCity.innerHTML = '<option value="all">All Cities</option>' + 
-            citiesData.map(c => `<option value="${c.city_id}">${c.city_name}</option>`).join('');
+        trendCity.innerHTML = 
+            citiesData.map((c, i) => `<option value="${c.city_id}" ${i === 0 ? 'selected' : ''}>${c.city_name}</option>`).join('');
         
         // Add event listener only once
         if (!trendEventListenersSet) {
@@ -2157,6 +2191,190 @@ async function loadHistoricalComparison() {
     }
 }
 
+// ========== DATE COMPARISON FEATURE ==========
+function initDateCompare() {
+    const datePicker = document.getElementById('compareDatePicker');
+    const citySelect = document.getElementById('compareCitySelect');
+    const compareBtn = document.getElementById('dateCompareBtn');
+
+    if (!datePicker || !compareBtn) {
+        console.warn('Date compare elements not found, retrying in 500ms...');
+        setTimeout(initDateCompare, 500);
+        return;
+    }
+
+    // Set max date to today and default to today
+    const today = new Date();
+    const todayStr = today.getFullYear() + '-' + 
+        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(today.getDate()).padStart(2, '0');
+    datePicker.setAttribute('max', todayStr);
+    datePicker.value = todayStr;
+
+    // Populate city select
+    if (citySelect) {
+        const cities = currentCityData && currentCityData.length > 0
+            ? currentCityData.map(c => ({ id: c.city_id, name: c.city_name }))
+            : DEFAULT_CITIES;
+        citySelect.innerHTML = 
+            cities.map((c, i) => `<option value="${c.id}" ${i === 0 ? 'selected' : ''}>${c.name}</option>`).join('');
+    }
+
+    // Compare button click
+    compareBtn.onclick = function(e) {
+        e.preventDefault();
+        fetchDateComparison();
+    };
+
+    // Quick date buttons - use closest() to handle clicks on child elements
+    document.querySelectorAll('.quick-date-btn').forEach(btn => {
+        btn.onclick = function(e) {
+            e.preventDefault();
+            const button = e.target.closest('.quick-date-btn');
+            if (!button) return;
+            
+            const offset = parseInt(button.getAttribute('data-offset'));
+            const d = new Date();
+            d.setDate(d.getDate() - offset);
+            const dateStr = d.getFullYear() + '-' + 
+                String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                String(d.getDate()).padStart(2, '0');
+            datePicker.value = dateStr;
+
+            document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
+            button.classList.add('active');
+
+            fetchDateComparison();
+        };
+    });
+    
+    console.log('Date compare initialized successfully');
+}
+
+async function fetchDateComparison() {
+    const datePicker = document.getElementById('compareDatePicker');
+    const citySelect = document.getElementById('compareCitySelect');
+    const resultsDiv = document.getElementById('dateCompareResults');
+    const compareBtn = document.getElementById('dateCompareBtn');
+
+    if (!datePicker || !resultsDiv) return;
+
+    const dateVal = datePicker.value;
+    const cityVal = citySelect ? citySelect.value : 'all';
+
+    if (!dateVal) {
+        resultsDiv.innerHTML = '<div class="date-compare-placeholder"><i class="fas fa-exclamation-circle"></i><p>Please select a date first</p></div>';
+        return;
+    }
+
+    // Show loading
+    compareBtn.classList.add('loading');
+    compareBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    resultsDiv.innerHTML = `
+        <div class="dc-loading">
+            <div class="dc-spinner"></div>
+            <p>Fetching real weather data from Open-Meteo Archive...</p>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`${API_BASE}/historical/date-compare?date=${dateVal}&city=${cityVal}`);
+        const result = await response.json();
+
+        if (result.status === 'success' && result.data && result.data.length > 0) {
+            const targetDate = new Date(dateVal);
+            const dateDisplay = targetDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+
+            resultsDiv.innerHTML = result.data.map((city, idx) => {
+                const yearsHtml = city.years.map((yr, yi) => {
+                    const isTarget = yi === 0;
+                    const dayTemp = yr.day_temp !== null ? `${yr.day_temp}°C` : 'N/A';
+                    const nightTemp = yr.night_temp !== null ? `${yr.night_temp}°C` : 'N/A';
+                    const humidity = yr.humidity !== null ? `${yr.humidity}%` : 'N/A';
+                    const dateLabel = yr.date ? new Date(yr.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+                    return `
+                        <div class="dc-year-col ${isTarget ? 'current-year' : ''}" style="animation-delay: ${yi * 0.1}s">
+                            <div class="dc-year-label">
+                                <h4>📅 ${yr.year}</h4>
+                                <span class="dc-year-date">${dateLabel}</span>
+                            </div>
+                            <div class="dc-temp-row">
+                                <span class="dc-temp-label"><i class="fas fa-sun" style="color:#f59e0b"></i> Day</span>
+                                <span class="dc-temp-value ${yr.day_temp !== null ? 'day' : 'na'}">${dayTemp}</span>
+                            </div>
+                            <div class="dc-temp-row">
+                                <span class="dc-temp-label"><i class="fas fa-moon" style="color:#6366f1"></i> Night</span>
+                                <span class="dc-temp-value ${yr.night_temp !== null ? 'night' : 'na'}">${nightTemp}</span>
+                            </div>
+                            <div class="dc-temp-row">
+                                <span class="dc-temp-label"><i class="fas fa-tint" style="color:#06b6d4"></i> Humidity</span>
+                                <span class="dc-temp-value ${yr.humidity !== null ? 'humidity' : 'na'}">${humidity}</span>
+                            </div>
+                            ${yr.is_current ? '<div style="margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted);text-align:center;">Live / Forecast</div>' : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                // Verdict badge
+                let verdictHtml = '';
+                if (city.comparison) {
+                    const c = city.comparison;
+                    const trendIcon = c.trend === 'warmer' ? 'fa-temperature-high' : (c.trend === 'cooler' ? 'fa-temperature-low' : 'fa-equals');
+                    const trendText = c.trend === 'warmer' ? 'Warmer than last year' : (c.trend === 'cooler' ? 'Cooler than last year' : 'Similar to last year');
+                    verdictHtml = `<span class="dc-verdict ${c.trend}"><i class="fas ${trendIcon}"></i> ${trendText}</span>`;
+                }
+
+                // Diff strip
+                let diffHtml = '';
+                if (city.comparison) {
+                    const c = city.comparison;
+                    const dayClass = c.day_diff > 0 ? 'up' : (c.day_diff < 0 ? 'down' : 'neutral');
+                    const nightClass = c.night_diff > 0 ? 'up' : (c.night_diff < 0 ? 'down' : 'neutral');
+                    const dayIcon = c.day_diff > 0 ? 'fa-arrow-up' : (c.day_diff < 0 ? 'fa-arrow-down' : 'fa-minus');
+                    const nightIcon = c.night_diff > 0 ? 'fa-arrow-up' : (c.night_diff < 0 ? 'fa-arrow-down' : 'fa-minus');
+                    diffHtml = `
+                        <div class="dc-diff-strip">
+                            <div class="dc-diff-badge ${dayClass}">
+                                <i class="fas ${dayIcon}"></i> ${c.day_label} <span class="dc-diff-label">Day vs Last Year</span>
+                            </div>
+                            <div class="dc-diff-badge ${nightClass}">
+                                <i class="fas ${nightIcon}"></i> ${c.night_label} <span class="dc-diff-label">Night vs Last Year</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="dc-city-card" style="animation-delay: ${idx * 0.15}s">
+                        <div class="dc-city-header">
+                            <div>
+                                <span class="dc-city-name"><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> ${city.city_name}</span>
+                                <span class="dc-city-state">${city.state} — ${dateDisplay}</span>
+                            </div>
+                            ${verdictHtml}
+                        </div>
+                        <div class="dc-years-grid">${yearsHtml}</div>
+                        ${diffHtml}
+                        <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;background:rgba(99,102,241,0.04);border-radius:8px;font-size:0.7rem;color:var(--text-muted);display:flex;align-items:center;gap:0.4rem;">
+                            <i class="fas fa-info-circle" style="color:var(--primary);opacity:0.5"></i>
+                            Data from Open-Meteo ECMWF reanalysis (~11km grid). Values may differ ±2-3°C from actual station readings (IMD/Google).
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            resultsDiv.innerHTML = '<div class="date-compare-placeholder"><i class="fas fa-exclamation-triangle"></i><p>No data found for the selected date and city</p></div>';
+        }
+    } catch (error) {
+        console.error('Date comparison error:', error);
+        resultsDiv.innerHTML = '<div class="date-compare-placeholder"><i class="fas fa-exclamation-triangle"></i><p>Failed to fetch comparison data. Please try again.</p></div>';
+    } finally {
+        compareBtn.classList.remove('loading');
+        compareBtn.innerHTML = '<i class="fas fa-balance-scale"></i> Compare';
+    }
+}
+
 async function loadWeeklySummary() {
     const container = document.getElementById('weeklyContainer');
     if (!container) return;
@@ -2205,7 +2423,6 @@ async function loadWeeklySummary() {
 async function loadNewSections() {
     // Load sections sequentially to reduce server load
     try {
-        await loadInsights();
         await loadDemandPredictions();
         await loadEnergyEstimates();
         // These are less critical, load last
@@ -2219,6 +2436,9 @@ async function loadNewSections() {
     } catch (error) {
         console.warn('Some sections failed to load:', error);
     }
+    
+    // Initialize date comparison (outside try-catch so it always runs)
+    try { initDateCompare(); } catch(e) { console.warn('Date compare init error:', e); }
 }
 
 // ========== 2-Year Historical Data Functions ==========
@@ -2253,7 +2473,7 @@ const DEFAULT_CITIES = [
     { id: 'coimbatore', name: 'Coimbatore' },
     { id: 'visakhapatnam', name: 'Visakhapatnam' },
     { id: 'madurai', name: 'Madurai' },
-    { id: 'secunderabad', name: 'Secunderabad' }
+    { id: 'vijayawada', name: 'Vijayawada' }
 ];
 
 function populateHistoricalCitySelect() {
@@ -2271,9 +2491,9 @@ function populateHistoricalCitySelect() {
         cities = DEFAULT_CITIES;
     }
     
-    select.innerHTML = '<option value="all">All Cities</option>' +
-        cities.map(city => 
-            `<option value="${city.id}">${city.name}</option>`
+    select.innerHTML = 
+        cities.map((city, i) => 
+            `<option value="${city.id}" ${i === 0 ? 'selected' : ''}>${city.name}</option>`
         ).join('');
 }
 
@@ -2365,10 +2585,12 @@ function updateHistoricalStats(data, meta) {
     const minTempEl = document.getElementById('minTemp2yr');
     if (minTempEl) minTempEl.textContent = `${minNightTemp.toFixed(1)}°C`;
     
-    // Calculate YoY change
+    // Calculate YoY change using peak temps (per-city), not averages
     const yearlyStats = data.yearly_stats;
     if (yearlyStats && yearlyStats[2024] && yearlyStats[2025]) {
-        const yoyChange = (yearlyStats[2025].avg_day_temp - yearlyStats[2024].avg_day_temp).toFixed(1);
+        const peak2025 = yearlyStats[2025].peak_day_temp || 0;
+        const peak2024 = yearlyStats[2024].peak_day_temp || 0;
+        const yoyChange = (peak2025 - peak2024).toFixed(1);
         const yoyEl = document.getElementById('yoyChange');
         if (yoyEl) yoyEl.textContent = `${yoyChange >= 0 ? '+' : ''}${yoyChange}°C`;
     }
@@ -2387,62 +2609,43 @@ function renderTwoYearHistoricalChart(data) {
         return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
     });
     
-    // Aggregate data across all cities
-    const avgDayTemps = data.timeline.map(entry => {
-        const temps = Object.values(entry.cities).map(c => c.day_temp);
-        return temps.reduce((a, b) => a + b, 0) / temps.length;
-    });
+    // Per-city night temperature lines (no combined averages)
+    const cityIds = data.cities ? data.cities.map(c => c.id) : Object.keys(data.timeline[0]?.cities || {});
+    const cityNames = {};
+    if (data.cities) {
+        data.cities.forEach(c => { cityNames[c.id] = c.name; });
+    }
     
-    const avgNightTemps = data.timeline.map(entry => {
-        const temps = Object.values(entry.cities).map(c => c.night_temp);
-        return temps.reduce((a, b) => a + b, 0) / temps.length;
-    });
+    const cityColors = [
+        '#f97316', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', 
+        '#ec4899', '#14b8a6', '#f59e0b'
+    ];
     
-    const avgDemand = data.timeline.map(entry => {
-        const demands = Object.values(entry.cities).map(c => c.demand_index);
-        return demands.reduce((a, b) => a + b, 0) / demands.length;
+    const datasets = [];
+    cityIds.forEach((cityId, i) => {
+        const color = cityColors[i % cityColors.length];
+        const nightTemps = data.timeline.map(entry => {
+            return entry.cities[cityId]?.night_temp || null;
+        });
+        datasets.push({
+            label: `${cityNames[cityId] || cityId} Night \u00b0C`,
+            data: nightTemps,
+            borderColor: color,
+            backgroundColor: `${color}1a`,
+            fill: false,
+            tension: 0.4,
+            pointRadius: 1,
+            pointHoverRadius: 5,
+            borderWidth: 2,
+            yAxisID: 'y'
+        });
     });
     
     twoYearHistoricalChart = new Chart(canvas, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Avg Day Temperature (°C)',
-                    data: avgDayTemps,
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 2,
-                    pointHoverRadius: 6,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Avg Night Temperature (°C) ⭐',
-                    data: avgNightTemps,
-                    borderColor: '#3b82f6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 2,
-                    pointHoverRadius: 6,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Demand Index',
-                    data: avgDemand,
-                    borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                    fill: false,
-                    tension: 0.4,
-                    pointRadius: 2,
-                    pointHoverRadius: 6,
-                    borderDash: [5, 5],
-                    yAxisID: 'y1'
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -2501,28 +2704,13 @@ function renderTwoYearHistoricalChart(data) {
                     position: 'left',
                     title: {
                         display: true,
-                        text: 'Temperature (°C)',
+                        text: 'Night Temperature (°C)',
                         font: { size: 12 }
                     },
                     min: 15,
-                    max: 50,
+                    max: 40,
                     grid: {
                         color: 'rgba(0, 0, 0, 0.05)'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Demand Index',
-                        font: { size: 12 }
-                    },
-                    min: 0,
-                    max: 100,
-                    grid: {
-                        drawOnChartArea: false
                     }
                 }
             }
@@ -2533,35 +2721,30 @@ function renderTwoYearHistoricalChart(data) {
 function updateYearComparisonCards(yearlyStats) {
     if (!yearlyStats) return;
     
-    // 2024
-    if (yearlyStats[2024]) {
-        const el2024Day = document.getElementById('avg2024Day');
-        const el2024Night = document.getElementById('avg2024Night');
-        const el2024Demand = document.getElementById('avg2024Demand');
-        if (el2024Day) el2024Day.textContent = `${yearlyStats[2024].avg_day_temp}°C`;
-        if (el2024Night) el2024Night.textContent = `${yearlyStats[2024].avg_night_temp}°C`;
-        if (el2024Demand) el2024Demand.textContent = Math.round(yearlyStats[2024].avg_demand);
-    }
-    
-    // 2025
-    if (yearlyStats[2025]) {
-        const el2025Day = document.getElementById('avg2025Day');
-        const el2025Night = document.getElementById('avg2025Night');
-        const el2025Demand = document.getElementById('avg2025Demand');
-        if (el2025Day) el2025Day.textContent = `${yearlyStats[2025].avg_day_temp}°C`;
-        if (el2025Night) el2025Night.textContent = `${yearlyStats[2025].avg_night_temp}°C`;
-        if (el2025Demand) el2025Demand.textContent = Math.round(yearlyStats[2025].avg_demand);
-    }
-    
-    // 2026
-    if (yearlyStats[2026]) {
-        const el2026Day = document.getElementById('avg2026Day');
-        const el2026Night = document.getElementById('avg2026Night');
-        const el2026Demand = document.getElementById('avg2026Demand');
-        if (el2026Day) el2026Day.textContent = `${yearlyStats[2026].avg_day_temp}°C`;
-        if (el2026Night) el2026Night.textContent = `${yearlyStats[2026].avg_night_temp}°C`;
-        if (el2026Demand) el2026Demand.textContent = Math.round(yearlyStats[2026].avg_demand);
-    }
+    // Update year cards with per-city hottest data (no combined averages)
+    [2024, 2025, 2026].forEach(year => {
+        if (!yearlyStats[year]) return;
+        const ys = yearlyStats[year];
+        
+        const elDay = document.getElementById(`avg${year}Day`);
+        const elNight = document.getElementById(`avg${year}Night`);
+        const elDemand = document.getElementById(`avg${year}Demand`);
+        
+        if (elDay) {
+            const hotCity = ys.hottest_city;
+            elDay.textContent = hotCity ? `${hotCity.max_day_temp}°C` : '--';
+            elDay.title = hotCity ? `Hottest: ${hotCity.name}` : '';
+        }
+        if (elNight) {
+            const hotCity = ys.hottest_city;
+            elNight.textContent = hotCity ? `${hotCity.max_night_temp}°C` : '--';
+            elNight.title = hotCity ? `Hottest: ${hotCity.name}` : '';
+        }
+        if (elDemand) {
+            const hotCity = ys.hottest_city;
+            elDemand.textContent = hotCity ? Math.round(hotCity.avg_demand) : '--';
+        }
+    });
 }
 
 async function generateMonthlyHeatmap(cityId = 'all') {
@@ -2595,7 +2778,7 @@ async function generateMonthlyHeatmap(cityId = 'all') {
         });
         
         // Get city name for display
-        let cityName = apiData.city_name || 'All Cities (Average)';
+        let cityName = apiData.city_name || 'Chennai';
         
         // Generate heatmap HTML
         let html = `
@@ -2669,15 +2852,10 @@ function populateHeatmapCitySelect() {
     // Preserve current selection
     const currentValue = select.value;
     
-    select.innerHTML = '<option value="all">All Cities (Average)</option>' +
-        cities.map(city => 
-            `<option value="${city.id}">${city.name}</option>`
+    select.innerHTML = 
+        cities.map((city, i) => 
+            `<option value="${city.id}" ${city.id === currentValue ? 'selected' : (i === 0 && !currentValue ? 'selected' : '')}>${city.name}</option>`
         ).join('');
-    
-    // Restore selection if it still exists
-    if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
-        select.value = currentValue;
-    }
 }
 
 // Setup heatmap city select event listener (called once on init)
@@ -2934,14 +3112,10 @@ function populateYoYCitySelect() {
         }
         
         const currentValue = select.value;
-        select.innerHTML = '<option value="all">All Cities (Average)</option>' +
-            cities.map(city => 
-                `<option value="${city.id}">${city.name}</option>`
+        select.innerHTML = 
+            cities.map((city, i) => 
+                `<option value="${city.id}" ${city.id === currentValue ? 'selected' : (i === 0 && !currentValue ? 'selected' : '')}>${city.name}</option>`
             ).join('');
-        
-        if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
-            select.value = currentValue;
-        }
     });
 }
 
@@ -3531,3 +3705,12 @@ function renderCityInsights(cityInsights) {
         </div>
     `).join('');
 }
+
+// Ensure date comparison is initialized even if loadNewSections fails
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (!document.getElementById('compareDatePicker')?.value) {
+            initDateCompare();
+        }
+    }, 3000);
+});

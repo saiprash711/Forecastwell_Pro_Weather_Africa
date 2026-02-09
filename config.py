@@ -96,11 +96,11 @@ class Config:
             'imd_station': 'MADURAI'
         },
         {
-            'id': 'secunderabad',
-            'name': 'Secunderabad',
-            'state': 'Telangana',
-            'lat': 17.4399,
-            'lon': 78.4983,
-            'imd_station': 'SECUNDERABAD'
+            'id': 'vijayawada',
+            'name': 'Vijayawada',
+            'state': 'Andhra Pradesh',
+            'lat': 16.5062,
+            'lon': 80.6480,
+            'imd_station': 'VIJAYAWADA'
         }
     ]

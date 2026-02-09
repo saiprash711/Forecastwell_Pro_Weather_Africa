@@ -281,7 +281,7 @@ class WeatherService:
             'warangal': {'day': 33, 'night': 22},
             'rajahmundry': {'day': 33, 'night': 24},
             'kakinada': {'day': 32, 'night': 24},
-            'secunderabad': {'day': 32, 'night': 22}
+            'vijayawada': {'day': 34, 'night': 25}
         }
         
         monthly_variations = {

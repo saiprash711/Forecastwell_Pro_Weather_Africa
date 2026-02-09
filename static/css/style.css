@@ -5343,3 +5343,397 @@ section + section {
         grid-template-columns: 1fr;
     }
 }
+
+/* ========== DATE COMPARISON SECTION ========== */
+.date-compare-section {
+    margin-bottom: 2rem;
+}
+
+.date-compare-controls {
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.date-compare-input-group {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.date-compare-field {
+    flex: 1;
+    min-width: 160px;
+}
+
+.date-compare-field label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.date-compare-field label i {
+    margin-right: 4px;
+    color: var(--primary);
+}
+
+.date-compare-field input,
+.date-compare-field select {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    border: 2px solid rgba(99, 102, 241, 0.15);
+    border-radius: 12px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.date-compare-field input:focus,
+.date-compare-field select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    outline: none;
+}
+
+.date-compare-btn {
+    padding: 0.7rem 2rem;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.date-compare-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+.date-compare-btn:active {
+    transform: translateY(0);
+}
+
+.date-compare-btn.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.date-compare-quick-picks {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.quick-date-btn {
+    padding: 0.4rem 1rem;
+    border: 1.5px solid rgba(99, 102, 241, 0.2);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.quick-date-btn:hover,
+.quick-date-btn.active {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+/* Results */
+.date-compare-results {
+    min-height: 120px;
+}
+
+.date-compare-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--text-muted);
+    text-align: center;
+    gap: 1rem;
+}
+
+.date-compare-placeholder i {
+    font-size: 2.5rem;
+    opacity: 0.3;
+}
+
+.date-compare-placeholder p {
+    font-size: 0.95rem;
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+/* City Comparison Card */
+.dc-city-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(99, 102, 241, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s ease;
+    animation: fadeInUp 0.5s ease forwards;
+    opacity: 0;
+}
+
+.dc-city-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    border-color: rgba(99, 102, 241, 0.15);
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dc-city-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+}
+
+.dc-city-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dc-city-state {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.dc-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.3px;
+}
+
+.dc-verdict.warmer {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.1));
+    color: #ef4444;
+    border: 1.5px solid rgba(239, 68, 68, 0.2);
+}
+
+.dc-verdict.cooler {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(6, 182, 212, 0.1));
+    color: #3b82f6;
+    border: 1.5px solid rgba(59, 130, 246, 0.2);
+}
+
+.dc-verdict.same {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+    border: 1.5px solid rgba(107, 114, 128, 0.2);
+}
+
+/* Year columns */
+.dc-years-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.dc-year-col {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.03), rgba(168, 85, 247, 0.03));
+    border-radius: 14px;
+    padding: 1.25rem;
+    border: 1.5px solid rgba(99, 102, 241, 0.08);
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.dc-year-col:hover {
+    border-color: rgba(99, 102, 241, 0.2);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.08);
+}
+
+.dc-year-col.current-year {
+    border-color: rgba(99, 102, 241, 0.25);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.06));
+}
+
+.dc-year-col.current-year::before {
+    content: 'SELECTED';
+    position: absolute;
+    top: -8px;
+    right: 12px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 1px;
+}
+
+.dc-year-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.dc-year-label h4 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.dc-year-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.dc-temp-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.05);
+}
+
+.dc-temp-row:last-child {
+    border-bottom: none;
+}
+
+.dc-temp-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.dc-temp-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.dc-temp-value.day { color: #f59e0b; }
+.dc-temp-value.night { color: #6366f1; }
+.dc-temp-value.humidity { color: #06b6d4; }
+.dc-temp-value.na { color: var(--text-muted); font-size: 0.85rem; }
+
+/* Diff badges */
+.dc-diff-strip {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1.5px dashed rgba(99, 102, 241, 0.1);
+    flex-wrap: wrap;
+}
+
+.dc-diff-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.9rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.dc-diff-badge.up {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.08));
+    color: #ef4444;
+}
+
+.dc-diff-badge.down {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(6, 182, 212, 0.08));
+    color: #3b82f6;
+}
+
+.dc-diff-badge.neutral {
+    background: rgba(107, 114, 128, 0.08);
+    color: #6b7280;
+}
+
+.dc-diff-badge i {
+    font-size: 0.7rem;
+}
+
+.dc-diff-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+/* Loading spinner */
+.dc-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    gap: 1rem;
+    color: var(--text-muted);
+}
+
+.dc-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(99, 102, 241, 0.1);
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: dcSpin 0.8s linear infinite;
+}
+
+@keyframes dcSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .date-compare-input-group {
+        flex-direction: column;
+    }
+    .dc-years-grid {
+        grid-template-columns: 1fr;
+    }
+    .date-compare-field {
+        min-width: 100%;
+    }
+}

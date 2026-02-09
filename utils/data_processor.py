@@ -209,40 +209,60 @@ class DataProcessor:
     
     def get_season_status(self, avg_day_temp, avg_night_temp):
         """
-        Determine season status based on temperatures
+        Determine season status based on temperatures AND calendar month.
         
         Returns:
             str: Season status (e.g., "Peak Season", "Building", "Off Season")
         """
-        # Night temp is primary indicator
-        if avg_night_temp >= 23:
+        month = datetime.now().month
+        
+        # Use both temperature and calendar for accurate status
+        if avg_night_temp >= 24 or month in (4, 5):
             return "🔥 Peak Season"
-        elif avg_night_temp >= 20:
-            return "📈 Building Season"
-        elif avg_night_temp >= 18:
-            return "🌡️ Moderate Season"
-        else:
+        elif avg_night_temp >= 22 or month == 3:
+            return "📈 High Season"
+        elif avg_night_temp >= 20 or (month == 2 and avg_night_temp >= 18):
+            return "🌤️ Building"
+        elif month in (6, 7, 8, 9):
+            return "🌧️ Monsoon"
+        elif month in (11, 12, 1):
             return "❄️ Off Season"
+        else:
+            return "🌡️ Moderate Season"
     
-    def calculate_days_to_peak(self, forecast_data):
+    def calculate_days_to_peak(self, forecast_data=None):
         """
-        Calculate days until peak temperature season
+        Calculate days until peak summer season using actual calendar dates.
+        Peak summer in South India is approximately mid-April to mid-May.
+        Target peak date: April 20.
         
         Args:
-            forecast_data: List of forecast data
+            forecast_data: List of forecast data (unused, kept for API compat)
             
         Returns:
-            int: Days to peak, or 0 if already at peak
+            int: Days to peak, or 0 if already in peak season
         """
-        if not forecast_data:
+        today = datetime.now()
+        month = today.month
+        
+        # If we're in peak season (April-May), return 0
+        if month in (4, 5):
             return 0
         
-        for idx, day in enumerate(forecast_data):
-            night_temp = day.get('night_temp', 0)
-            if night_temp >= Config.THRESHOLD_RED_NIGHT:
-                return idx
+        # Calculate days to April 20 (approximate peak)
+        year = today.year
+        peak_date = datetime(year, 4, 20)
         
-        return len(forecast_data)  # Beyond forecast period
+        if today > peak_date:
+            # Check if still in peak window (before June 1)
+            peak_end = datetime(year, 6, 1)
+            if today < peak_end:
+                return 0
+            # Past peak, calculate to next year's peak
+            peak_date = datetime(year + 1, 4, 20)
+        
+        days = (peak_date - today).days
+        return max(0, days)
     
     def find_hottest_city(self, cities_data, by_night=True):
         """

@@ -271,7 +271,7 @@
                             <h2><i class="fas fa-chart-area"></i> Temperature Trends</h2>
                             <div class="trend-controls">
                                 <select id="trendCity">
-                                    <option value="all">All Cities</option>
+                                    <option value="chennai">Chennai</option>
                                 </select>
                                 <select id="trendPeriod">
                                     <option value="7">7 Days</option>
@@ -313,17 +313,6 @@
 
                 <!-- ===== PREDICTIONS SUB-TAB ===== -->
                 <div class="dashboard-subtab" id="predictions-subtab">
-                    <!-- AI Insights Section -->
-                    <section class="insights-section glass-card animate__animated animate__fadeInUp">
-                        <div class="section-header">
-                            <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
-                            <span class="section-subtitle">Smart recommendations based on current conditions</span>
-                        </div>
-                        <div class="insights-grid" id="insightsContainer">
-                            <div class="loading-shimmer"></div>
-                        </div>
-                    </section>
-
                     <!-- Demand Prediction Section -->
                     <section class="prediction-section glass-card animate__animated animate__fadeInUp">
                         <div class="section-header">
@@ -410,6 +399,48 @@
                 <!-- ===== HISTORICAL DATA SUB-TAB ===== -->
                 <div class="dashboard-subtab" id="historical-subtab">
 
+                <!-- Date Comparison Section - Compare any date across 3 years -->
+                <section class="date-compare-section glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar-check"></i> Date Temperature Comparison</h2>
+                        <span class="section-subtitle">Compare any date's weather with the same date last year &amp; year before</span>
+                    </div>
+
+                    <!-- Date Picker Controls -->
+                    <div class="date-compare-controls">
+                        <div class="date-compare-input-group">
+                            <div class="date-compare-field">
+                                <label for="compareDatePicker"><i class="fas fa-calendar-day"></i> Pick a Date</label>
+                                <input type="date" id="compareDatePicker" max="" value="">
+                            </div>
+                            <div class="date-compare-field">
+                                <label for="compareCitySelect"><i class="fas fa-city"></i> City</label>
+                                <select id="compareCitySelect">
+                                    <option value="chennai">Chennai</option>
+                                </select>
+                            </div>
+                            <button type="button" class="date-compare-btn" id="dateCompareBtn">
+                                <i class="fas fa-balance-scale"></i> Compare
+                            </button>
+                        </div>
+                        <!-- Quick Date Picks -->
+                        <div class="date-compare-quick-picks">
+                            <button type="button" class="quick-date-btn" data-offset="0">Today</button>
+                            <button type="button" class="quick-date-btn" data-offset="7">7 Days Ago</button>
+                            <button type="button" class="quick-date-btn" data-offset="30">30 Days Ago</button>
+                            <button type="button" class="quick-date-btn" data-offset="90">90 Days Ago</button>
+                        </div>
+                    </div>
+
+                    <!-- Results Container -->
+                    <div class="date-compare-results" id="dateCompareResults">
+                        <div class="date-compare-placeholder">
+                            <i class="fas fa-search"></i>
+                            <p>Select a date and click <strong>Compare</strong> to see year-over-year temperature changes</p>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- 2-Year Historical Analysis Section -->
                 <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
                     <div class="section-header">
@@ -430,7 +461,7 @@
                         <div class="date-picker-group">
                             <label for="historicalCitySelect">City</label>
                             <select id="historicalCitySelect">
-                                <option value="all">All Cities</option>
+                                <option value="chennai">Chennai</option>
                             </select>
                         </div>
                         <div class="date-picker-group">
@@ -502,11 +533,11 @@
                             </div>
                             <div class="year-stats">
                                 <div class="year-stat">
-                                    <span class="label">Avg Day Temp</span>
+                                    <span class="label">Peak Day Temp</span>
                                     <span class="value" id="avg2024Day">34.2°C</span>
                                 </div>
                                 <div class="year-stat">
-                                    <span class="label">Avg Night Temp</span>
+                                    <span class="label">Peak Night Temp</span>
                                     <span class="value" id="avg2024Night">23.8°C</span>
                                 </div>
                                 <div class="year-stat">
@@ -514,7 +545,7 @@
                                     <span class="value">Apr-Jun</span>
                                 </div>
                                 <div class="year-stat">
-                                    <span class="label">Avg Demand</span>
+                                    <span class="label">Peak Demand</span>
                                     <span class="value" id="avg2024Demand">62</span>
                                 </div>
                             </div>
@@ -526,11 +557,11 @@
                             </div>
                             <div class="year-stats">
                                 <div class="year-stat">
-                                    <span class="label">Avg Day Temp</span>
+                                    <span class="label">Peak Day Temp</span>
                                     <span class="value" id="avg2025Day">34.8°C</span>
                                 </div>
                                 <div class="year-stat">
-                                    <span class="label">Avg Night Temp</span>
+                                    <span class="label">Peak Night Temp</span>
                                     <span class="value" id="avg2025Night">24.3°C</span>
                                 </div>
                                 <div class="year-stat">
@@ -538,7 +569,7 @@
                                     <span class="value">Apr-Jun</span>
                                 </div>
                                 <div class="year-stat">
-                                    <span class="label">Avg Demand</span>
+                                    <span class="label">Peak Demand</span>
                                     <span class="value" id="avg2025Demand">67</span>
                                 </div>
                             </div>
@@ -550,11 +581,11 @@
                             </div>
                             <div class="year-stats">
                                 <div class="year-stat">
-                                    <span class="label">Avg Day Temp</span>
+                                    <span class="label">Peak Day Temp</span>
                                     <span class="value" id="avg2026Day">31.5°C</span>
                                 </div>
                                 <div class="year-stat">
-                                    <span class="label">Avg Night Temp</span>
+                                    <span class="label">Peak Night Temp</span>
                                     <span class="value" id="avg2026Night">21.2°C</span>
                                 </div>
                                 <div class="year-stat">
@@ -562,7 +593,7 @@
                                     <span class="value">Expected Apr-Jun</span>
                                 </div>
                                 <div class="year-stat">
-                                    <span class="label">Avg Demand</span>
+                                    <span class="label">Peak Demand</span>
                                     <span class="value" id="avg2026Demand">58</span>
                                 </div>
                             </div>
@@ -579,7 +610,7 @@
                             <div class="heatmap-city-selector">
                                 <label for="heatmapCitySelect"><i class="fas fa-city"></i> City:</label>
                                 <select id="heatmapCitySelect">
-                                    <option value="all">All Cities (Average)</option>
+                                    <option value="chennai">Chennai</option>
                                 </select>
                             </div>
                         </div>
@@ -606,7 +637,7 @@
                                 <div class="yoy-city-selector">
                                     <label for="yoyCitySelect"><i class="fas fa-city"></i> City:</label>
                                     <select id="yoyCitySelect">
-                                        <option value="all">All Cities (Average)</option>
+                                        <option value="chennai">Chennai</option>
                                     </select>
                                 </div>
                                 <div class="yoy-month-selector">
@@ -657,7 +688,7 @@
                             </svg>
                             <div class="ring-value" id="avgTempValue">--°C</div>
                         </div>
-                        <span class="stat-title">Avg Temperature</span>
+                        <span class="stat-title">Peak Temperature</span>
                     </div>
                     
                     <div class="analytics-stat-card glass-card">
@@ -668,7 +699,7 @@
                             </svg>
                             <div class="ring-value" id="avgHumidityValue">--%</div>
                         </div>
-                        <span class="stat-title">Avg Humidity</span>
+                        <span class="stat-title">Peak Humidity</span>
                     </div>
                     
                     <div class="analytics-stat-card glass-card">
@@ -690,7 +721,7 @@
                             </svg>
                             <div class="ring-value" id="avgAcHoursValue">--h</div>
                         </div>
-                        <span class="stat-title">Avg AC Hours</span>
+                        <span class="stat-title">Peak AC Hours</span>
                     </div>
                 </div>
 
@@ -706,10 +737,10 @@
                         </div>
                     </section>
 
-                    <!-- Radar Chart -->
+                    <!-- City Performance Comparison -->
                     <section class="glass-card">
                         <div class="section-header">
-                            <h2><i class="fas fa-chart-pie"></i> City Performance Radar</h2>
+                            <h2><i class="fas fa-chart-bar"></i> City Performance Comparison</h2>
                         </div>
                         <div class="chart-container">
                             <canvas id="radarChart"></canvas>
@@ -752,7 +783,7 @@
                             <h2><i class="fas fa-balance-scale"></i> Monthly YoY Comparison (2024 vs 2025 vs 2026)</h2>
                             <div class="analytics-yoy-controls">
                                 <select id="analyticsYoyCitySelect">
-                                    <option value="all">All Cities</option>
+                                    <option value="chennai">Chennai</option>
                                 </select>
                                 <select id="analyticsYoyMetricSelect">
                                     <option value="day_temp">Day Temperature</option>

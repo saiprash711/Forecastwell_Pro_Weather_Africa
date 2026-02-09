@@ -8,6 +8,7 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 import random
 import time
+import requests
 from config import Config
 from utils.weather_service import WeatherService
 from utils.alert_engine import AlertEngine
@@ -206,17 +207,29 @@ def get_kpis():
         hottest_day_city = data_processor.find_hottest_city(cities_weather, by_night=False)
         hottest_night_city = data_processor.find_hottest_city(cities_weather, by_night=True)
         
-        # Calculate averages
-        avg_day_temp = sum(c.get('day_temp', c['temperature']) for c in cities_weather) / len(cities_weather)
-        avg_night_temp = sum(c.get('night_temp', c['temperature']-5) for c in cities_weather) / len(cities_weather)
+        # Per-city temperatures (no combined averages - they don't make sense across diverse cities)
+        city_temps = []
+        for c in cities_weather:
+            city_temps.append({
+                'name': c['city_name'],
+                'day_temp': round(c.get('day_temp', c['temperature']), 1),
+                'night_temp': round(c.get('night_temp', c['temperature'] - 5), 1)
+            })
+        city_temps.sort(key=lambda x: x['night_temp'], reverse=True)
         
-        # Get season status
-        season_status = data_processor.get_season_status(avg_day_temp, avg_night_temp)
+        # Use hottest city's night temp for season status (most relevant for demand)
+        hottest_night_temp = hottest_night_city.get('night_temp', hottest_night_city['temperature'] - 5)
+        hottest_day_temp = hottest_day_city.get('day_temp', hottest_day_city['temperature'])
+        season_status = data_processor.get_season_status(hottest_day_temp, hottest_night_temp)
         
         # Get forecast to calculate days to peak (extended to +4 months)
         # Use Chennai as reference city - Open-Meteo Seasonal API provides up to 7 months
         chennai_forecast = weather_service.get_forecast('chennai', days=120)  # 4 months forecast
         days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
+        
+        # Night temp range across cities
+        night_temps = [c['night_temp'] for c in city_temps]
+        day_temps = [c['day_temp'] for c in city_temps]
         
         kpis = {
             'hottest_day_city': {
@@ -232,8 +245,9 @@ def get_kpis():
             },
             'season_status': season_status,
             'days_to_peak': days_to_peak,
-            'avg_day_temp': round(avg_day_temp, 1),
-            'avg_night_temp': round(avg_night_temp, 1)
+            'city_temps': city_temps,
+            'night_temp_range': {'min': round(min(night_temps), 1), 'max': round(max(night_temps), 1)},
+            'day_temp_range': {'min': round(min(day_temps), 1), 'max': round(max(day_temps), 1)}
         }
         
         return jsonify({
@@ -509,34 +523,46 @@ def get_simple_insights():
         cities_weather = get_cached_weather()
         alerts = get_cached_alerts(cities_weather)
         
-        # Calculate various metrics
-        avg_day_temp = sum(c.get('day_temp', c['temperature']) for c in cities_weather) / len(cities_weather)
-        avg_night_temp = sum(c.get('night_temp', c['temperature']-5) for c in cities_weather) / len(cities_weather)
+        # Per-city metrics (no combined averages across diverse cities)
+        hot_night_cities = []
+        for c in cities_weather:
+            hot_night_cities.append({
+                'name': c['city_name'],
+                'night_temp': round(c.get('night_temp', c['temperature'] - 5), 1),
+                'day_temp': round(c.get('day_temp', c['temperature']), 1)
+            })
+        hot_night_cities.sort(key=lambda x: x['night_temp'], reverse=True)
         avg_humidity = sum(c.get('humidity', 60) for c in cities_weather) / len(cities_weather)
         
         # Count cities by alert level
         critical_count = len([a for a in alerts if a['alert_level'] == 'critical'])
         high_count = len([a for a in alerts if a['alert_level'] == 'high'])
         
+        # Count cities by night temp threshold
+        cities_above_24 = [c for c in hot_night_cities if c['night_temp'] >= 24]
+        cities_above_22 = [c for c in hot_night_cities if c['night_temp'] >= 22]
+        
         # Generate insights
         insights = []
         
-        # Night temperature insight
-        if avg_night_temp >= 24:
+        # Night temperature insight - per city, not averaged
+        if cities_above_24:
+            city_list = ', '.join([f"{c['name']} ({c['night_temp']}°C)" for c in cities_above_24])
             insights.append({
                 'type': 'critical',
                 'icon': '🌙',
-                'title': 'Peak Night Temperatures',
-                'description': f'Average night temperature is {round(avg_night_temp, 1)}°C - expect maximum AC usage (12-16 hours/day)',
-                'action': 'Maximize inventory allocation to all markets'
+                'title': f'{len(cities_above_24)} Cities at Peak Night Temps',
+                'description': f'{city_list} — expect maximum AC usage (12-16 hours/day)',
+                'action': 'Maximize inventory allocation to these markets'
             })
-        elif avg_night_temp >= 22:
+        elif cities_above_22:
+            city_list = ', '.join([f"{c['name']} ({c['night_temp']}°C)" for c in cities_above_22])
             insights.append({
                 'type': 'high',
                 'icon': '🌡️',
-                'title': 'High Night Temperatures',
-                'description': f'Average night temperature is {round(avg_night_temp, 1)}°C - strong demand expected',
-                'action': 'Accelerate stock movement to high-demand areas'
+                'title': f'{len(cities_above_22)} Cities with High Night Temps',
+                'description': f'{city_list} — strong demand expected',
+                'action': 'Accelerate stock movement to these areas'
             })
         
         # Humidity impact insight
@@ -577,8 +603,9 @@ def get_simple_insights():
             'data': {
                 'insights': insights,
                 'summary': {
-                    'avg_day_temp': round(avg_day_temp, 1),
-                    'avg_night_temp': round(avg_night_temp, 1),
+                    'city_temps': hot_night_cities,
+                    'hottest_night': hot_night_cities[0] if hot_night_cities else None,
+                    'coolest_night': hot_night_cities[-1] if hot_night_cities else None,
                     'avg_humidity': round(avg_humidity, 1),
                     'total_cities': len(cities_weather),
                     'critical_markets': critical_count,
@@ -938,6 +965,161 @@ def get_historical_comparison():
         }), 500
 
 
+@app.route('/api/historical/date-compare')
+def get_date_comparison():
+    """
+    Compare weather on a specific date across current year, last year, and 2 years ago.
+    Uses Open-Meteo Archive API for real historical data.
+    Query params: date (YYYY-MM-DD), city (city_id, default: all)
+    """
+    try:
+        date_str = request.args.get('date')
+        city_filter = request.args.get('city', 'all')
+
+        if not date_str:
+            return jsonify({'status': 'error', 'message': 'date parameter required (YYYY-MM-DD)'}), 400
+
+        target_date = datetime.strptime(date_str, '%Y-%m-%d')
+        today = datetime.now()
+
+        # Build the 3 comparison dates: same month-day for target year, year-1, year-2
+        target_year = target_date.year
+        years = [target_year, target_year - 1, target_year - 2]
+
+        # Don't request future dates from archive API
+        comparison_dates = []
+        for y in years:
+            try:
+                d = datetime(y, target_date.month, target_date.day)
+            except ValueError:
+                # handle Feb 29 in non-leap years
+                d = datetime(y, target_date.month, 28)
+            # Only include if date is in the past (archive API only has past data)
+            if d.date() < today.date():
+                comparison_dates.append(d)
+            else:
+                comparison_dates.append(None)
+
+        # Determine which cities to query
+        if city_filter and city_filter != 'all':
+            cities_to_query = [c for c in Config.CITIES if c['id'] == city_filter]
+        else:
+            cities_to_query = Config.CITIES
+
+        results = []
+        for city in cities_to_query:
+            city_result = {
+                'city_id': city['id'],
+                'city_name': city['name'],
+                'state': city['state'],
+                'years': []
+            }
+
+            for i, comp_date in enumerate(comparison_dates):
+                year_label = years[i]
+                if comp_date is None:
+                    # Future date - use current weather or forecast
+                    current = weather_service.get_current_weather(city['id'])
+                    if current:
+                        city_result['years'].append({
+                            'year': year_label,
+                            'date': target_date.strftime('%Y-%m-%d'),
+                            'day_temp': current.get('day_temp', current['temperature']),
+                            'night_temp': current.get('night_temp', current['temperature'] - 5),
+                            'humidity': current.get('humidity', 65),
+                            'source': 'Current/Forecast',
+                            'is_current': True
+                        })
+                    continue
+
+                # Fetch from Open-Meteo Archive API
+                try:
+                    params = {
+                        'latitude': city['lat'],
+                        'longitude': city['lon'],
+                        'start_date': comp_date.strftime('%Y-%m-%d'),
+                        'end_date': comp_date.strftime('%Y-%m-%d'),
+                        'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean',
+                        'timezone': 'Asia/Kolkata'
+                    }
+                    resp = requests.get(
+                        'https://archive-api.open-meteo.com/v1/archive',
+                        params=params, timeout=10
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        daily = data.get('daily', {})
+                        if daily.get('temperature_2m_max') and daily['temperature_2m_max'][0] is not None:
+                            city_result['years'].append({
+                                'year': year_label,
+                                'date': comp_date.strftime('%Y-%m-%d'),
+                                'day_temp': round(daily['temperature_2m_max'][0], 1),
+                                'night_temp': round(daily['temperature_2m_min'][0], 1),
+                                'humidity': round(daily['relative_humidity_2m_mean'][0], 1) if daily.get('relative_humidity_2m_mean') and daily['relative_humidity_2m_mean'][0] else None,
+                                'source': 'Open-Meteo Archive',
+                                'is_current': False
+                            })
+                        else:
+                            city_result['years'].append({
+                                'year': year_label,
+                                'date': comp_date.strftime('%Y-%m-%d'),
+                                'day_temp': None,
+                                'night_temp': None,
+                                'humidity': None,
+                                'source': 'No data available',
+                                'is_current': False
+                            })
+                    else:
+                        city_result['years'].append({
+                            'year': year_label,
+                            'date': comp_date.strftime('%Y-%m-%d'),
+                            'day_temp': None, 'night_temp': None, 'humidity': None,
+                            'source': f'API Error {resp.status_code}',
+                            'is_current': False
+                        })
+                except Exception as api_err:
+                    city_result['years'].append({
+                        'year': year_label,
+                        'date': comp_date.strftime('%Y-%m-%d'),
+                        'day_temp': None, 'night_temp': None, 'humidity': None,
+                        'source': f'Error: {str(api_err)}',
+                        'is_current': False
+                    })
+
+            # Calculate trend comparison
+            valid_years = [y for y in city_result['years'] if y['day_temp'] is not None]
+            if len(valid_years) >= 2:
+                latest = valid_years[0]
+                previous = valid_years[1]
+                day_diff = round(latest['day_temp'] - previous['day_temp'], 1)
+                night_diff = round(latest['night_temp'] - previous['night_temp'], 1)
+                city_result['comparison'] = {
+                    'day_diff': day_diff,
+                    'night_diff': night_diff,
+                    'trend': 'warmer' if (day_diff + night_diff) / 2 > 0 else ('cooler' if (day_diff + night_diff) / 2 < 0 else 'same'),
+                    'day_label': f'+{day_diff}°C' if day_diff > 0 else f'{day_diff}°C',
+                    'night_label': f'+{night_diff}°C' if night_diff > 0 else f'{night_diff}°C'
+                }
+            else:
+                city_result['comparison'] = None
+
+            results.append(city_result)
+
+        return jsonify({
+            'status': 'success',
+            'data': results,
+            'query': {
+                'date': date_str,
+                'city': city_filter,
+                'years_compared': years
+            }
+        })
+    except ValueError as ve:
+        return jsonify({'status': 'error', 'message': f'Invalid date format: {str(ve)}'}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/historical/two-years')
 def get_two_year_historical():
     """
@@ -1005,14 +1187,14 @@ def get_historical_summary():
                 'total_days': 766
             },
             'temperature_stats': {
-                'overall_avg_day': 0,
-                'overall_avg_night': 0,
+                'hottest_city_day': None,
+                'hottest_city_night': None,
                 'hottest_month': {'month': 'May 2024', 'avg_temp': 42.3},
                 'coolest_month': {'month': 'January 2024', 'avg_temp': 28.5},
                 'peak_seasons': [
-                    {'year': 2024, 'peak_period': 'Apr-Jun', 'avg_peak_temp': 41.2},
-                    {'year': 2025, 'peak_period': 'Apr-Jun', 'avg_peak_temp': 42.1},
-                    {'year': 2026, 'peak_period': 'Expected Apr-Jun', 'avg_peak_temp': 'TBD'}
+                    {'year': 2024, 'peak_period': 'Apr-Jun', 'peak_temp': 41.2},
+                    {'year': 2025, 'peak_period': 'Apr-Jun', 'peak_temp': 42.1},
+                    {'year': 2026, 'peak_period': 'Expected Apr-Jun', 'peak_temp': 'TBD'}
                 ]
             },
             'demand_trends': {
@@ -1038,8 +1220,8 @@ def get_historical_summary():
             city_night = city.get('night_temp', city_temp - 5)
             summary['city_rankings'].append({
                 'city': city['city_name'],
-                'avg_day_temp_2yr': round(city_temp - random.uniform(-1, 2), 1),
-                'avg_night_temp_2yr': round(city_night - random.uniform(-0.5, 1), 1),
+                'peak_day_temp_2yr': round(city_temp + random.uniform(0, 3), 1),
+                'peak_night_temp_2yr': round(city_night + random.uniform(0, 2), 1),
                 'total_peak_days': random.randint(80, 150),
                 'avg_demand_index': random.randint(55, 85)
             })
@@ -1047,13 +1229,15 @@ def get_historical_summary():
         # Sort by avg demand
         summary['city_rankings'].sort(key=lambda x: x['avg_demand_index'], reverse=True)
         
-        # Calculate overall averages
-        summary['temperature_stats']['overall_avg_day'] = round(
-            sum(c['avg_day_temp_2yr'] for c in summary['city_rankings']) / len(summary['city_rankings']), 1
-        )
-        summary['temperature_stats']['overall_avg_night'] = round(
-            sum(c['avg_night_temp_2yr'] for c in summary['city_rankings']) / len(summary['city_rankings']), 1
-        )
+        # Set hottest cities (per-city, not averaged)
+        hottest_day_city = max(summary['city_rankings'], key=lambda x: x['peak_day_temp_2yr'])
+        hottest_night_city = max(summary['city_rankings'], key=lambda x: x['peak_night_temp_2yr'])
+        summary['temperature_stats']['hottest_city_day'] = {
+            'city': hottest_day_city['city'], 'temp': hottest_day_city['peak_day_temp_2yr']
+        }
+        summary['temperature_stats']['hottest_city_night'] = {
+            'city': hottest_night_city['city'], 'temp': hottest_night_city['peak_night_temp_2yr']
+        }
         
         return jsonify({
             'status': 'success',
@@ -1161,26 +1345,41 @@ def generate_two_year_historical_data(start_date, end_date, city_filter, granula
         timeline.append(date_entry)
         current_date += delta
     
-    # Calculate aggregated statistics
+    # Calculate per-city statistics (no combined averages across diverse cities)
     yearly_stats = {}
     for year in [2024, 2025, 2026]:
         year_data = [t for t in timeline if t['date'].startswith(str(year))]
         if year_data:
-            all_day_temps = []
-            all_night_temps = []
-            all_demands = []
-            for entry in year_data:
-                for city_id, city_vals in entry['cities'].items():
-                    all_day_temps.append(city_vals['day_temp'])
-                    all_night_temps.append(city_vals['night_temp'])
-                    all_demands.append(city_vals['demand_index'])
+            # Per-city stats
+            city_year_stats = {}
+            for cid in [c['id'] for c in cities]:
+                city_day_temps = []
+                city_night_temps = []
+                city_demands = []
+                for entry in year_data:
+                    if cid in entry['cities']:
+                        cv = entry['cities'][cid]
+                        city_day_temps.append(cv['day_temp'])
+                        city_night_temps.append(cv['night_temp'])
+                        city_demands.append(cv['demand_index'])
+                if city_day_temps:
+                    city_name = next((c['name'] for c in cities if c['id'] == cid), cid)
+                    city_year_stats[cid] = {
+                        'name': city_name,
+                        'max_day_temp': round(max(city_day_temps), 1),
+                        'max_night_temp': round(max(city_night_temps), 1),
+                        'avg_demand': round(sum(city_demands) / len(city_demands), 1)
+                    }
+            
+            # Find hottest/coolest cities for the year
+            sorted_by_night = sorted(city_year_stats.values(), key=lambda x: x['max_night_temp'], reverse=True)
             
             yearly_stats[year] = {
-                'avg_day_temp': round(sum(all_day_temps) / len(all_day_temps), 1) if all_day_temps else 0,
-                'avg_night_temp': round(sum(all_night_temps) / len(all_night_temps), 1) if all_night_temps else 0,
-                'max_day_temp': round(max(all_day_temps), 1) if all_day_temps else 0,
-                'max_night_temp': round(max(all_night_temps), 1) if all_night_temps else 0,
-                'avg_demand': round(sum(all_demands) / len(all_demands), 1) if all_demands else 0,
+                'city_stats': city_year_stats,
+                'hottest_city': sorted_by_night[0] if sorted_by_night else None,
+                'coolest_city': sorted_by_night[-1] if sorted_by_night else None,
+                'peak_day_temp': round(max(cv['max_day_temp'] for cv in city_year_stats.values()), 1) if city_year_stats else 0,
+                'peak_night_temp': round(max(cv['max_night_temp'] for cv in city_year_stats.values()), 1) if city_year_stats else 0,
                 'data_points': len(year_data)
             }
     
@@ -1513,26 +1712,26 @@ def generate_strategic_recommendations(cities_weather, forecast_by_city, histori
         })
     
     # Regional strategy based on data
-    south_cities = ['chennai', 'bangalore', 'hyderabad', 'kochi', 'coimbatore']
-    south_avg_night = []
-    for city_id in south_cities:
-        city_weather = next((c for c in cities_weather if c['city_id'] == city_id), None)
-        if city_weather:
-            south_avg_night.append(city_weather.get('night_temp', 20))
+    # Identify hottest South Indian cities by night temp
+    south_hot_cities = []
+    for c in cities_weather:
+        night_temp = c.get('night_temp', 20)
+        if night_temp >= 22:
+            south_hot_cities.append({'name': c['city_name'], 'night_temp': round(night_temp, 1)})
+    south_hot_cities.sort(key=lambda x: x['night_temp'], reverse=True)
     
-    if south_avg_night:
-        avg = sum(south_avg_night) / len(south_avg_night)
-        if avg >= 22:
-            recommendations.append({
-                'priority': 'medium',
-                'icon': 'map-marker-alt',
-                'title': 'South India Demand Surge',
-                'description': f'Average night temp {avg:.1f}°C across South India. Allocate 60-70% inventory to southern markets.',
-                'metrics': [
-                    {'value': f'{avg:.1f}°C', 'label': 'Avg Night'},
-                    {'value': '60-70%', 'label': 'Recommended Allocation'}
-                ]
-            })
+    if south_hot_cities:
+        city_list = ', '.join([f"{c['name']} ({c['night_temp']}°C)" for c in south_hot_cities[:3]])
+        recommendations.append({
+            'priority': 'medium',
+            'icon': 'map-marker-alt',
+            'title': f'{len(south_hot_cities)} Cities Showing High Night Temps',
+            'description': f'{city_list} — prioritize inventory allocation to these markets.',
+            'metrics': [
+                {'value': f"{south_hot_cities[0]['night_temp']}°C", 'label': f"Hottest: {south_hot_cities[0]['name']}"},
+                {'value': f'{len(south_hot_cities)}', 'label': 'Hot Markets'}
+            ]
+        })
     
     # Inventory timing recommendation
     recommendations.append({
