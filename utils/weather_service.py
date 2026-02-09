@@ -5,6 +5,7 @@ Handles IMD data integration and weather data processing
 import requests
 import random
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from config import Config
 
 # Global variable to hold imported Excel data
@@ -583,15 +584,25 @@ class WeatherService:
         return monthly_data
     
     def get_all_cities_current(self):
-        """Get current weather for all configured cities"""
+        """Get current weather for all configured cities (parallel fetching)"""
         cities_data = []
 
-        for city in Config.CITIES:
+        def fetch_city(city):
             data = self.get_current_weather(city['id'])
             if data:
                 data['lat'] = city['lat']
                 data['lon'] = city['lon']
-                cities_data.append(data)
+            return data
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = {executor.submit(fetch_city, city): city for city in Config.CITIES}
+            for future in as_completed(futures):
+                try:
+                    data = future.result()
+                    if data:
+                        cities_data.append(data)
+                except Exception as e:
+                    print(f"Error fetching city weather: {e}")
 
         return cities_data
     

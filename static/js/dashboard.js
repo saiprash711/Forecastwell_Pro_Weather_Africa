@@ -39,8 +39,14 @@ async function initializeDashboard() {
     try {
         showLoading();
         
-        // Initialize map
-        initializeMap();
+        // Initialize map with error handling
+        try {
+            initializeMap();
+            console.log('✓ Map initialized');
+        } catch (mapError) {
+            console.error('⚠ Map initialization failed:', mapError);
+            // Continue anyway
+        }
         
         // Load all data
         await loadDashboardData();
@@ -52,7 +58,7 @@ async function initializeDashboard() {
     } catch (error) {
         console.error('❌ Error initializing dashboard:', error);
         hideLoading();
-        showToast('Failed to initialize dashboard', 'error');
+        showToast('Failed to load data: ' + error.message, 'error');
     }
 }
 
@@ -136,6 +142,13 @@ function setupEventListeners() {
     const globalSearch = document.getElementById('globalSearch');
     if (globalSearch) {
         globalSearch.addEventListener('input', handleSearch);
+        globalSearch.addEventListener('focus', handleSearch);
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('searchResultsDropdown');
+            if (dropdown && !e.target.closest('.search-box')) {
+                dropdown.classList.remove('active');
+            }
+        });
     }
 }
 
@@ -192,90 +205,196 @@ function navigateToPage(pageId) {
     if (sidebar) sidebar.classList.remove('open');
 }
 
+// Track which pages have been loaded to avoid redundant re-fetches
+const pageLoadedCache = {};
+
 function loadPageData(pageId) {
     switch (pageId) {
         case 'analytics':
-            initializeAnalyticsCharts();
+            if (pageLoadedCache.analytics && currentCityData.length) {
+                // Already loaded, just resize charts
+                setTimeout(() => {
+                    if (charts.radar) charts.radar.resize();
+                    if (charts.distribution) charts.distribution.resize();
+                }, 50);
+                return;
+            }
+            showPageLoader('analyticsPage', 'analyticsLoader');
+            requestAnimationFrame(() => {
+                initializeAnalyticsCharts();
+                hidePageLoader('analyticsPage', 'analyticsLoader');
+                pageLoadedCache.analytics = true;
+            });
             break;
         case 'forecast':
-            loadForecastPage();
+            if (pageLoadedCache.forecast) {
+                return;
+            }
+            showPageLoader('forecastPage', 'forecastLoader');
+            requestAnimationFrame(() => {
+                loadForecastPage();
+                hidePageLoader('forecastPage', 'forecastLoader');
+                pageLoadedCache.forecast = true;
+            });
             break;
         case 'cities':
-            loadCitiesDetailPage();
+            if (pageLoadedCache.cities && currentCityData.length) {
+                return;
+            }
+            showPageLoader('citiesPage', 'citiesLoader');
+            requestAnimationFrame(() => {
+                loadCitiesDetailPage();
+                hidePageLoader('citiesPage', 'citiesLoader');
+                pageLoadedCache.cities = true;
+            });
             break;
         case 'alerts':
-            loadAlertsPage();
+            if (pageLoadedCache.alerts && currentAlerts.length) {
+                return;
+            }
+            showPageLoader('alertsPage', 'alertsPageLoader');
+            requestAnimationFrame(() => {
+                loadAlertsPage();
+                hidePageLoader('alertsPage', 'alertsPageLoader');
+                pageLoadedCache.alerts = true;
+            });
             break;
         case 'insights':
-            loadInsightsPage();
+            if (pageLoadedCache.insights) {
+                // Already loaded, just show content
+                return;
+            }
+            showPageLoader('insightsPage', 'insightsLoader');
+            loadInsightsPage().then(() => {
+                hidePageLoader('insightsPage', 'insightsLoader');
+                pageLoadedCache.insights = true;
+            }).catch(() => {
+                hidePageLoader('insightsPage', 'insightsLoader');
+            });
+            break;
+        case 'demand-intel':
+            if (pageLoadedCache.demandIntel) {
+                return;
+            }
+            showPageLoader('demand-intelPage', 'demandIntelLoader');
+            loadDemandIntelPage().then(() => {
+                hidePageLoader('demand-intelPage', 'demandIntelLoader');
+                pageLoadedCache.demandIntel = true;
+            }).catch(() => {
+                hidePageLoader('demand-intelPage', 'demandIntelLoader');
+            });
             break;
     }
+}
+
+// Show a page-level loader and hide page content
+function showPageLoader(pageId, loaderId) {
+    const page = document.getElementById(pageId);
+    const loader = document.getElementById(loaderId);
+    if (!page) return;
+    
+    // Show loader
+    if (loader) loader.style.display = 'flex';
+    
+    // Hide all children except the loader
+    Array.from(page.children).forEach(child => {
+        if (child.id !== loaderId) {
+            child.style.display = 'none';
+        }
+    });
+}
+
+// Hide page loader and reveal content
+function hidePageLoader(pageId, loaderId) {
+    const page = document.getElementById(pageId);
+    const loader = document.getElementById(loaderId);
+    if (!page) return;
+    
+    // Hide loader
+    if (loader) loader.style.display = 'none';
+    
+    // Show all children except the loader
+    Array.from(page.children).forEach(child => {
+        if (child.id !== loaderId) {
+            child.style.display = '';
+        }
+    });
 }
 
 // ========== Data Loading ==========
 async function loadDashboardData() {
     try {
-        // Load critical data first (weather + alerts in parallel)
-        const [weatherRes, alertsRes] = await Promise.all([
-            fetch(`${API_BASE}/weather/current`),
-            fetch(`${API_BASE}/alerts`)
-        ]);
+        console.log('📊 Loading dashboard data...');
+        
+        // Single combined API call: weather + alerts + KPIs
+        console.log('→ Fetching dashboard-init (combined endpoint)...');
+        const initRes = await fetch(`${API_BASE}/dashboard-init`);
+        const initData = await initRes.json();
+        
+        console.log('→ Init response status:', initRes.status);
 
-        const weather = await weatherRes.json();
-        const alerts = await alertsRes.json();
-
-        if (weather.status === 'success' && weather.data) {
-            currentCityData = weather.data;
-            // Update UI immediately
-            updateHeaderStats(weather.data);
-            updateMapMarkers(weather.data);
-            updateCitiesGrid(weather.data);
-            populateCitySelects(weather.data);
+        if (initData.status === 'success' && initData.data) {
+            const { weather, alerts: alertsList, kpis } = initData.data;
             
-            // Update historical city select with loaded data
-            populateHistoricalCitySelect();
+            // Process weather data
+            if (weather && weather.length) {
+                currentCityData = weather;
+                console.log('✓ Found', currentCityData.length, 'cities');
+                
+                try { updateHeaderStats(weather); } catch (e) { console.error('Header stats error:', e); }
+                try { updateMapMarkers(weather); } catch (e) { console.error('Map markers error:', e); }
+                try { updateCitiesGrid(weather); } catch (e) { console.error('Cities grid error:', e); }
+                try { populateCitySelects(weather); } catch (e) { console.error('City selects error:', e); }
+                try { populateHistoricalCitySelect(); } catch (e) { console.error('Historical select error:', e); }
+                try { populateHeatmapCitySelect(); } catch (e) { console.error('Heatmap select error:', e); }
+                try { populateYoYCitySelect(); } catch (e) { console.error('YoY select error:', e); }
+                
+                // Initialize charts in next frame for smoother UX
+                requestAnimationFrame(() => {
+                    try {
+                        initializeDashboardCharts(weather);
+                        updateWaveSequence(weather);
+                    } catch (e) {
+                        console.error('Charts initialization error:', e);
+                    }
+                });
+            }
             
-            // Update heatmap city select with loaded data
-            populateHeatmapCitySelect();
+            // Process alerts
+            if (alertsList) {
+                currentAlerts = Array.isArray(alertsList) ? alertsList : [];
+                console.log('✓ Found', currentAlerts.length, 'alerts');
+                try {
+                    updateAlertsPanel(currentAlerts);
+                    updateAlertBadge(currentAlerts.length);
+                } catch (e) {
+                    console.error('Alerts panel error:', e);
+                }
+            }
             
-            // Update YoY city selects with loaded data
-            populateYoYCitySelect();
-            
-            // Initialize charts (deferred slightly for smoother UX)
-            requestAnimationFrame(() => {
-                initializeDashboardCharts(weather.data);
-                updateWaveSequence(weather.data);
-            });
-        }
-
-        if (alerts.status === 'success' && alerts.data) {
-            currentAlerts = alerts.data;
-            updateAlertsPanel(alerts.data);
-            updateAlertBadge(alerts.data.length);
+            // Process KPIs (already included, no extra API call)
+            if (kpis) {
+                try {
+                    const daysEl = document.getElementById('daysToPeak');
+                    if (daysEl) daysEl.textContent = kpis.days_to_peak === 0 ? '🎯 NOW!' : `~${kpis.days_to_peak} days`;
+                    const seasonEl = document.getElementById('seasonStatus');
+                    if (seasonEl) seasonEl.textContent = kpis.season_status || seasonEl.textContent;
+                } catch (e) { console.warn('KPIs update error:', e); }
+            }
+        } else {
+            console.error('⚠ Dashboard init data not available:', initData);
         }
 
         updateLastUpdate();
 
-        // Fetch server-side KPIs (use server-calculated days_to_peak to avoid heuristic mismatch)
-        try {
-            const kpisRes = await fetch(`${API_BASE}/kpis`);
-            const kpisJson = await kpisRes.json();
-            if (kpisJson.status === 'success' && kpisJson.data) {
-                const days = kpisJson.data.days_to_peak;
-                const daysEl = document.getElementById('daysToPeak');
-                if (daysEl) daysEl.textContent = days === 0 ? '🎯 NOW!' : `~${days} days`;
-                const seasonEl = document.getElementById('seasonStatus');
-                if (seasonEl) seasonEl.textContent = kpisJson.data.season_status || seasonEl.textContent;
-            }
-        } catch (err) {
-            console.warn('Failed to fetch KPIs:', err);
-        }
-
-        // Load additional sections in background (non-blocking)
+        // Load additional sections in background (non-blocking, parallelized)
         loadNewSections().catch(err => console.warn('Background sections error:', err));
         
+        console.log('✅ Data loading complete');
+        
     } catch (error) {
-        console.error('Error loading dashboard data:', error);
+        console.error('❌ Error loading dashboard data:', error);
+        console.error('Error details:', error.message, error.stack);
         throw error;
     }
 }
@@ -285,6 +404,9 @@ async function refreshData() {
     if (refreshBtn) {
         refreshBtn.querySelector('i').classList.add('fa-spin');
     }
+    
+    // Clear page cache so all pages reload fresh data
+    Object.keys(pageLoadedCache).forEach(k => delete pageLoadedCache[k]);
     
     try {
         await loadDashboardData();
@@ -537,10 +659,10 @@ function updateHeaderStats(citiesData) {
     const seasonEl = document.getElementById('seasonStatus');
     const daysEl = document.getElementById('daysToPeak');
 
-    if (hottestDayEl) hottestDayEl.textContent = `${hottestDay.city_name} (${hottestDay.day_temp || hottestDay.temperature}°C)`;
-    if (hottestNightEl) hottestNightEl.textContent = `${hottestNight.city_name} (${hottestNight.night_temp || hottestNight.temperature - 5}°C)`;
-    if (seasonEl) seasonEl.textContent = seasonStatus;
-    if (daysEl) daysEl.textContent = daysToPeak === 0 ? '🎯 NOW!' : `~${daysToPeak} days`;
+    if (hottestDayEl) { hottestDayEl.textContent = `${hottestDay.city_name} (${hottestDay.day_temp || hottestDay.temperature}°C)`; hottestDayEl.classList.remove('stat-value-loading'); }
+    if (hottestNightEl) { hottestNightEl.textContent = `${hottestNight.city_name} (${hottestNight.night_temp || hottestNight.temperature - 5}°C)`; hottestNightEl.classList.remove('stat-value-loading'); }
+    if (seasonEl) { seasonEl.textContent = seasonStatus; seasonEl.classList.remove('stat-value-loading'); }
+    if (daysEl) { daysEl.textContent = daysToPeak === 0 ? '🎯 NOW!' : `~${daysToPeak} days`; daysEl.classList.remove('stat-value-loading'); }
 }
 
 // ========== Wave Sequence ==========
@@ -667,6 +789,8 @@ function updateCitiesGrid(citiesData) {
         const tempClass = dayTemp >= 38 ? 'hot' : dayTemp >= 35 ? 'warm' : dayTemp >= 32 ? 'mild' : 'cool';
         
         const weatherIcon = dayTemp >= 38 ? '🔥' : dayTemp >= 35 ? '☀️' : dayTemp >= 30 ? '🌤️' : '⛅';
+        const dsbZone = city.dsb_zone || {};
+        const dsbBadge = dsbZone.zone ? `<span class="dsb-badge dsb-${dsbZone.zone}" title="${dsbZone.action || ''}">${dsbZone.icon || ''} ${(dsbZone.zone || '').toUpperCase()}</span>` : '';
 
         return `
             <div class="city-card glass-card ${tempClass}" onclick='showCityModal(${JSON.stringify(city)})'>
@@ -674,6 +798,7 @@ function updateCitiesGrid(citiesData) {
                     <div>
                         <div class="city-name">${city.city_name}</div>
                         <div class="city-state">${city.state || ''}</div>
+                        ${city.demand_zone ? `<div class="demand-zone-badge">${city.zone_icon || '📍'} ${city.demand_zone}</div>` : ''}
                     </div>
                     <div class="city-weather-icon">${weatherIcon}</div>
                 </div>
@@ -695,8 +820,8 @@ function updateCitiesGrid(citiesData) {
                         <div class="city-stat-value">${city.humidity || '--'}%</div>
                     </div>
                     <div class="city-stat">
-                        <div class="city-stat-label">Wind</div>
-                        <div class="city-stat-value">${city.wind_speed || '--'}</div>
+                        <div class="city-stat-label">Wet Bulb</div>
+                        <div class="city-stat-value" style="color:${city.wet_bulb?.color || 'inherit'}">${city.wet_bulb?.value !== null && city.wet_bulb?.value !== undefined ? city.wet_bulb.value + '°' : '--'}</div>
                     </div>
                     <div class="city-stat">
                         <div class="city-stat-label">AC Hours</div>
@@ -709,7 +834,7 @@ function updateCitiesGrid(citiesData) {
                         <div class="meter-fill" style="width: ${city.demand_index || 50}%"></div>
                     </div>
                     <div class="meter-label">
-                        <span>Demand Index</span>
+                        <span>Demand ${dsbBadge}</span>
                         <span>${city.demand_index || '--'}/100</span>
                     </div>
                 </div>
@@ -817,6 +942,11 @@ function initializeDashboardCharts(citiesData) {
     // Temperature Trends Chart
     const tempCanvas = document.getElementById('temperatureChart');
     if (tempCanvas) {
+        // Show canvas and hide skeleton
+        const tempSkeleton = document.getElementById('temperatureChartSkeleton');
+        if (tempSkeleton) tempSkeleton.style.display = 'none';
+        tempCanvas.style.display = '';
+
         if (charts.temperature) charts.temperature.destroy();
         
         // Generate date labels for past 7 days + today
@@ -1575,15 +1705,20 @@ function loadAlertsPage() {
 }
 
 function updateAlertCounts() {
-    const critical = currentAlerts.filter(a => a.alert_level === 'critical').length;
-    const high = currentAlerts.filter(a => a.alert_level === 'high').length;
-    const medium = currentAlerts.filter(a => a.alert_level === 'medium' || a.alert_level === 'low').length;
-    const low = currentAlerts.filter(a => a.alert_level === 'normal').length;
+    // Map alert_engine levels to dashboard categories
+    const critical = currentAlerts.filter(a => a.alert_level === 'red' || a.alert_level === 'kerala_special' || a.alert_level === 'critical').length;
+    const high = currentAlerts.filter(a => a.alert_level === 'orange' || a.alert_level === 'high').length;
+    const medium = currentAlerts.filter(a => a.alert_level === 'yellow' || a.alert_level === 'medium' || a.alert_level === 'low').length;
+    const low = currentAlerts.filter(a => a.alert_level === 'green' || a.alert_level === 'blue' || a.alert_level === 'normal').length;
 
-    document.getElementById('criticalCount').textContent = critical;
-    document.getElementById('highCount').textContent = high;
-    document.getElementById('mediumCount').textContent = medium;
-    document.getElementById('lowCount').textContent = low || currentCityData.length - critical - high - medium;
+    const critEl = document.getElementById('criticalCount');
+    const highEl = document.getElementById('highCount');
+    const medEl = document.getElementById('mediumCount');
+    const lowEl = document.getElementById('lowCount');
+    if (critEl) critEl.textContent = critical;
+    if (highEl) highEl.textContent = high;
+    if (medEl) medEl.textContent = medium;
+    if (lowEl) lowEl.textContent = low || Math.max(0, currentCityData.length - critical - high - medium);
 }
 
 function generateAlertTimeline() {
@@ -1847,13 +1982,265 @@ function toggleTheme() {
 
 // ========== Search ==========
 function handleSearch(e) {
-    const query = e.target.value.toLowerCase();
-    const cityCards = document.querySelectorAll('.city-card');
-    
-    cityCards.forEach(card => {
-        const cityName = card.querySelector('.city-name')?.textContent.toLowerCase() || '';
-        card.style.display = cityName.includes(query) ? 'block' : 'none';
+    const query = (e.target.value || '').toLowerCase().trim();
+    const dropdown = document.getElementById('searchResultsDropdown');
+    if (!dropdown) return;
+
+    if (!query || query.length < 1) {
+        dropdown.classList.remove('active');
+        dropdown.innerHTML = '';
+        return;
+    }
+
+    const results = [];
+    const metricKeywords = {
+        'temperature': { icon: 'fa-thermometer-half', label: 'Temperature' },
+        'temp': { icon: 'fa-thermometer-half', label: 'Temperature' },
+        'day temp': { icon: 'fa-sun', label: 'Day Temperature' },
+        'night temp': { icon: 'fa-moon', label: 'Night Temperature' },
+        'humidity': { icon: 'fa-tint', label: 'Humidity' },
+        'wind': { icon: 'fa-wind', label: 'Wind Speed' },
+        'wind speed': { icon: 'fa-wind', label: 'Wind Speed' },
+        'demand': { icon: 'fa-chart-line', label: 'Demand Index' },
+        'demand index': { icon: 'fa-chart-line', label: 'Demand Index' },
+        'ac hours': { icon: 'fa-snowflake', label: 'AC Hours' },
+        'ac': { icon: 'fa-snowflake', label: 'AC Hours' },
+        'cooling': { icon: 'fa-snowflake', label: 'AC Hours' }
+    };
+
+    // Search cities
+    if (currentCityData && currentCityData.length > 0) {
+        currentCityData.forEach(city => {
+            const name = (city.city_name || '').toLowerCase();
+            const state = (city.state || '').toLowerCase();
+            if (name.includes(query) || state.includes(query)) {
+                results.push({
+                    type: 'city',
+                    icon: 'fa-city',
+                    title: city.city_name,
+                    subtitle: `${city.day_temp || city.temperature}°C Day · ${city.night_temp || '--'}°C Night · ${city.humidity || '--'}% Humidity`,
+                    data: city
+                });
+            }
+        });
+    }
+
+    // Search metrics — match when query is a prefix of the keyword or label
+    Object.keys(metricKeywords).forEach(key => {
+        const metric = metricKeywords[key];
+        const labelLower = metric.label.toLowerCase();
+        if (key.startsWith(query) || labelLower.startsWith(query) || labelLower.includes(query)) {
+            // Avoid duplicate metric results
+            if (!results.find(r => r.type === 'metric' && r.title === metric.label)) {
+                let metricSummary = '';
+                if (currentCityData && currentCityData.length > 0) {
+                    const metricExtractor = getMetricExtractor(metric.label);
+                    const vals = currentCityData.map(c => metricExtractor(c)).filter(v => v !== null && v !== undefined && !isNaN(v));
+                    if (vals.length) {
+                        const unit = getMetricUnit(metric.label);
+                        metricSummary = `Range: ${Math.min(...vals)}${unit} – ${Math.max(...vals)}${unit} across ${vals.length} cities`;
+                    }
+                }
+                results.push({
+                    type: 'metric',
+                    icon: metric.icon,
+                    title: metric.label,
+                    subtitle: metricSummary || 'View across all cities',
+                    metricLabel: metric.label
+                });
+            }
+        }
     });
+
+    // Also search city+metric combos (e.g., "Chennai humidity")
+    if (currentCityData && currentCityData.length > 0 && query.includes(' ')) {
+        const queryParts = query.split(/\s+/);
+        currentCityData.forEach(city => {
+            const name = (city.city_name || '').toLowerCase();
+            // Check if any part of the query matches a city name
+            const cityMatch = queryParts.some(p => name.includes(p));
+            if (!cityMatch) return;
+
+            Object.keys(metricKeywords).forEach(key => {
+                const metric = metricKeywords[key];
+                const labelLower = metric.label.toLowerCase();
+                // Check if any part of the query matches a metric
+                const metricMatch = queryParts.some(p => key.startsWith(p) || labelLower.startsWith(p));
+                if (!metricMatch) return;
+                if (results.find(r => r.type === 'city-metric' && r.title === city.city_name + ' – ' + metric.label)) return;
+
+                const extractor = getMetricExtractor(metric.label);
+                const val = extractor(city);
+                const unit = getMetricUnit(metric.label);
+
+                results.push({
+                    type: 'city-metric',
+                    icon: metric.icon,
+                    title: city.city_name + ' – ' + metric.label,
+                    subtitle: val !== null && val !== undefined ? val + unit : '--',
+                    data: city
+                });
+            });
+        });
+    }
+
+    // Render dropdown
+    if (results.length === 0) {
+        dropdown.innerHTML = `<div class="search-no-results"><i class="fas fa-search"></i> No results for "${e.target.value}"</div>`;
+    } else {
+        dropdown.innerHTML = results.slice(0, 8).map((r, i) => `
+            <div class="search-result-item" data-index="${i}" data-type="${r.type}">
+                <div class="search-result-icon"><i class="fas ${r.icon}"></i></div>
+                <div class="search-result-text">
+                    <div class="search-result-title">${r.title}</div>
+                    <div class="search-result-subtitle">${r.subtitle}</div>
+                </div>
+                <div class="search-result-badge">${r.type === 'city' ? 'City' : r.type === 'metric' ? 'Metric' : 'Detail'}</div>
+            </div>
+        `).join('');
+
+        // Attach click handlers
+        dropdown.querySelectorAll('.search-result-item').forEach((item, idx) => {
+            item.addEventListener('click', () => {
+                const result = results[idx];
+                dropdown.classList.remove('active');
+                document.getElementById('globalSearch').value = '';
+
+                if (result.type === 'city' || result.type === 'city-metric') {
+                    // Navigate to cities page and show modal
+                    navigateToPage('dashboard');
+                    // Switch to trends sub-tab where city cards are
+                    const trendsTab = document.querySelector('.dashboard-tab[data-subtab="trends"]');
+                    if (trendsTab) trendsTab.click();
+                    // Scroll to city and highlight
+                    setTimeout(() => {
+                        const cards = document.querySelectorAll('.city-card');
+                        cards.forEach(card => {
+                            const cardName = card.querySelector('.city-name')?.textContent || '';
+                            if (cardName === result.data.city_name) {
+                                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                card.classList.add('search-highlight');
+                                setTimeout(() => card.classList.remove('search-highlight'), 2000);
+                            }
+                        });
+                        // Also open the city modal
+                        if (result.data) showCityModal(result.data);
+                    }, 300);
+                } else if (result.type === 'metric') {
+                    // Show metric comparison modal across all cities
+                    showMetricComparison(result.metricLabel || result.title);
+                }
+            });
+        });
+    }
+
+    dropdown.classList.add('active');
+}
+
+// ========== Metric Helpers ==========
+function getMetricExtractor(label) {
+    switch (label) {
+        case 'Temperature':
+        case 'Day Temperature': return c => c.day_temp || c.temperature || null;
+        case 'Night Temperature': return c => c.night_temp || null;
+        case 'Humidity': return c => c.humidity || null;
+        case 'Wind Speed': return c => { const v = parseFloat(c.wind_speed); return isNaN(v) ? null : v; };
+        case 'Demand Index': return c => c.demand_index || null;
+        case 'AC Hours': return c => c.ac_hours || null;
+        default: return () => null;
+    }
+}
+
+function getMetricUnit(label) {
+    switch (label) {
+        case 'Temperature':
+        case 'Day Temperature':
+        case 'Night Temperature': return '°C';
+        case 'Humidity': return '%';
+        case 'Wind Speed': return ' km/h';
+        case 'AC Hours': return 'h';
+        default: return '';
+    }
+}
+
+function showMetricComparison(metricLabel) {
+    if (!currentCityData || currentCityData.length === 0) {
+        showToast('No city data loaded yet', 'warning');
+        return;
+    }
+
+    const extractor = getMetricExtractor(metricLabel);
+    const unit = getMetricUnit(metricLabel);
+
+    // Build sorted city list for this metric
+    const cityMetrics = currentCityData
+        .map(c => ({ name: c.city_name, state: c.state || '', value: extractor(c), data: c }))
+        .filter(c => c.value !== null && c.value !== undefined && !isNaN(c.value))
+        .sort((a, b) => b.value - a.value);
+
+    if (cityMetrics.length === 0) {
+        showToast(`No ${metricLabel} data available`, 'warning');
+        return;
+    }
+
+    const maxVal = Math.max(...cityMetrics.map(c => c.value));
+
+    // Color scheme based on metric type
+    const colors = {
+        'Temperature': ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'],
+        'Day Temperature': ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'],
+        'Night Temperature': ['#7c3aed', '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6'],
+        'Humidity': ['#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7'],
+        'Wind Speed': ['#10b981', '#22c55e', '#84cc16', '#eab308', '#f97316'],
+        'Demand Index': ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e'],
+        'AC Hours': ['#f97316', '#eab308', '#84cc16', '#22c55e', '#06b6d4']
+    };
+    const palette = colors[metricLabel] || ['#6366f1', '#8b5cf6', '#a855f7', '#c084fc', '#d8b4fe'];
+
+    const modal = document.getElementById('cityModal');
+    const modalName = document.getElementById('modalCityName');
+    const modalBody = document.getElementById('modalBody');
+    if (!modal) return;
+
+    modalName.textContent = `${metricLabel} – All Cities`;
+    modalBody.innerHTML = `
+        <div class="metric-comparison">
+            <div class="metric-summary-bar">
+                <div class="metric-summary-item">
+                    <span class="metric-summary-label">Highest</span>
+                    <span class="metric-summary-value" style="color:${palette[0]}">${cityMetrics[0].name}: ${cityMetrics[0].value}${unit}</span>
+                </div>
+                <div class="metric-summary-item">
+                    <span class="metric-summary-label">Lowest</span>
+                    <span class="metric-summary-value" style="color:${palette[palette.length - 1]}">${cityMetrics[cityMetrics.length - 1].name}: ${cityMetrics[cityMetrics.length - 1].value}${unit}</span>
+                </div>
+                <div class="metric-summary-item">
+                    <span class="metric-summary-label">Avg</span>
+                    <span class="metric-summary-value">${(cityMetrics.reduce((s, c) => s + c.value, 0) / cityMetrics.length).toFixed(1)}${unit}</span>
+                </div>
+            </div>
+            <div class="metric-ranking-list">
+                ${cityMetrics.map((c, i) => {
+                    const pct = maxVal > 0 ? (c.value / maxVal * 100) : 0;
+                    const barColor = palette[Math.min(Math.floor(i / Math.max(1, cityMetrics.length / palette.length)), palette.length - 1)];
+                    return `
+                    <div class="metric-rank-row" onclick='showCityModal(${JSON.stringify(c.data).replace(/'/g, "&#39;")})'>
+                        <div class="metric-rank-pos">#${i + 1}</div>
+                        <div class="metric-rank-info">
+                            <div class="metric-rank-name">${c.name}</div>
+                            <div class="metric-rank-state">${c.state}</div>
+                        </div>
+                        <div class="metric-rank-bar-wrap">
+                            <div class="metric-rank-bar" style="width:${pct}%;background:${barColor}"></div>
+                        </div>
+                        <div class="metric-rank-value" style="color:${barColor}">${c.value}${unit}</div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+    `;
+
+    modal.classList.add('active');
 }
 
 // ========== Loading & Toast ==========
@@ -1864,7 +2251,15 @@ function showLoading() {
 
 function hideLoading() {
     const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.remove('active');
+    if (overlay) {
+        overlay.style.transition = 'opacity 0.4s ease';
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.classList.remove('active');
+            overlay.style.opacity = '';
+            overlay.style.transition = '';
+        }, 400);
+    }
 }
 
 function showToast(message, type = 'info') {
@@ -2421,23 +2816,25 @@ async function loadWeeklySummary() {
 
 // Load all new sections (in background, non-blocking)
 async function loadNewSections() {
-    // Load sections sequentially to reduce server load
-    try {
-        await loadDemandPredictions();
-        await loadEnergyEstimates();
-        // These are less critical, load last
-        await loadHistoricalComparison();
-        await loadWeeklySummary();
-        // Load 2-year historical data
-        await loadTwoYearHistoricalData();
-        await generateMonthlyHeatmap();
-        // Load Year-over-Year comparison
-        await loadYoYComparison();
-    } catch (error) {
-        console.warn('Some sections failed to load:', error);
-    }
+    // Load ALL sections in parallel for maximum speed
+    const results = await Promise.allSettled([
+        loadDemandPredictions(),
+        loadEnergyEstimates(),
+        loadHistoricalComparison(),
+        loadWeeklySummary(),
+        loadTwoYearHistoricalData(),
+        generateMonthlyHeatmap(),
+        loadYoYComparison()
+    ]);
     
-    // Initialize date comparison (outside try-catch so it always runs)
+    // Log any failures
+    results.forEach((result, i) => {
+        if (result.status === 'rejected') {
+            console.warn(`Section ${i} failed:`, result.reason);
+        }
+    });
+    
+    // Initialize date comparison (always runs)
     try { initDateCompare(); } catch(e) { console.warn('Date compare init error:', e); }
 }
 
@@ -3714,3 +4111,447 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 3000);
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEMAND INTELLIGENCE PAGE (Boss's 6-Point Directive)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let correlationChartInstance = null;
+
+async function loadDemandIntelPage() {
+    console.log('📊 Loading Demand Intelligence page...');
+    try {
+        // Load all data in parallel
+        const [dsbRes, advRes, serviceRes, refreshRes] = await Promise.all([
+            fetch('/api/dsb-overview').then(r => r.json()),
+            fetch('/api/advanced-weather').then(r => r.json()),
+            fetch('/api/service-predictions').then(r => r.json()),
+            fetch('/api/refresh-status').then(r => r.json())
+        ]);
+
+        if (dsbRes.status === 'success') renderDSBOverview(dsbRes.data);
+        if (advRes.status === 'success') renderAdvancedWeather(advRes.data);
+        if (serviceRes.status === 'success') renderServicePredictions(serviceRes.data);
+        if (refreshRes.status === 'success') renderRefreshCadence(refreshRes.data);
+
+        // Load demand correlation for default city
+        populateCorrelationCitySelect();
+        loadCorrelationData('chennai');
+
+        console.log('✅ Demand Intelligence page loaded');
+    } catch (err) {
+        console.error('Error loading Demand Intel page:', err);
+    }
+}
+
+function renderDSBOverview(data) {
+    const { zones, summary } = data;
+
+    // Update counts
+    const gc = document.getElementById('dsbGreenCount');
+    const ac = document.getElementById('dsbAmberCount');
+    const rc = document.getElementById('dsbRedCount');
+    if (gc) gc.textContent = `${summary.green_count} cities`;
+    if (ac) ac.textContent = `${summary.amber_count} cities`;
+    if (rc) rc.textContent = `${summary.red_count} cities`;
+
+    // City list
+    const list = document.getElementById('dsbCityList');
+    if (!list) return;
+
+    let html = '';
+    const allCities = [...(zones.red || []), ...(zones.amber || []), ...(zones.green || [])];
+    allCities.forEach(city => {
+        html += `
+        <div class="dsb-city-row ${city.dsb.zone}">
+            <span class="dsb-city-icon">${city.zone_icon}</span>
+            <span class="dsb-city-name">${city.city_name}</span>
+            <span class="dsb-city-zone-label">${city.demand_zone}</span>
+            <span class="dsb-city-demand">${city.demand_index}%</span>
+            <span class="dsb-city-badge" style="background:${city.dsb.color};color:#fff">${city.dsb.label}</span>
+            <span class="dsb-city-action">${city.dsb.action}</span>
+        </div>`;
+    });
+    list.innerHTML = html;
+}
+
+function renderAdvancedWeather(data) {
+    const grid = document.getElementById('advancedWeatherGrid');
+    if (!grid) return;
+
+    const { cities, monsoon } = data;
+
+    grid.innerHTML = cities.map(c => `
+        <div class="adv-weather-card">
+            <div class="adv-header">
+                <span class="adv-zone-icon">${c.zone_icon}</span>
+                <strong>${c.city_name}</strong>
+                <span class="adv-zone-tag">${c.demand_zone}</span>
+            </div>
+            <div class="adv-metrics">
+                <div class="adv-metric">
+                    <span class="adv-label">Wet Bulb</span>
+                    <span class="adv-value" style="color:${c.wet_bulb.color}">${c.wet_bulb.value !== null ? c.wet_bulb.value + '°C' : 'N/A'}</span>
+                    <span class="adv-sub">${c.wet_bulb.label}</span>
+                </div>
+                <div class="adv-metric">
+                    <span class="adv-label">Heat Wave</span>
+                    <span class="adv-value ${c.heatwave.is_heatwave ? 'danger' : ''}">${c.heatwave.is_heatwave ? '⚠️ YES' : '✅ No'}</span>
+                    <span class="adv-sub">${c.heatwave.consecutive_days} consecutive hot days</span>
+                </div>
+                <div class="adv-metric">
+                    <span class="adv-label">DSB Zone</span>
+                    <span class="adv-value">${c.dsb_zone.icon} ${c.dsb_zone.zone.toUpperCase()}</span>
+                    <span class="adv-sub">Demand: ${c.demand_index}%</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    // Monsoon status
+    const monsoonEl = document.getElementById('monsoonStatus');
+    if (monsoonEl && monsoon) {
+        const phase = monsoon.phase;
+        let progressPct = 0;
+        if (phase === 'pre_monsoon') progressPct = Math.max(5, 100 - (monsoon.days_to_onset / 180 * 100));
+        else if (phase === 'active') progressPct = 50 + (monsoon.days_active / (monsoon.days_active + monsoon.days_remaining) * 50);
+        else progressPct = 100;
+
+        monsoonEl.innerHTML = `
+            <div class="monsoon-card">
+                <div class="monsoon-icon">${monsoon.icon}</div>
+                <h3>${monsoon.label}</h3>
+                <div class="monsoon-progress">
+                    <div class="monsoon-bar">
+                        <div class="monsoon-fill" style="width:${progressPct}%"></div>
+                    </div>
+                    <div class="monsoon-labels">
+                        <span>Jun 1 (Onset)</span>
+                        <span>Oct 15 (Withdrawal)</span>
+                    </div>
+                </div>
+                <div class="monsoon-phases">
+                    <span class="${phase === 'pre_monsoon' ? 'active-phase' : ''}">☀️ Pre-Monsoon</span>
+                    <span class="${phase === 'active' ? 'active-phase' : ''}">🌧️ Active</span>
+                    <span class="${phase === 'post_monsoon' ? 'active-phase' : ''}">🌤️ Post-Monsoon</span>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function renderServicePredictions(predictions) {
+    const grid = document.getElementById('servicePredictionsGrid');
+    if (!grid) return;
+
+    grid.innerHTML = predictions.map(pred => `
+        <div class="service-pred-card">
+            <div class="service-pred-header">
+                <span>${pred.zone_icon}</span>
+                <strong>${pred.city_name}</strong>
+                <span class="service-load-badge" style="background: ${pred.overall_service_load >= 60 ? '#dc3545' : pred.overall_service_load >= 35 ? '#fd7e14' : '#28a745'}">${Math.round(pred.overall_service_load)}% load</span>
+            </div>
+            <div class="service-metrics">
+                ${['compressor_failure', 'gas_refill', 'warranty_claims', 'installation'].map(key => {
+                    const item = pred[key];
+                    return `
+                    <div class="service-metric">
+                        <span class="sm-icon">${item.icon}</span>
+                        <span class="sm-label">${item.label}</span>
+                        <div class="sm-bar-wrap"><div class="sm-bar ${item.level.toLowerCase()}" style="width:${item.risk}%"></div></div>
+                        <span class="sm-level ${item.level.toLowerCase()}">${item.level}</span>
+                    </div>`;
+                }).join('')}
+            </div>
+            <p class="service-detail">${pred.compressor_failure.detail}</p>
+        </div>
+    `).join('');
+}
+
+function renderRefreshCadence(data) {
+    const items = [
+        { el: 'cadenceWeather', d: data.weather },
+        { el: 'cadenceDemand', d: data.demand },
+        { el: 'cadenceAccuracy', d: data.accuracy }
+    ];
+    items.forEach(({ el, d }) => {
+        const e = document.getElementById(el);
+        if (!e) return;
+        const val = e.querySelector('.cadence-value');
+        if (val) {
+            if (d.validated_accuracy) {
+                val.textContent = `${d.cadence} (${d.validated_accuracy})`;
+            } else {
+                val.textContent = d.cadence;
+            }
+        }
+    });
+}
+
+/* Alerts & Checklist UI */
+// currentAlerts already declared at top of file
+
+async function loadAlerts() {
+    try {
+        const res = await fetch('/api/alerts');
+        const json = await res.json();
+        if (json.status !== 'success') return;
+        currentAlerts = json.data.alerts || [];
+        const count = currentAlerts.length;
+        const badge = document.getElementById('alertsCount');
+        if (badge) badge.textContent = count;
+    } catch (err) {
+        console.error('Error loading alerts:', err);
+    }
+}
+
+function renderAlertsModal(alerts) {
+    const container = document.getElementById('alertsList');
+    if (!container) return;
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = '<p>No active alerts</p>';
+        showModal('alertsModal');
+        return;
+    }
+
+    const html = alerts.map(a => {
+        const zone = a.dsb_zone || {};
+        const rec = a.recommendation || {};
+        const steps = (rec.steps || []).slice(0,3).map(s => '<div>• '+s+'</div>').join('');
+        return `
+        <div class="alert-row" data-id="${a.id || ''}">
+            <label style="display:flex; align-items:center; gap:10px; width:100%">
+                <input type="checkbox" class="alert-checkbox" value="${a.id || ''}" />
+                <div style="flex:1">
+                    <div style="font-weight:700">${a.city || '--'} — ${zone.label || a.alert_level || '--'} — ${a.demand_index || '--'}%</div>
+                    <div style="font-size:0.85rem; color:var(--text-muted)">${rec.action || 'No action'} — ${rec.priority || ''}</div>
+                    <div style="margin-top:6px; font-size:0.85rem">${steps}</div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    <button class="btn btn-sm" onclick="generateChecklist('${a.city_id || ''}')">Checklist</button>
+                    <button class="btn btn-sm" onclick="ackSingleAlert('${a.id || ''}')">Acknowledge</button>
+                </div>
+            </label>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = html;
+    showModal('alertsModal');
+}
+
+async function acknowledgeSelectedAlerts() {
+    try {
+        const checked = Array.from(document.querySelectorAll('.alert-checkbox:checked')).map(i => i.value);
+        if (!checked.length) return alert('Select at least one alert to acknowledge');
+        const res = await fetch('/api/alerts/ack', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ids: checked})
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+            // refresh
+            await loadAlerts();
+            renderAlertsModal(currentAlerts);
+            const badge = document.getElementById('alertsCount');
+            if (badge) badge.textContent = currentAlerts.length;
+        }
+    } catch (err) {
+        console.error('Error acknowledging alerts', err);
+    }
+}
+
+async function ackSingleAlert(id) {
+    try {
+        const res = await fetch('/api/alerts/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids:[id]})});
+        const json = await res.json();
+        if (json.status === 'success') {
+            await loadAlerts();
+            renderAlertsModal(currentAlerts);
+            const badge = document.getElementById('alertsCount');
+            if (badge) badge.textContent = currentAlerts.length;
+        }
+    } catch (err) { console.error(err); }
+}
+
+async function generateChecklist(cityId) {
+    try {
+        const res = await fetch(`/api/generate-checklist?city=${cityId}`);
+        const json = await res.json();
+        if (json.status !== 'success') return alert('Failed to generate checklist');
+        const checklist = json.data.checklist;
+        renderChecklistModal(checklist);
+    } catch (err) {
+        console.error('Error generating checklist', err);
+    }
+}
+
+function renderChecklistModal(checklist) {
+    const body = document.getElementById('checklistBody');
+    if (!body) return;
+    let html = `<h4>${checklist.city} — ${checklist.action} (${checklist.priority})</h4>`;
+    html += `<div style="margin:8px 0; font-weight:700">Demand Index: ${checklist.demand_index}%</div>`;
+    html += checklist.steps.map(s => `<div style="margin:6px 0">• ${s}</div>`).join('');
+    html += `<div style="margin-top:12px"><button class="btn btn-primary" onclick="ackSingleAlert('${checklist.city_id}_now')">Acknowledge Alert</button></div>`;
+    body.innerHTML = html;
+    showModal('checklistModal');
+}
+
+/* Modal helpers — support both .hidden and .active modal systems */
+function showModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.classList.remove('hidden');
+    m.classList.add('active');
+    m.style.display = 'flex';
+}
+function hideModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.classList.add('hidden');
+    m.classList.remove('active');
+    m.style.display = '';
+}
+
+// Wire alert button events
+const alertsBtn = document.getElementById('alertsButton');
+if (alertsBtn) {
+    alertsBtn.addEventListener('click', async () => {
+        await loadAlerts();
+        renderAlertsModal(currentAlerts);
+    });
+}
+
+const ackBtn = document.getElementById('ackAlertsBtn');
+if (ackBtn) {
+    ackBtn.addEventListener('click', acknowledgeSelectedAlerts);
+}
+
+// Modal close buttons (support both .hidden and .active modal systems)
+document.addEventListener('click', (e) => {
+    if (e.target.matches('.modal-close') || (e.target.matches('[data-modal]') && e.target.dataset.modal)) {
+        const id = e.target.dataset.modal || e.target.closest('.modal')?.id;
+        if (id) hideModal(id);
+    }
+    // Also handle clicking on the .btn with data-modal
+    const btn = e.target.closest('[data-modal]');
+    if (btn && btn.dataset.modal) {
+        hideModal(btn.dataset.modal);
+    }
+});
+
+// Ensure alerts load when page opens
+loadAlerts();
+
+function populateCorrelationCitySelect() {
+    const select = document.getElementById('correlationCitySelect');
+    if (!select) return;
+    const cities = [
+        { id: 'chennai', name: 'Chennai' },
+        { id: 'bangalore', name: 'Bangalore' },
+        { id: 'hyderabad', name: 'Hyderabad' },
+        { id: 'kochi', name: 'Kochi' },
+        { id: 'coimbatore', name: 'Coimbatore' },
+        { id: 'visakhapatnam', name: 'Visakhapatnam' }
+    ];
+    select.innerHTML = cities.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    select.addEventListener('change', () => loadCorrelationData(select.value));
+}
+
+async function loadCorrelationData(cityId) {
+    try {
+        const res = await fetch(`/api/demand-correlation?city=${cityId}&days=60`);
+        const json = await res.json();
+        if (json.status !== 'success') return;
+
+        const { correlation } = json.data;
+
+        // Update metrics
+        const scoreEl = document.getElementById('corrScore');
+        const insightEl = document.getElementById('corrInsight');
+        if (scoreEl) scoreEl.textContent = correlation.correlation_label;
+        if (insightEl) insightEl.textContent = correlation.insight;
+
+        // Render chart
+        renderCorrelationChart(correlation.chart_data);
+    } catch (err) {
+        console.error('Error loading correlation data:', err);
+    }
+}
+
+function renderCorrelationChart(chartData) {
+    const ctx = document.getElementById('correlationChart');
+    if (!ctx) return;
+
+    if (correlationChartInstance) {
+        correlationChartInstance.destroy();
+    }
+
+    const labels = chartData.map(d => d.date);
+    correlationChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Demand Index',
+                    data: chartData.map(d => d.demand_index),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Sales Index',
+                    data: chartData.map(d => d.sales_index),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16,185,129,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Night Temp (°C)',
+                    data: chartData.map(d => d.night_temp),
+                    borderColor: '#f59e0b',
+                    borderDash: [4, 4],
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 1.5,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { usePointStyle: true, padding: 15 } },
+                datalabels: { display: false }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    ticks: { maxTicksLimit: 10, maxRotation: 0 },
+                    grid: { display: false }
+                },
+                y: {
+                    position: 'left',
+                    title: { display: true, text: 'Index (0-100)' },
+                    min: 0, max: 100
+                },
+                y1: {
+                    position: 'right',
+                    title: { display: true, text: 'Temperature (°C)' },
+                    grid: { drawOnChartArea: false }
+                }
+            }
+        }
+    });
+}

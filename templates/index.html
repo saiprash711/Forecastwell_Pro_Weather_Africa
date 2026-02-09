@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ForecastWell Pro - Premium Weather Intelligence Dashboard</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,6 +85,11 @@
                 <span>Insights</span>
                 <span class="nav-badge new">NEW</span>
             </a>
+            <a href="#" class="nav-item" data-page="demand-intel">
+                <i class="fas fa-bolt"></i>
+                <span>Demand Intel</span>
+                <span class="nav-badge new">NEW</span>
+            </a>
             <a href="#" class="nav-item" data-page="reports">
                 <i class="fas fa-file-alt"></i>
                 <span>Reports</span>
@@ -109,7 +117,8 @@
                 </button>
                 <div class="search-box">
                     <i class="fas fa-search"></i>
-                    <input type="text" placeholder="Search cities, metrics..." id="globalSearch">
+                    <input type="text" placeholder="Search cities, metrics..." id="globalSearch" autocomplete="off">
+                    <div class="search-results-dropdown" id="searchResultsDropdown"></div>
                 </div>
             </div>
             
@@ -184,7 +193,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-label">Hottest Day City</span>
-                                <span class="stat-value" id="hottestDayCity">--</span>
+                                <span class="stat-value stat-value-loading" id="hottestDayCity">Loading...</span>
                             </div>
                             <div class="stat-trend up">
                                 <i class="fas fa-arrow-up"></i>
@@ -197,7 +206,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-label">⭐ Hottest Night</span>
-                                <span class="stat-value" id="hottestNightCity">--</span>
+                                <span class="stat-value stat-value-loading" id="hottestNightCity">Loading...</span>
                             </div>
                             <div class="stat-badge">PRIORITY</div>
                         </div>
@@ -208,7 +217,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-label">Season Status</span>
-                                <span class="stat-value" id="seasonStatus">--</span>
+                                <span class="stat-value stat-value-loading" id="seasonStatus">Loading...</span>
                             </div>
                         </div>
                         
@@ -218,7 +227,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-label">Days to Peak</span>
-                                <span class="stat-value" id="daysToPeak">--</span>
+                                <span class="stat-value stat-value-loading" id="daysToPeak">Loading...</span>
                             </div>
                             <div class="countdown-ring" id="countdownRing"></div>
                         </div>
@@ -257,7 +266,9 @@
                                 <span class="alert-count" id="totalAlerts">0</span>
                             </div>
                             <div id="alertsContainer" class="alerts-list">
-                                <div class="loading-shimmer"></div>
+                                <div class="skeleton-row"></div>
+                                <div class="skeleton-row"></div>
+                                <div class="skeleton-row"></div>
                             </div>
                         </section>
                     </div>
@@ -281,7 +292,8 @@
                             </div>
                         </div>
                         <div class="chart-container large">
-                            <canvas id="temperatureChart"></canvas>
+                            <div class="skeleton-chart" id="temperatureChartSkeleton"><i class="fas fa-chart-line"></i> Loading trends...</div>
+                            <canvas id="temperatureChart" style="display:none"></canvas>
                         </div>
                     </section>
 
@@ -295,7 +307,14 @@
                             </div>
                         </div>
                         <div id="citiesGrid" class="cities-grid">
-                            <div class="loading-shimmer"></div>
+                            <div class="skeleton-cities-grid">
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                            </div>
                         </div>
                     </section>
 
@@ -673,7 +692,12 @@
 
             <!-- ========== ANALYTICS PAGE ========== -->
             <div class="page" id="analyticsPage">
-                <div class="page-header">
+                <div class="page-loader" id="analyticsLoader">
+                    <div class="loader-spinner"></div>
+                    <div class="loader-text">Loading Analytics</div>
+                    <div class="loader-subtext">Crunching weather data...</div>
+                </div>
+                <div class="page-header" style="display:none" id="analyticsContent">
                     <h1><i class="fas fa-chart-line"></i> Advanced Analytics</h1>
                     <p>Deep insights into weather patterns and demand correlations</p>
                 </div>
@@ -733,7 +757,7 @@
                             <h2><i class="fas fa-th"></i> City Temperature Heatmap</h2>
                         </div>
                         <div class="heatmap-container" id="heatmapContainer">
-                            <!-- Generated dynamically -->
+                            <div class="skeleton-chart" style="min-height: 300px"><i class="fas fa-th"></i> Loading heatmap...</div>
                         </div>
                     </section>
 
@@ -802,7 +826,12 @@
 
             <!-- ========== FORECAST PAGE ========== -->
             <div class="page" id="forecastPage">
-                <div class="page-header">
+                <div class="page-loader" id="forecastLoader">
+                    <div class="loader-spinner"></div>
+                    <div class="loader-text">Loading Forecast</div>
+                    <div class="loader-subtext">Preparing 7-day predictions...</div>
+                </div>
+                <div class="page-header" style="display:none" id="forecastContent">
                     <h1><i class="fas fa-cloud-sun"></i> Weather Forecasting</h1>
                     <p>7-Day forecast with demand predictions</p>
                 </div>
@@ -824,7 +853,12 @@
 
                 <!-- Forecast Cards -->
                 <div class="forecast-carousel" id="forecastCarousel">
-                    <!-- Generated dynamically -->
+                    <div class="skeleton-cities-grid">
+                        <div class="skeleton-card" style="height: 220px"></div>
+                        <div class="skeleton-card" style="height: 220px"></div>
+                        <div class="skeleton-card" style="height: 220px"></div>
+                        <div class="skeleton-card" style="height: 220px"></div>
+                    </div>
                 </div>
 
                 <!-- Detailed Forecast Chart -->
@@ -850,19 +884,29 @@
 
             <!-- ========== CITIES PAGE ========== -->
             <div class="page" id="citiesPage">
-                <div class="page-header">
+                <div class="page-loader" id="citiesLoader">
+                    <div class="loader-spinner"></div>
+                    <div class="loader-text">Loading City Data</div>
+                    <div class="loader-subtext">Gathering city-wise analytics...</div>
+                </div>
+                <div class="page-header" style="display:none" id="citiesContent">
                     <h1><i class="fas fa-city"></i> City Details</h1>
                     <p>Comprehensive city-wise weather analysis</p>
                 </div>
 
-                <div class="cities-detail-grid" id="citiesDetailGrid">
+                <div class="cities-detail-grid" id="citiesDetailGrid" style="display:none">
                     <!-- Generated dynamically -->
                 </div>
             </div>
 
             <!-- ========== ALERTS PAGE ========== -->
             <div class="page" id="alertsPage">
-                <div class="page-header">
+                <div class="page-loader" id="alertsPageLoader">
+                    <div class="loader-spinner"></div>
+                    <div class="loader-text">Loading Alerts</div>
+                    <div class="loader-subtext">Scanning active notifications...</div>
+                </div>
+                <div class="page-header" style="display:none" id="alertsPageContent">
                     <h1><i class="fas fa-bell"></i> Alert Center</h1>
                     <p>Real-time monitoring and notifications</p>
                 </div>
@@ -919,7 +963,12 @@
 
             <!-- ========== INSIGHTS PAGE ========== -->
             <div class="page" id="insightsPage">
-                <div class="page-header">
+                <div class="page-loader" id="insightsLoader">
+                    <div class="loader-spinner"></div>
+                    <div class="loader-text">Loading Insights</div>
+                    <div class="loader-subtext">Analyzing trends & generating recommendations...</div>
+                </div>
+                <div class="page-header" style="display:none" id="insightsContent">
                     <h1><i class="fas fa-lightbulb"></i> Business Insights & Recommendations</h1>
                     <p>AI-powered actionable insights based on historical trends and 4-month forecast</p>
                 </div>
@@ -1033,6 +1082,173 @@
                         <div class="loading-shimmer"></div>
                     </div>
                 </section>
+            </div>
+
+            <!-- ========== DEMAND INTELLIGENCE PAGE ========== -->
+            <div class="page" id="demand-intelPage">
+                <div class="page-loader" id="demandIntelLoader">
+                    <div class="loader-spinner"></div>
+                    <div class="loader-text">Loading Demand Intelligence</div>
+                    <div class="loader-subtext">Fetching DSB zones, correlations & predictions...</div>
+                </div>
+                <div class="page-header" style="display:none" id="demandIntelContent">
+                    <h1><i class="fas fa-bolt"></i> Demand Intelligence Hub</h1>
+                    <div style="display:flex; align-items:center; gap:12px">
+                        <p style="margin:0">DSB methodology, demand correlation, service predictions & refresh cadence</p>
+                        <button id="alertsButton" class="btn btn-sm" style="margin-left:12px; display:flex; align-items:center; gap:8px;">🔔 Alerts <span id="alertsCount" class="badge" style="background:#dc3545;color:#fff;border-radius:999px;padding:2px 8px;display:inline-block;">0</span></button>
+                    </div>
+                </div>
+
+                <!-- Refresh Cadence Bar -->
+                <div class="refresh-cadence-bar glass-card">
+                    <div class="cadence-item" id="cadenceWeather">
+                        <span class="cadence-icon">☁️</span>
+                        <span class="cadence-label">Weather</span>
+                        <span class="cadence-value">Daily</span>
+                    </div>
+                    <div class="cadence-divider"></div>
+                    <div class="cadence-item" id="cadenceDemand">
+                        <span class="cadence-icon">📊</span>
+                        <span class="cadence-label">Demand</span>
+                        <span class="cadence-value">Weekly</span>
+                    </div>
+                    <div class="cadence-divider"></div>
+                    <div class="cadence-item" id="cadenceAccuracy">
+                        <span class="cadence-icon">✅</span>
+                        <span class="cadence-label">Accuracy</span>
+                        <span class="cadence-value">Monthly (87%)</span>
+                    </div>
+                </div>
+
+                <!-- DSB Overview Section -->
+                <section class="dsb-overview glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-traffic-light"></i> DSB Alert Zones</h2>
+                        <span class="section-subtitle">Green → Amber → Red methodology</span>
+                    </div>
+                    <div class="dsb-summary" id="dsbSummary">
+                        <div class="dsb-zone-card green">
+                            <div class="dsb-icon">🟢</div>
+                            <div class="dsb-info">
+                                <h4>Green — Normal</h4>
+                                <span class="dsb-count" id="dsbGreenCount">0</span>
+                                <p>Normal stocking</p>
+                            </div>
+                        </div>
+                        <div class="dsb-zone-card amber">
+                            <div class="dsb-icon">🟡</div>
+                            <div class="dsb-info">
+                                <h4>Amber — Pre-Position</h4>
+                                <span class="dsb-count" id="dsbAmberCount">0</span>
+                                <p>Additional inventory</p>
+                            </div>
+                        </div>
+                        <div class="dsb-zone-card red">
+                            <div class="dsb-icon">🔴</div>
+                            <div class="dsb-info">
+                                <h4>Red — Emergency</h4>
+                                <span class="dsb-count" id="dsbRedCount">0</span>
+                                <p>Emergency replenishment</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dsb-city-list" id="dsbCityList">
+                        <!-- Generated dynamically -->
+                    </div>
+                </section>
+
+                <!-- Advanced Weather & Monsoon Row -->
+                <div class="demand-intel-two-col">
+                    <!-- Advanced Weather Parameters -->
+                    <section class="glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-temperature-high"></i> Advanced Weather</h2>
+                            <span class="section-subtitle">Wet bulb, heatwave, monsoon</span>
+                        </div>
+                        <div class="advanced-weather-grid" id="advancedWeatherGrid">
+                            <!-- Generated dynamically -->
+                        </div>
+                    </section>
+
+                    <!-- Monsoon Timeline -->
+                    <section class="glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-cloud-rain"></i> Monsoon Timeline</h2>
+                        </div>
+                        <div class="monsoon-status" id="monsoonStatus">
+                            <!-- Generated dynamically -->
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Demand Correlation Section -->
+                <section class="glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-project-diagram"></i> Demand Correlation Layer</h2>
+                        <span class="section-subtitle">Weather vs Sales — historical overlay</span>
+                        <div class="correlation-controls">
+                            <select id="correlationCitySelect">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="correlation-metrics" id="correlationMetrics">
+                        <div class="corr-metric">
+                            <span class="corr-label">Correlation</span>
+                            <span class="corr-value" id="corrScore">--</span>
+                        </div>
+                        <div class="corr-metric">
+                            <span class="corr-label">Insight</span>
+                            <span class="corr-value small" id="corrInsight">--</span>
+                        </div>
+                    </div>
+                    <div class="correlation-chart-wrapper">
+                        <canvas id="correlationChart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Service Demand Predictions -->
+                <section class="glass-card animate__animated animate__fadeInUp">
+                    <div class="section-header">
+                        <h2><i class="fas fa-tools"></i> Service Demand Predictions</h2>
+                        <span class="section-subtitle">Compressor failures, gas refills, warranty claims, installations</span>
+                    </div>
+                    <div class="service-predictions-grid" id="servicePredictionsGrid">
+                        <!-- Generated dynamically -->
+                    </div>
+                </section>
+
+                <!-- Alerts Modal -->
+                <div id="alertsModal" class="modal hidden">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Active Alerts</h3>
+                            <button class="modal-close" data-modal="alertsModal">✖</button>
+                        </div>
+                        <div class="modal-body" id="alertsList">
+                            <!-- Alerts inserted dynamically -->
+                        </div>
+                        <div class="modal-footer">
+                            <button id="ackAlertsBtn" class="btn btn-primary">Acknowledge Selected</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Checklist Modal -->
+                <div id="checklistModal" class="modal hidden">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Actionable Checklist</h3>
+                            <button class="modal-close" data-modal="checklistModal">✖</button>
+                        </div>
+                        <div class="modal-body" id="checklistBody">
+                            <!-- checklist content -->
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn" data-modal="checklistModal">Close</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- ========== REPORTS PAGE ========== -->
@@ -1160,13 +1376,17 @@
     </div>
 
     <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-overlay active" id="loadingOverlay">
         <div class="loading-content">
             <div class="loading-spinner">
                 <div class="spinner-ring"></div>
                 <i class="fas fa-cloud-sun"></i>
             </div>
-            <p>Loading weather data...</p>
+            <h3 style="margin: 0 0 0.5rem 0; font-weight: 600;">ForecastWell Pro</h3>
+            <p style="margin: 0; opacity: 0.8;">Fetching live weather intelligence...</p>
+            <div style="margin-top: 1rem; width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden;">
+                <div style="height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent-primary), #a855f7); border-radius: 2px; animation: loadProgress 2s ease-in-out infinite;"></div>
+            </div>
         </div>
     </div>
 

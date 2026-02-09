@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Sun rays -->
+  <g fill="#F5A623">
+    <polygon points="24,8 26,16 22,16"/>
+    <polygon points="8,24 16,22 16,26"/>
+    <polygon points="10,12 16,16 12,18"/>
+    <polygon points="12,36 16,32 18,36"/>
+    <polygon points="36,12 32,16 34,18"/>
+    <polygon points="38,6 36,14 40,12"/>
+    <polygon points="6,30 14,28 12,32"/>
+    <polygon points="10,18 16,18 14,22"/>
+  </g>
+  <!-- Sun circle -->
+  <circle cx="24" cy="24" r="12" fill="#F5A623"/>
+  <!-- Cloud -->
+  <path d="M20,56 C12,56 6,50 6,44 C6,38 12,32 20,32 C20,32 22,24 32,24 C42,24 46,32 46,32 C54,32 58,38 58,44 C58,50 54,56 46,56 Z" fill="#1B3A5C"/>
+</svg>

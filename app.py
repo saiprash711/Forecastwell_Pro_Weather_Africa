@@ -8,7 +8,9 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 import random
 import time
+import threading
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from config import Config
 from utils.weather_service import WeatherService
 from utils.alert_engine import AlertEngine
@@ -81,10 +83,23 @@ def get_cached_weather():
     for city in cities_weather:
         day_temp = city.get('day_temp', city['temperature'])
         night_temp = city.get('night_temp', city['temperature'] - 5)
+        humidity = city.get('humidity', 60)
         city['demand_index'] = data_processor.calculate_demand_index(
-            day_temp, night_temp, city.get('humidity')
+            day_temp, night_temp, humidity
         )
         city['ac_hours'] = data_processor.calculate_ac_hours(day_temp, night_temp)
+        
+        # DSB zone classification
+        city['dsb_zone'] = data_processor.get_dsb_zone(city['demand_index'])
+        
+        # Wet bulb temperature
+        city['wet_bulb'] = data_processor.calculate_wet_bulb(day_temp, humidity)
+        
+        # Demand zone info from config
+        city_config = next((c for c in Config.CITIES if c['id'] == city.get('city_id')), {})
+        city['demand_zone'] = city_config.get('demand_zone', 'Unknown')
+        city['zone_icon'] = city_config.get('zone_icon', '📍')
+        city['zone_traits'] = city_config.get('zone_traits', '')
     
     cache['weather_data'] = cities_weather
     cache['weather_timestamp'] = now
@@ -116,6 +131,74 @@ def get_cities():
         'status': 'success',
         'data': Config.CITIES
     })
+
+
+@app.route('/api/dashboard-init')
+def get_dashboard_init():
+    """Combined endpoint: weather + alerts + KPIs in one call to reduce round-trips"""
+    try:
+        cities_weather = get_cached_weather()
+        
+        # Alerts
+        alerts = refresh_alerts()
+        filtered_alerts = [a for a in alerts if not a.get('acknowledged', False)]
+        
+        # KPIs (computed from cached data, no extra API calls)
+        hottest_day_city = data_processor.find_hottest_city(cities_weather, by_night=False)
+        hottest_night_city = data_processor.find_hottest_city(cities_weather, by_night=True)
+        
+        city_temps = []
+        for c in cities_weather:
+            city_temps.append({
+                'name': c['city_name'],
+                'day_temp': round(c.get('day_temp', c['temperature']), 1),
+                'night_temp': round(c.get('night_temp', c['temperature'] - 5), 1)
+            })
+        city_temps.sort(key=lambda x: x['night_temp'], reverse=True)
+        
+        hottest_night_temp = hottest_night_city.get('night_temp', hottest_night_city['temperature'] - 5)
+        hottest_day_temp = hottest_day_city.get('day_temp', hottest_day_city['temperature'])
+        season_status = data_processor.get_season_status(hottest_day_temp, hottest_night_temp)
+        
+        chennai_forecast = get_cached_forecast('chennai', days=120)
+        days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
+        
+        night_temps = [c['night_temp'] for c in city_temps]
+        day_temps = [c['day_temp'] for c in city_temps]
+        
+        kpis = {
+            'hottest_day_city': {
+                'name': hottest_day_city['city_name'],
+                'temperature': hottest_day_city.get('day_temp', hottest_day_city['temperature']),
+                'type': 'day'
+            },
+            'hottest_night_city': {
+                'name': hottest_night_city['city_name'],
+                'temperature': hottest_night_city.get('night_temp', hottest_night_city['temperature'] - 5),
+                'type': 'night',
+                'priority_note': '⭐ Night temp drives demand!'
+            },
+            'season_status': season_status,
+            'days_to_peak': days_to_peak,
+            'city_temps': city_temps,
+            'night_temp_range': {'min': round(min(night_temps), 1), 'max': round(max(night_temps), 1)},
+            'day_temp_range': {'min': round(min(day_temps), 1), 'max': round(max(day_temps), 1)}
+        }
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'weather': cities_weather,
+                'alerts': filtered_alerts,
+                'kpis': kpis,
+                'timestamp': cities_weather[0]['timestamp'] if cities_weather else None
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 
 @app.route('/api/weather/current')
@@ -172,17 +255,18 @@ def get_city_weather(city_id):
         }), 500
 
 
-@app.route('/api/alerts')
+@app.route('/api/alerts', endpoint='alerts_get')
 def get_alerts():
-    """Get alerts for all cities (with caching)"""
+    """Get alerts for all cities (with optional include_ack param)"""
     try:
-        cities_weather = get_cached_weather()
-        alerts = get_cached_alerts(cities_weather)
-        
+        include_ack = request.args.get('include_ack', 'false').lower() == 'true'
+        # Refresh and get alerts
+        alerts = refresh_alerts()
+        filtered = alerts if include_ack else [a for a in alerts if not a.get('acknowledged', False)]
         return jsonify({
             'status': 'success',
-            'data': alerts,
-            'count': len(alerts)
+            'data': {'alerts': filtered},
+            'count': len(filtered)
         })
     except Exception as e:
         return jsonify({
@@ -201,7 +285,8 @@ def get_kpis():
     - Days to Peak
     """
     try:
-        cities_weather = weather_service.get_all_cities_current()
+        # Use CACHED weather data instead of making fresh API calls
+        cities_weather = get_cached_weather()
         
         # Find hottest cities
         hottest_day_city = data_processor.find_hottest_city(cities_weather, by_night=False)
@@ -224,7 +309,7 @@ def get_kpis():
         
         # Get forecast to calculate days to peak (extended to +4 months)
         # Use Chennai as reference city - Open-Meteo Seasonal API provides up to 7 months
-        chennai_forecast = weather_service.get_forecast('chennai', days=120)  # 4 months forecast
+        chennai_forecast = get_cached_forecast('chennai', days=120)  # Use cached forecast
         days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
         
         # Night temp range across cities
@@ -269,11 +354,16 @@ def get_wave_sequence():
     Lead indicators → Building markets → Lag markets
     """
     try:
-        # Get forecasts for all cities using Open-Meteo Seasonal API (up to 7 months)
+        # Get forecasts for all cities in parallel using cached data
         all_forecasts = {}
-        for city in Config.CITIES:
-            forecast = weather_service.get_forecast(city['id'], days=120)  # 4 months forecast
-            all_forecasts[city['id']] = forecast
+        def _fetch_wave_forecast(city_id):
+            return city_id, get_cached_forecast(city_id, days=120)
+        
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [executor.submit(_fetch_wave_forecast, c['id']) for c in Config.CITIES]
+            for f in futures:
+                cid, data = f.result()
+                all_forecasts[cid] = data
         
         # Analyze wave sequence
         wave_data = alert_engine.analyze_wave_sequence(all_forecasts)
@@ -293,14 +383,18 @@ def get_wave_sequence():
 def export_excel():
     """Export dashboard data to Excel"""
     try:
-        cities_weather = weather_service.get_all_cities_current()
+        cities_weather = get_cached_weather()
         alerts = alert_engine.get_all_alerts(cities_weather)
 
-        # Get wave sequence
+        # Get wave sequence (parallel, cached)
         all_forecasts = {}
-        for city in Config.CITIES:
-            forecast = weather_service.get_forecast(city['id'], days=120)  # 4 months forecast
-            all_forecasts[city['id']] = forecast
+        def _fetch_export_forecast(city_id):
+            return city_id, get_cached_forecast(city_id, days=120)
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [executor.submit(_fetch_export_forecast, c['id']) for c in Config.CITIES]
+            for f in futures:
+                cid, data = f.result()
+                all_forecasts[cid] = data
         wave_data = alert_engine.analyze_wave_sequence(all_forecasts)
 
         # Prepare export data
@@ -634,19 +728,31 @@ def get_business_insights_page():
         # Get cached weather data for all cities
         cities_weather = get_cached_weather()
         
-        # Get 4-month forecast for analysis
+        # Get 4-month forecast + historical data for all cities IN PARALLEL
         forecast_by_city = {}
-        for city in Config.CITIES:
-            forecast = get_cached_forecast(city['id'], days=120)
-            forecast_by_city[city['id']] = forecast
-        
-        # Get historical data for YoY comparison
         historical_by_city = {}
-        for city in Config.CITIES:
-            historical_by_city[city['id']] = {
-                2024: get_cached_monthly_data(city['id'], 2024),
-                2025: get_cached_monthly_data(city['id'], 2025)
-            }
+        
+        def fetch_city_forecast(city_id):
+            return city_id, get_cached_forecast(city_id, days=120)
+        
+        def fetch_city_historical(city_id, year):
+            return city_id, year, get_cached_monthly_data(city_id, year)
+        
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            # Submit all forecast tasks
+            forecast_futures = [executor.submit(fetch_city_forecast, c['id']) for c in Config.CITIES]
+            # Submit all historical tasks
+            hist_futures = [executor.submit(fetch_city_historical, c['id'], y) for c in Config.CITIES for y in [2024, 2025]]
+            
+            for f in forecast_futures:
+                city_id, data = f.result()
+                forecast_by_city[city_id] = data
+            
+            for f in hist_futures:
+                city_id, year, data = f.result()
+                if city_id not in historical_by_city:
+                    historical_by_city[city_id] = {}
+                historical_by_city[city_id][year] = data
         
         # Calculate key metrics
         # 1. Days to peak (from Chennai as reference)
@@ -1276,13 +1382,9 @@ def generate_two_year_historical_data(start_date, end_date, city_filter, granula
         'chennai': {'day': 2, 'night': 3},      # Coastal, warmer nights
         'hyderabad': {'day': 1, 'night': -1},   # Moderate
         'bangalore': {'day': -3, 'night': -3},  # Cooler highland
-        'vijayawada': {'day': 3, 'night': 2},   # Hot
         'visakhapatnam': {'day': 1, 'night': 2},# Coastal
-        'madurai': {'day': 2, 'night': 1},      # Hot
         'coimbatore': {'day': -2, 'night': -2}, # Cooler
-        'tirupati': {'day': 1, 'night': 0},     # Moderate
         'kochi': {'day': 0, 'night': 3},        # Coastal, warm nights
-        'trivandrum': {'day': 0, 'night': 3},   # Coastal
     }
     
     cities = Config.CITIES if city_filter == 'all' else [
@@ -1924,6 +2026,9 @@ def generate_city_insights(cities_weather, forecast_by_city, historical_by_city)
         else:
             recommendation = f"<strong>Moderate demand.</strong> Maintain baseline inventory. Monitor for temperature changes."
         
+        # Demand zone from config
+        city_config = next((c for c in Config.CITIES if c['id'] == city_id), {})
+        
         city_insights.append({
             'city': city['city_name'],
             'city_id': city_id,
@@ -1933,7 +2038,9 @@ def generate_city_insights(cities_weather, forecast_by_city, historical_by_city)
             'current_night': round(current_night, 1),
             'forecast_night': round(avg_future_night, 1),
             'demand_score': demand_score,
-            'recommendation': recommendation
+            'recommendation': recommendation,
+            'demand_zone': city_config.get('demand_zone', ''),
+            'zone_icon': city_config.get('zone_icon', '📍')
         })
     
     # Sort by demand score
@@ -1942,7 +2049,395 @@ def generate_city_insights(cities_weather, forecast_by_city, historical_by_city)
     return city_insights
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# NEW API ENDPOINTS (Boss's 6-Point Directive)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/advanced-weather')
+def get_advanced_weather():
+    """
+    Advanced weather parameters: wet bulb, heat wave, monsoon, consecutive hot days.
+    Query params: city (optional, default: all)
+    """
+    try:
+        city_filter = request.args.get('city', 'all')
+        cities_weather = get_cached_weather()
+        
+        if city_filter != 'all':
+            cities_weather = [c for c in cities_weather if c.get('city_id') == city_filter]
+        
+        result = []
+        for city in cities_weather:
+            city_id = city.get('city_id', '')
+            day_temp = city.get('day_temp', city['temperature'])
+            night_temp = city.get('night_temp', city['temperature'] - 5)
+            humidity = city.get('humidity', 60)
+            
+            # Wet bulb
+            wet_bulb = data_processor.calculate_wet_bulb(day_temp, humidity)
+            
+            # Consecutive hot days from forecast
+            forecast = get_cached_forecast(city_id, days=16)
+            heatwave = data_processor.detect_consecutive_hot_days(forecast)
+            
+            # DSB zone
+            demand_idx = data_processor.calculate_demand_index(day_temp, night_temp, humidity)
+            dsb = data_processor.get_dsb_zone(demand_idx)
+            
+            # City config
+            city_config = next((c for c in Config.CITIES if c['id'] == city_id), {})
+            
+            result.append({
+                'city_id': city_id,
+                'city_name': city.get('city_name', ''),
+                'demand_zone': city_config.get('demand_zone', ''),
+                'zone_icon': city_config.get('zone_icon', '📍'),
+                'zone_traits': city_config.get('zone_traits', ''),
+                'wet_bulb': wet_bulb,
+                'heatwave': heatwave,
+                'dsb_zone': dsb,
+                'demand_index': round(demand_idx, 1),
+                'day_temp': day_temp,
+                'night_temp': night_temp,
+                'humidity': humidity
+            })
+        
+        # Monsoon status (same for all cities in region)
+        monsoon = data_processor.get_monsoon_status()
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'cities': result,
+                'monsoon': monsoon
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# Alerts subsystem: generate alerts for Amber/Red/kerala_special, cache and provide endpoints
+ALERTS_TTL = 300  # refresh alerts every 5 minutes
+
+# Acknowledged alerts store
+if 'alerts_ack' not in cache:
+    cache['alerts_ack'] = set()
+
+
+def refresh_alerts(force=False):
+    """Refresh alerts and store in cache."""
+    now = time.time()
+    if (not force and cache.get('alerts_timestamp', 0) and (now - cache['alerts_timestamp'] < ALERTS_TTL)):
+        return cache.get('alerts_data', [])
+
+    try:
+        cities_weather = get_cached_weather()
+        alerts = alert_engine.get_all_alerts(cities_weather)
+        # Attach stable ids and ack flag
+        ts = int(time.time())
+        new_alerts_to_send = []
+        for idx, a in enumerate(alerts):
+            a_id = f"{a.get('city_id')}_{ts}_{idx}"
+            a['id'] = a_id
+            a['acknowledged'] = a_id in cache.get('alerts_ack', set())
+            # if webhook configured and this alert is Amber/Red/Kerala special and not sent yet
+            if (a.get('alert_level') in ('red', 'orange', 'kerala_special') and
+                a_id not in cache.get('alerts_webhook_sent', set()) and
+                getattr(Config, 'ALERT_WEBHOOK_URLS', [])):
+                new_alerts_to_send.append(a)
+        cache['alerts_data'] = alerts
+        cache['alerts_timestamp'] = now
+
+        # send webhooks for newly discovered alerts (non-blocking)
+        if new_alerts_to_send:
+            try:
+                threading.Thread(target=send_alert_webhooks, args=(new_alerts_to_send,), daemon=True).start()
+            except Exception as e:
+                app.logger.error('Failed to start webhook thread: %s', e)
+
+        return alerts
+    except Exception as e:
+        app.logger.error('Error refreshing alerts: %s', e)
+        return []
+
+
+def send_alert_webhooks(alerts_list):
+    """Send alerts to configured webhook URLs and update cache of sent alerts."""
+    urls = getattr(Config, 'ALERT_WEBHOOK_URLS', []) or []
+    headers = getattr(Config, 'ALERT_WEBHOOK_HEADERS', {}) or {}
+    timeout = getattr(Config, 'ALERT_WEBHOOK_TIMEOUT', 5)
+    sent = cache.setdefault('alerts_webhook_sent', set())
+    for alert in alerts_list:
+        payload = {
+            'city_id': alert.get('city_id'),
+            'city': alert.get('city'),
+            'demand_index': alert.get('demand_index'),
+            'dsb_zone': alert.get('dsb_zone'),
+            'alert_level': alert.get('alert_level'),
+            'timestamp': alert.get('timestamp'),
+            'recommendation': alert.get('recommendation')
+        }
+        for url in urls:
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+                app.logger.info('Webhook sent to %s (%s) -> %s', url, alert.get('id'), resp.status_code)
+                # If request returns 2xx, mark as sent
+                if 200 <= resp.status_code < 300:
+                    sent.add(alert.get('id'))
+            except Exception as e:
+                app.logger.error('Webhook send failed for %s -> %s', url, e)
+    cache['alerts_webhook_sent'] = sent
+
+
+def _start_alerts_worker():
+    def worker():
+        while True:
+            try:
+                refresh_alerts(force=True)
+            except Exception as e:
+                app.logger.error('Alert worker error: %s', e)
+            time.sleep(ALERTS_TTL)
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
+# Start background worker when app initializes
+_start_alerts_worker()
+
+
+
+@app.route('/api/alerts/ack', methods=['POST'], endpoint='alerts_ack')
+def acknowledge_alerts():
+    """Acknowledge alerts by id. Accepts JSON: {'ids': ['city_...'] }"""
+    try:
+        body = request.get_json() or {}
+        ids = body.get('ids', [])
+        if not isinstance(ids, list):
+            return jsonify({'status': 'error', 'message': 'ids must be a list'}), 400
+        for _id in ids:
+            cache.setdefault('alerts_ack', set()).add(_id)
+        # update cached alerts' acknowledged flags
+        for a in cache.get('alerts_data', []):
+            if a.get('id') in ids:
+                a['acknowledged'] = True
+        return jsonify({'status': 'success', 'acknowledged': ids})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/generate-checklist', endpoint='generate_checklist_api')
+def generate_checklist():
+    """Generate an actionable checklist for a city based on current conditions. Query: city=<city_id> or city=all"""
+    try:
+        city_id = request.args.get('city')
+        if not city_id or city_id == 'all':
+            return jsonify({'status': 'error', 'message': 'Please specify a city parameter'}), 400
+        # Find city weather
+        cities = get_cached_weather()
+        city = next((c for c in cities if c.get('city_id') == city_id), None)
+        if not city:
+            return jsonify({'status': 'error', 'message': 'City not found'}), 404
+
+        # Use alert engine to create recommendation steps
+        alert = alert_engine.analyze_temperature(
+            city.get('day_temp', city.get('temperature')),
+            city.get('night_temp', city.get('temperature') - 5),
+            city.get('city_name'),
+            city_id
+        )
+        rec = alert.get('recommendation', {})
+        checklist = {
+            'city': city.get('city_name'),
+            'city_id': city_id,
+            'demand_index': alert.get('demand_index'),
+            'action': rec.get('action'),
+            'priority': rec.get('priority'),
+            'steps': rec.get('steps', [])
+        }
+        return jsonify({'status': 'success', 'data': {'checklist': checklist}})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/demand-correlation')
+def get_demand_correlation():
+    """
+    Demand correlation layer: overlay historical weather vs simulated sales data.
+    Query params: city (city_id, default: chennai), days (int, default: 90)
+    """
+    try:
+        city_id = request.args.get('city', 'chennai')
+        days = int(request.args.get('days', 90))
+        
+        # Get historical weather data
+        historical = weather_service.get_historical_data(city_id, days=days)
+        
+        if not historical:
+            return jsonify({'status': 'error', 'message': 'No historical data available'}), 404
+        
+        # Calculate correlation
+        correlation = data_processor.calculate_demand_correlation(historical, city_id)
+        
+        city_config = next((c for c in Config.CITIES if c['id'] == city_id), {})
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'city_id': city_id,
+                'city_name': city_config.get('name', city_id),
+                'demand_zone': city_config.get('demand_zone', ''),
+                'days_analyzed': len(historical),
+                'correlation': correlation
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/service-predictions')
+def get_service_predictions():
+    """
+    Service demand predictions: compressor failures, gas refills, warranty claims.
+    Returns predictions for all cities or a specific city.
+    Query params: city (optional, default: all)
+    """
+    try:
+        city_filter = request.args.get('city', 'all')
+        cities_weather = get_cached_weather()
+        
+        if city_filter != 'all':
+            cities_weather = [c for c in cities_weather if c.get('city_id') == city_filter]
+        
+        predictions = []
+        for city in cities_weather:
+            city_id = city.get('city_id', '')
+            day_temp = city.get('day_temp', city['temperature'])
+            night_temp = city.get('night_temp', city['temperature'] - 5)
+            humidity = city.get('humidity', 60)
+            
+            pred = data_processor.predict_service_demand(city_id, day_temp, night_temp, humidity)
+            pred['city_id'] = city_id
+            pred['city_name'] = city.get('city_name', '')
+            
+            city_config = next((c for c in Config.CITIES if c['id'] == city_id), {})
+            pred['demand_zone'] = city_config.get('demand_zone', '')
+            pred['zone_icon'] = city_config.get('zone_icon', '📍')
+            
+            predictions.append(pred)
+        
+        # Sort by overall service load
+        predictions.sort(key=lambda x: x.get('overall_service_load', 0), reverse=True)
+        
+        return jsonify({
+            'status': 'success',
+            'data': predictions
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/refresh-status')
+def get_refresh_status():
+    """
+    Get refresh cadence status: daily weather, weekly demand forecast, monthly accuracy validation.
+    """
+    try:
+        refresh = data_processor.get_refresh_status()
+        return jsonify({
+            'status': 'success',
+            'data': refresh
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/dsb-overview')
+def get_dsb_overview():
+    """
+    DSB methodology overview: Green/Amber/Red zones for all cities.
+    """
+    try:
+        cities_weather = get_cached_weather()
+        
+        zones = {'green': [], 'amber': [], 'red': []}
+        
+        for city in cities_weather:
+            demand_idx = city.get('demand_index', 0)
+            dsb = data_processor.get_dsb_zone(demand_idx)
+            city_config = next((c for c in Config.CITIES if c['id'] == city.get('city_id')), {})
+            
+            entry = {
+                'city_id': city.get('city_id', ''),
+                'city_name': city.get('city_name', ''),
+                'demand_index': round(demand_idx, 1),
+                'demand_zone': city_config.get('demand_zone', ''),
+                'zone_icon': city_config.get('zone_icon', '📍'),
+                'day_temp': city.get('day_temp'),
+                'night_temp': city.get('night_temp'),
+                'dsb': dsb
+            }
+            
+            zones[dsb['zone']].append(entry)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'zones': zones,
+                'summary': {
+                    'green_count': len(zones['green']),
+                    'amber_count': len(zones['amber']),
+                    'red_count': len(zones['red']),
+                    'total': len(cities_weather)
+                },
+                'methodology': {
+                    'green': Config.DSB_GREEN,
+                    'amber': Config.DSB_AMBER,
+                    'red': Config.DSB_RED
+                }
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+def warm_cache():
+    """Pre-warm caches in background so first user request is instant"""
+    try:
+        time.sleep(1)  # Wait for server to be fully ready
+        
+        print("[Cache] Pre-warming weather cache...")
+        weather = get_cached_weather()
+        print(f"[Cache] Weather ready ({len(weather)} cities)")
+        
+        # Pre-warm forecasts for all cities (staggered to avoid rate limits)
+        print("[Cache] Pre-warming forecast cache...")
+        for city in Config.CITIES:
+            try:
+                get_cached_forecast(city['id'], days=120)
+            except Exception:
+                pass
+            time.sleep(0.3)  # Small delay between API calls
+        print(f"[Cache] Forecasts ready ({len(Config.CITIES)} cities)")
+        
+        # Pre-warm historical data (staggered)
+        print("[Cache] Pre-warming historical cache...")
+        for city in Config.CITIES:
+            for year in [2024, 2025]:
+                try:
+                    get_cached_monthly_data(city['id'], year)
+                except Exception:
+                    pass
+                time.sleep(0.2)
+        print("[Cache] Historical data ready")
+        print("[Cache] All caches warmed successfully!")
+    except Exception as e:
+        print(f"[Cache] Warning: Pre-warming failed: {e}")
+
+
 if __name__ == '__main__':
+    # Start cache warming in background thread (non-blocking)
+    cache_thread = threading.Thread(target=warm_cache, daemon=True)
+    cache_thread.start()
+    
     app.run(
         host='0.0.0.0',
         port=Config.PORT,

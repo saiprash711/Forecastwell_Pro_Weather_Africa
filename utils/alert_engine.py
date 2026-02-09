@@ -2,6 +2,7 @@
 Alert Engine Module
 Handles threshold monitoring and demand acceleration/de-acceleration triggers
 Per ForecastWell Guide: Night temperature is MORE important than day temperature!
+Enhanced: DSB methodology, heat wave alerts, service demand predictions
 """
 from datetime import datetime
 from config import Config
@@ -59,6 +60,15 @@ class AlertEngine:
             primary_color = 'PURPLE'
             alert_level = 'kerala_special'
         
+        # DSB zone classification
+        from utils.data_processor import DataProcessor
+        dp = DataProcessor()
+        demand_index = dp.calculate_demand_index(day_temp, night_temp)
+        dsb_zone = dp.get_dsb_zone(demand_index)
+        
+        # Get city config for demand zone info
+        city_config = next((c for c in Config.CITIES if c['id'] == city_id), {})
+        
         alert = {
             'city': city_name,
             'city_id': city_id,
@@ -73,6 +83,10 @@ class AlertEngine:
             'ac_hours_estimated': ac_hours,
             'is_kerala_special': is_kerala_special,
             'priority_note': 'Night temp drives demand!' if ac_hours > 10 else None,
+            'demand_index': round(demand_index, 1),
+            'dsb_zone': dsb_zone,
+            'demand_zone': city_config.get('demand_zone', 'Unknown'),
+            'zone_icon': city_config.get('zone_icon', '📍'),
             'recommendation': self._get_recommendation(
                 night_color, day_color, city_name, ac_hours, is_kerala_special
             )
