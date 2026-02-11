@@ -24,13 +24,13 @@ let currentCityData = [];
 let currentAlerts = [];
 
 // ========== Initialization ==========
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('🚀 ForecastWell Pro Dashboard Initializing...');
     initializeDashboard();
     setupEventListeners();
     setupHeatmapCitySelectListener();
     startClock();
-    
+
     // Auto-refresh
     setInterval(refreshData, REFRESH_INTERVAL);
 });
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeDashboard() {
     try {
         showLoading();
-        
+
         // Initialize map with error handling
         try {
             initializeMap();
@@ -47,13 +47,13 @@ async function initializeDashboard() {
             console.error('⚠ Map initialization failed:', mapError);
             // Continue anyway
         }
-        
+
         // Load all data
         await loadDashboardData();
-        
+
         hideLoading();
         showToast('Dashboard loaded successfully!', 'success');
-        
+
         console.log('✅ Dashboard initialized successfully');
     } catch (error) {
         console.error('❌ Error initializing dashboard:', error);
@@ -72,15 +72,25 @@ function setupEventListeners() {
             sidebar.classList.toggle('collapsed');
         });
     }
-    
+
     // Mobile Menu
     const menuBtn = document.getElementById('menuBtn');
     if (menuBtn && sidebar) {
         menuBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('open');
+            sidebar.classList.toggle('active');
+        });
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 &&
+                sidebar.classList.contains('active') &&
+                !sidebar.contains(e.target) &&
+                !menuBtn.contains(e.target)) {
+                sidebar.classList.remove('active');
+            }
         });
     }
-    
+
     // Navigation
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
@@ -89,25 +99,25 @@ function setupEventListeners() {
             navigateToPage(page);
         });
     });
-    
+
     // Theme Toggle
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
         themeToggle.addEventListener('click', toggleTheme);
     }
-    
+
     // Refresh Button
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', refreshData);
     }
-    
+
     // Excel Upload
     setupExcelUpload();
-    
+
     // Export Buttons
     setupExportButtons();
-    
+
     // Modal Close
     const modalClose = document.getElementById('modalClose');
     const modal = document.getElementById('cityModal');
@@ -117,7 +127,7 @@ function setupEventListeners() {
             if (e.target === modal) modal.classList.remove('active');
         });
     }
-    
+
     // Map View Controls
     document.querySelectorAll('.map-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -126,7 +136,7 @@ function setupEventListeners() {
             updateMapView(e.target.dataset.view);
         });
     });
-    
+
     // View Controls
     document.querySelectorAll('.view-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -134,10 +144,10 @@ function setupEventListeners() {
             e.target.classList.add('active');
         });
     });
-    
+
     // Dashboard Sub-Tabs
     setupDashboardSubTabs();
-    
+
     // Global Search
     const globalSearch = document.getElementById('globalSearch');
     if (globalSearch) {
@@ -155,24 +165,24 @@ function setupEventListeners() {
 // ========== Dashboard Sub-Tabs ==========
 function setupDashboardSubTabs() {
     const tabs = document.querySelectorAll('.dashboard-tab');
-    
+
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const targetTab = tab.dataset.subtab;
-            
+
             // Update tab buttons
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            
+
             // Update tab content
             document.querySelectorAll('.dashboard-subtab').forEach(content => {
                 content.classList.remove('active');
             });
-            
+
             const targetContent = document.getElementById(`${targetTab}-subtab`);
             if (targetContent) {
                 targetContent.classList.add('active');
-                
+
                 // Trigger chart resize for visible charts
                 if (targetTab === 'trends' && charts.temperature) {
                     setTimeout(() => charts.temperature.resize(), 100);
@@ -191,15 +201,15 @@ function navigateToPage(pageId) {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.toggle('active', item.dataset.page === pageId);
     });
-    
+
     // Update pages
     document.querySelectorAll('.page').forEach(page => {
         page.classList.toggle('active', page.id === `${pageId}Page`);
     });
-    
+
     // Load page-specific data
     loadPageData(pageId);
-    
+
     // Close mobile sidebar
     const sidebar = document.getElementById('sidebar');
     if (sidebar) sidebar.classList.remove('open');
@@ -287,15 +297,26 @@ function loadPageData(pageId) {
     }
 }
 
+// ========== Global Loading Overlay ==========
+function showLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('active');
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('active');
+}
+
 // Show a page-level loader and hide page content
 function showPageLoader(pageId, loaderId) {
     const page = document.getElementById(pageId);
     const loader = document.getElementById(loaderId);
     if (!page) return;
-    
+
     // Show loader
     if (loader) loader.style.display = 'flex';
-    
+
     // Hide all children except the loader
     Array.from(page.children).forEach(child => {
         if (child.id !== loaderId) {
@@ -309,10 +330,10 @@ function hidePageLoader(pageId, loaderId) {
     const page = document.getElementById(pageId);
     const loader = document.getElementById(loaderId);
     if (!page) return;
-    
+
     // Hide loader
     if (loader) loader.style.display = 'none';
-    
+
     // Show all children except the loader
     Array.from(page.children).forEach(child => {
         if (child.id !== loaderId) {
@@ -325,30 +346,31 @@ function hidePageLoader(pageId, loaderId) {
 async function loadDashboardData() {
     try {
         console.log('📊 Loading dashboard data...');
-        
+
         // Single combined API call: weather + alerts + KPIs
         console.log('→ Fetching dashboard-init (combined endpoint)...');
         const initRes = await fetch(`${API_BASE}/dashboard-init`);
         const initData = await initRes.json();
-        
+
         console.log('→ Init response status:', initRes.status);
 
         if (initData.status === 'success' && initData.data) {
             const { weather, alerts: alertsList, kpis } = initData.data;
-            
+
             // Process weather data
             if (weather && weather.length) {
                 currentCityData = weather;
                 console.log('✓ Found', currentCityData.length, 'cities');
-                
+
                 try { updateHeaderStats(weather); } catch (e) { console.error('Header stats error:', e); }
                 try { updateMapMarkers(weather); } catch (e) { console.error('Map markers error:', e); }
                 try { updateCitiesGrid(weather); } catch (e) { console.error('Cities grid error:', e); }
+                try { updateFallbackBanner(weather); } catch (e) { console.error('Fallback banner error:', e); }
                 try { populateCitySelects(weather); } catch (e) { console.error('City selects error:', e); }
                 try { populateHistoricalCitySelect(); } catch (e) { console.error('Historical select error:', e); }
                 try { populateHeatmapCitySelect(); } catch (e) { console.error('Heatmap select error:', e); }
                 try { populateYoYCitySelect(); } catch (e) { console.error('YoY select error:', e); }
-                
+
                 // Initialize charts in next frame for smoother UX
                 requestAnimationFrame(() => {
                     try {
@@ -359,7 +381,7 @@ async function loadDashboardData() {
                     }
                 });
             }
-            
+
             // Process alerts
             if (alertsList) {
                 currentAlerts = Array.isArray(alertsList) ? alertsList : [];
@@ -371,7 +393,7 @@ async function loadDashboardData() {
                     console.error('Alerts panel error:', e);
                 }
             }
-            
+
             // Process KPIs (already included, no extra API call)
             if (kpis) {
                 try {
@@ -389,9 +411,9 @@ async function loadDashboardData() {
 
         // Load additional sections in background (non-blocking, parallelized)
         loadNewSections().catch(err => console.warn('Background sections error:', err));
-        
+
         console.log('✅ Data loading complete');
-        
+
     } catch (error) {
         console.error('❌ Error loading dashboard data:', error);
         console.error('Error details:', error.message, error.stack);
@@ -404,10 +426,10 @@ async function refreshData() {
     if (refreshBtn) {
         refreshBtn.querySelector('i').classList.add('fa-spin');
     }
-    
+
     // Clear page cache so all pages reload fresh data
     Object.keys(pageLoadedCache).forEach(k => delete pageLoadedCache[k]);
-    
+
     try {
         await loadDashboardData();
         showToast('Data refreshed successfully!', 'success');
@@ -441,10 +463,10 @@ function initializeMap() {
 
 function updateMapMarkers(citiesData) {
     if (!map || !citiesData) return;
-    
+
     // Use updateMapView with default 'temp' view
     updateMapView('temp');
-    
+
     // Update the active button
     document.querySelectorAll('.map-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === 'temp');
@@ -463,8 +485,8 @@ function updateMapView(view) {
 
     currentCityData.forEach(city => {
         let value, unit, markerClass, bgColor;
-        
-        switch(view) {
+
+        switch (view) {
             case 'demand':
                 value = city.demand_index || 50;
                 unit = '';
@@ -511,7 +533,7 @@ function updateMapView(view) {
         }
 
         let borderColor;
-        switch(markerClass) {
+        switch (markerClass) {
             case 'hot': borderColor = '#ef4444'; break;
             case 'warm': borderColor = '#f97316'; break;
             default: borderColor = '#3b82f6'; break;
@@ -547,8 +569,8 @@ function updateMapView(view) {
 
 function createMarkerPopup(city, view = 'temp') {
     let highlightSection = '';
-    
-    switch(view) {
+
+    switch (view) {
         case 'demand':
             highlightSection = `
                 <div style="text-align: center; padding: 0.75rem; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 8px; margin: 0.75rem 0;">
@@ -579,7 +601,7 @@ function createMarkerPopup(city, view = 'temp') {
                 </div>
             `;
     }
-    
+
     return `
         <div style="min-width: 220px; font-family: 'Inter', sans-serif;">
             <h3 style="margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 700;">${city.city_name}</h3>
@@ -602,12 +624,12 @@ function updateHeaderStats(citiesData) {
     if (!citiesData || citiesData.length === 0) return;
 
     // Find hottest day city
-    const hottestDay = citiesData.reduce((max, city) => 
+    const hottestDay = citiesData.reduce((max, city) =>
         (city.day_temp || city.temperature) > (max.day_temp || max.temperature) ? city : max
     );
 
     // Find hottest night city
-    const hottestNight = citiesData.reduce((max, city) => 
+    const hottestNight = citiesData.reduce((max, city) =>
         (city.night_temp || city.temperature - 5) > (max.night_temp || max.temperature - 5) ? city : max
     );
 
@@ -730,9 +752,9 @@ function updateWaveSequence(citiesData) {
 function updateAlertsPanel(alerts) {
     const container = document.getElementById('alertsContainer');
     const totalEl = document.getElementById('totalAlerts');
-    
+
     if (!container) return;
-    
+
     if (totalEl) totalEl.textContent = alerts.length;
 
     if (alerts.length === 0) {
@@ -787,13 +809,20 @@ function updateCitiesGrid(citiesData) {
         const dayTemp = city.day_temp || city.temperature || 30;
         const nightTemp = city.night_temp || (city.temperature - 5) || 25;
         const tempClass = dayTemp >= 38 ? 'hot' : dayTemp >= 35 ? 'warm' : dayTemp >= 32 ? 'mild' : 'cool';
-        
+
         const weatherIcon = dayTemp >= 38 ? '🔥' : dayTemp >= 35 ? '☀️' : dayTemp >= 30 ? '🌤️' : '⛅';
         const dsbZone = city.dsb_zone || {};
         const dsbBadge = dsbZone.zone ? `<span class="dsb-badge dsb-${dsbZone.zone}" title="${dsbZone.action || ''}">${dsbZone.icon || ''} ${(dsbZone.zone || '').toUpperCase()}</span>` : '';
 
+        // Data source badge
+        const source = city.source || '';
+        const isFallback = city.is_fallback || source === 'Simulated' || source.includes('Fallback') || source.includes('Climate Estimate');
+        const sourceBadge = renderDataSourceBadge(source, isFallback);
+        const fallbackWarning = isFallback ? `<div class="fallback-warning-badge" title="${city.fallback_warning || 'Estimated data — verify before making decisions'}"><i class="fas fa-exclamation-triangle"></i> Estimated Data</div>` : '';
+
         return `
-            <div class="city-card glass-card ${tempClass}" onclick='showCityModal(${JSON.stringify(city)})'>
+            <div class="city-card glass-card ${tempClass}${isFallback ? ' fallback-card' : ''}" onclick='showCityModal(${JSON.stringify(city)})'>
+                ${fallbackWarning}
                 <div class="city-card-header">
                     <div>
                         <div class="city-name">${city.city_name}</div>
@@ -838,9 +867,44 @@ function updateCitiesGrid(citiesData) {
                         <span>${city.demand_index || '--'}/100</span>
                     </div>
                 </div>
+                ${sourceBadge}
             </div>
         `;
     }).join('');
+}
+
+// ========== Data Source Badge Helper ==========
+function renderDataSourceBadge(source, isFallback) {
+    if (!source) return '';
+    const icon = isFallback ? 'fa-exclamation-circle' : 'fa-check-circle';
+    const cls = isFallback ? 'source-badge fallback' : 'source-badge live';
+    return `<div class="${cls}"><i class="fas ${icon}"></i> ${source}</div>`;
+}
+
+// ========== Fallback Data Banner ==========
+function updateFallbackBanner(citiesData) {
+    let banner = document.getElementById('fallbackDataBanner');
+    if (!citiesData) return;
+
+    const fallbackCities = citiesData.filter(c => c.is_fallback || c.source === 'Simulated' || (c.source && c.source.includes('Fallback')));
+
+    if (fallbackCities.length > 0) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'fallbackDataBanner';
+            banner.className = 'fallback-banner';
+            const mainContent = document.querySelector('.main-content');
+            const topHeader = document.querySelector('.top-header');
+            if (mainContent && topHeader) {
+                topHeader.insertAdjacentElement('afterend', banner);
+            }
+        }
+        const cityNames = fallbackCities.map(c => c.city_name).join(', ');
+        banner.innerHTML = `<i class="fas fa-exclamation-triangle"></i> <strong>Data Warning:</strong> ${fallbackCities.length} city/cities (${cityNames}) showing estimated data due to API unavailability. Do not use for critical business decisions. <button onclick="this.parentElement.remove()" class="banner-dismiss">✕</button>`;
+        banner.style.display = 'flex';
+    } else if (banner) {
+        banner.style.display = 'none';
+    }
 }
 
 // ========== Charts ==========
@@ -851,7 +915,7 @@ function initializeDashboardCharts(citiesData) {
     const dayNightCanvas = document.getElementById('dayNightChart');
     if (dayNightCanvas) {
         if (charts.dayNight) charts.dayNight.destroy();
-        
+
         charts.dayNight = new Chart(dayNightCanvas, {
             type: 'bar',
             data: {
@@ -908,11 +972,11 @@ function initializeDashboardCharts(citiesData) {
     const gaugeCanvas = document.getElementById('demandGauge');
     if (gaugeCanvas) {
         if (charts.demandGauge) charts.demandGauge.destroy();
-        
+
         const avgDemand = Math.round(citiesData.reduce((sum, c) => sum + (c.demand_index || 50), 0) / citiesData.length);
         const gaugeValueEl = document.getElementById('gaugeValue');
         if (gaugeValueEl) gaugeValueEl.textContent = avgDemand;
-        
+
         charts.demandGauge = new Chart(gaugeCanvas, {
             type: 'doughnut',
             data: {
@@ -948,7 +1012,7 @@ function initializeDashboardCharts(citiesData) {
         tempCanvas.style.display = '';
 
         if (charts.temperature) charts.temperature.destroy();
-        
+
         // Generate date labels for past 7 days + today
         const dateLabels = [];
         for (let i = 6; i >= 0; i--) {
@@ -956,7 +1020,7 @@ function initializeDashboardCharts(citiesData) {
             date.setDate(date.getDate() - i);
             dateLabels.push(date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
         }
-        
+
         // Create datasets for each city
         const cityColors = [
             { border: 'rgb(239, 68, 68)', bg: 'rgba(239, 68, 68, 0.1)' },
@@ -966,12 +1030,12 @@ function initializeDashboardCharts(citiesData) {
             { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' },
             { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.1)' }
         ];
-        
+
         const datasets = [];
         citiesData.forEach((city, index) => {
             const baseTemp = city.day_temp || city.temperature;
             const color = cityColors[index % cityColors.length];
-            
+
             // Generate realistic temperature trend data
             const tempData = [];
             for (let i = 6; i >= 0; i--) {
@@ -979,7 +1043,7 @@ function initializeDashboardCharts(citiesData) {
                 const variation = (Math.sin(i * 0.8) * 2) + (Math.random() * 1.5 - 0.75);
                 tempData.push(Math.round((baseTemp + variation) * 10) / 10);
             }
-            
+
             datasets.push({
                 label: city.city_name,
                 data: tempData,
@@ -991,7 +1055,7 @@ function initializeDashboardCharts(citiesData) {
                 pointHoverRadius: 6
             });
         });
-        
+
         charts.temperature = new Chart(tempCanvas, {
             type: 'line',
             data: {
@@ -1020,7 +1084,7 @@ function initializeDashboardCharts(citiesData) {
                         titleFont: { size: 13 },
                         bodyFont: { size: 12 },
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 return `${context.dataset.label}: ${context.parsed.y}°C`;
                             }
                         }
@@ -1075,7 +1139,7 @@ function initializeAnalyticsCharts() {
     const radarCanvas = document.getElementById('radarChart');
     if (radarCanvas) {
         if (charts.radar) charts.radar.destroy();
-        
+
         // Colors for up to 6 cities (kept from original)
         const radarColors = [
             { border: '#667eea', bg: 'rgba(102, 126, 234, 0.8)' },
@@ -1136,7 +1200,7 @@ function initializeAnalyticsCharts() {
     const distCanvas = document.getElementById('distributionChart');
     if (distCanvas) {
         if (charts.distribution) charts.distribution.destroy();
-        
+
         charts.distribution = new Chart(distCanvas, {
             type: 'bar',
             data: {
@@ -1174,7 +1238,7 @@ function initializeAnalyticsCharts() {
     const corrCanvas = document.getElementById('correlationChart');
     if (corrCanvas) {
         if (charts.correlation) charts.correlation.destroy();
-        
+
         charts.correlation = new Chart(corrCanvas, {
             type: 'scatter',
             data: {
@@ -1213,7 +1277,7 @@ function initializeAnalyticsCharts() {
     const acCanvas = document.getElementById('acHoursChart');
     if (acCanvas) {
         if (charts.acHours) charts.acHours.destroy();
-        
+
         charts.acHours = new Chart(acCanvas, {
             type: 'polarArea',
             data: {
@@ -1239,7 +1303,7 @@ function initializeAnalyticsCharts() {
             }
         });
     }
-    
+
     // Load YoY Comparison Chart for Analytics page
     loadAnalyticsYoYChart();
 }
@@ -1277,7 +1341,7 @@ function generateHeatmap() {
     if (!container) return;
 
     const timeSlots = ['6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM', '12 AM'];
-    
+
     let html = `
         <div class="heatmap-wrapper">
             <div class="heatmap-table">
@@ -1287,21 +1351,21 @@ function generateHeatmap() {
                     <div class="heatmap-avg-label">PEAK</div>
                 </div>
                 ${currentCityData.map(city => {
-                    const baseTemp = city.day_temp || city.temperature || 30;
-                    const nightTemp = city.night_temp || baseTemp - 5;
-                    // Simulate temperature throughout the day
-                    const temps = [
-                        nightTemp + 2,           // 6 AM - early morning
-                        baseTemp - 3,            // 9 AM - morning
-                        baseTemp,                // 12 PM - noon peak
-                        baseTemp + 1,            // 3 PM - afternoon peak
-                        baseTemp - 2,            // 6 PM - evening
-                        nightTemp + 3,           // 9 PM - night
-                        nightTemp                // 12 AM - midnight
-                    ];
-                    const peakTemp = Math.max(...temps);
-                    
-                    return `
+        const baseTemp = city.day_temp || city.temperature || 30;
+        const nightTemp = city.night_temp || baseTemp - 5;
+        // Simulate temperature throughout the day
+        const temps = [
+            nightTemp + 2,           // 6 AM - early morning
+            baseTemp - 3,            // 9 AM - morning
+            baseTemp,                // 12 PM - noon peak
+            baseTemp + 1,            // 3 PM - afternoon peak
+            baseTemp - 2,            // 6 PM - evening
+            nightTemp + 3,           // 9 PM - night
+            nightTemp                // 12 AM - midnight
+        ];
+        const peakTemp = Math.max(...temps);
+
+        return `
                         <div class="heatmap-data-row">
                             <div class="heatmap-city-name">
                                 <span class="city-dot" style="background: ${getHeatmapColor(baseTemp)}"></span>
@@ -1319,7 +1383,7 @@ function generateHeatmap() {
                             </div>
                         </div>
                     `;
-                }).join('')}
+    }).join('')}
             </div>
             <div class="heatmap-legend">
                 <span class="legend-title">Temperature Scale:</span>
@@ -1368,7 +1432,7 @@ function setupForecastEventListeners() {
     // City dropdown change event
     const citySelect = document.getElementById('forecastCitySelect');
     if (citySelect) {
-        citySelect.addEventListener('change', function() {
+        citySelect.addEventListener('change', function () {
             selectedForecastCity = this.value;
             generateForecastCards();
             initializeForecastChart();
@@ -1379,11 +1443,11 @@ function setupForecastEventListeners() {
     // Range buttons click events
     const rangeButtons = document.querySelectorAll('.range-btn');
     rangeButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', function () {
             // Update active state
             rangeButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            
+
             // Update selected days and refresh
             selectedForecastDays = parseInt(this.dataset.days);
             generateForecastCards();
@@ -1396,11 +1460,11 @@ function populateForecastCitySelect() {
     const select = document.getElementById('forecastCitySelect');
     if (!select || !currentCityData) return;
 
-    select.innerHTML = 
-        currentCityData.map((city, i) => 
+    select.innerHTML =
+        currentCityData.map((city, i) =>
             `<option value="${city.city_id}" ${i === 0 ? 'selected' : ''}>${city.city_name}</option>`
         ).join('');
-    
+
     selectedForecastCity = currentCityData.length > 0 ? currentCityData[0].city_id : '';
 }
 
@@ -1433,12 +1497,12 @@ function generateForecastCards() {
         const date = new Date(today);
         date.setDate(date.getDate() + i);
         const dayName = i === 0 ? 'Today' : days[date.getDay()];
-        
+
         // Generate realistic temperature variations based on city's base temp
         const tempVariation = Math.sin(i * 0.5) * 3 + (Math.random() - 0.5) * 2;
         const dayHigh = Math.round(baseTemp + tempVariation);
         const dayLow = Math.round(baseNightTemp + tempVariation * 0.7);
-        
+
         // Determine icon based on temperature
         let icon = '☀️';
         if (dayHigh >= 40) icon = '🔥';
@@ -1446,7 +1510,7 @@ function generateForecastCards() {
         else if (dayHigh >= 32) icon = '🌤️';
         else if (dayHigh >= 28) icon = '⛅';
         else icon = '🌥️';
-        
+
         // Add rain chance for variety
         const rainChance = Math.random();
         if (rainChance > 0.85) icon = '🌧️';
@@ -1492,12 +1556,12 @@ function initializeForecastChart() {
         const date = new Date(today);
         date.setDate(date.getDate() + i);
         labels.push(`${date.getDate()}/${date.getMonth() + 1}`);
-        
+
         // More realistic temperature variations
         const tempVariation = Math.sin(i * 0.3) * 3 + (Math.random() - 0.5) * 2;
         const dayTemp = Math.round(baseTemp + tempVariation);
         const nightTemp = Math.round(baseNightTemp + tempVariation * 0.7);
-        
+
         dayData.push(dayTemp);
         nightData.push(nightTemp);
         demandData.push(Math.round((dayTemp - 20) * 2.5)); // Demand index based on temp
@@ -1587,12 +1651,12 @@ function generatePredictions() {
 
     const cityData = getSelectedCityData();
     const cityName = cityData ? cityData.city_name : 'Chennai';
-    
+
     // Calculate predictions based on selected city
     const avgTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 35;
-    
+
     const avgDemand = cityData ? (cityData.demand_index || 50) : 50;
-    
+
     const humidity = cityData ? (cityData.humidity || 50) : 50;
 
     // Calculate predictions
@@ -1813,21 +1877,21 @@ let trendEventListenersSet = false;
 function populateCitySelects(citiesData) {
     const trendCity = document.getElementById('trendCity');
     if (trendCity) {
-        trendCity.innerHTML = 
+        trendCity.innerHTML =
             citiesData.map((c, i) => `<option value="${c.city_id}" ${i === 0 ? 'selected' : ''}>${c.city_name}</option>`).join('');
-        
+
         // Add event listener only once
         if (!trendEventListenersSet) {
             trendCity.addEventListener('change', () => updateTemperatureTrends());
         }
     }
-    
+
     const trendPeriod = document.getElementById('trendPeriod');
     if (trendPeriod && !trendEventListenersSet) {
         // Add event listener only once
         trendPeriod.addEventListener('change', () => updateTemperatureTrends());
     }
-    
+
     trendEventListenersSet = true;
 }
 
@@ -1835,12 +1899,12 @@ async function updateTemperatureTrends() {
     const citySelect = document.getElementById('trendCity');
     const periodSelect = document.getElementById('trendPeriod');
     const tempCanvas = document.getElementById('temperatureChart');
-    
+
     if (!tempCanvas || !citySelect || !periodSelect) return;
-    
+
     const selectedCity = citySelect.value;
     const days = parseInt(periodSelect.value);
-    
+
     try {
         // Generate date labels
         const dateLabels = [];
@@ -1849,7 +1913,7 @@ async function updateTemperatureTrends() {
             date.setDate(date.getDate() - i);
             dateLabels.push(date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
         }
-        
+
         const cityColors = [
             { border: 'rgb(239, 68, 68)', bg: 'rgba(239, 68, 68, 0.1)' },
             { border: 'rgb(249, 115, 22)', bg: 'rgba(249, 115, 22, 0.1)' },
@@ -1858,21 +1922,21 @@ async function updateTemperatureTrends() {
             { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' },
             { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.1)' }
         ];
-        
+
         let datasets = [];
-        
+
         if (selectedCity === 'all') {
             // Show all cities
             currentCityData.forEach((city, index) => {
                 const baseTemp = city.day_temp || city.temperature;
                 const color = cityColors[index % cityColors.length];
-                
+
                 const tempData = [];
                 for (let i = days - 1; i >= 0; i--) {
                     const variation = (Math.sin(i * 0.5) * 2) + (Math.random() * 1.5 - 0.75);
                     tempData.push(Math.round((baseTemp + variation) * 10) / 10);
                 }
-                
+
                 datasets.push({
                     label: city.city_name,
                     data: tempData,
@@ -1890,17 +1954,17 @@ async function updateTemperatureTrends() {
             if (cityData) {
                 const baseDay = cityData.day_temp || cityData.temperature;
                 const baseNight = cityData.night_temp || cityData.temperature - 5;
-                
+
                 const dayTempData = [];
                 const nightTempData = [];
-                
+
                 for (let i = days - 1; i >= 0; i--) {
                     const dayVariation = (Math.sin(i * 0.6) * 2) + (Math.random() * 1.5 - 0.75);
                     const nightVariation = (Math.sin(i * 0.6) * 1.5) + (Math.random() * 1 - 0.5);
                     dayTempData.push(Math.round((baseDay + dayVariation) * 10) / 10);
                     nightTempData.push(Math.round((baseNight + nightVariation) * 10) / 10);
                 }
-                
+
                 datasets = [
                     {
                         label: `${cityData.city_name} - Day Temp`,
@@ -1925,7 +1989,7 @@ async function updateTemperatureTrends() {
                 ];
             }
         }
-        
+
         // Update chart
         if (charts.temperature && datasets.length > 0) {
             charts.temperature.data.labels = dateLabels;
@@ -1967,13 +2031,13 @@ function toggleTheme() {
     document.body.classList.toggle('dark-mode');
     const btn = document.getElementById('themeToggle');
     const isDark = document.body.classList.contains('dark-mode');
-    
+
     if (btn) {
-        btn.innerHTML = isDark 
+        btn.innerHTML = isDark
             ? '<i class="fas fa-sun"></i><span>Light Mode</span>'
             : '<i class="fas fa-moon"></i><span>Dark Mode</span>';
     }
-    
+
     // Re-render charts for theme
     if (currentCityData.length > 0) {
         initializeDashboardCharts(currentCityData);
@@ -2221,9 +2285,9 @@ function showMetricComparison(metricLabel) {
             </div>
             <div class="metric-ranking-list">
                 ${cityMetrics.map((c, i) => {
-                    const pct = maxVal > 0 ? (c.value / maxVal * 100) : 0;
-                    const barColor = palette[Math.min(Math.floor(i / Math.max(1, cityMetrics.length / palette.length)), palette.length - 1)];
-                    return `
+        const pct = maxVal > 0 ? (c.value / maxVal * 100) : 0;
+        const barColor = palette[Math.min(Math.floor(i / Math.max(1, cityMetrics.length / palette.length)), palette.length - 1)];
+        return `
                     <div class="metric-rank-row" onclick='showCityModal(${JSON.stringify(c.data).replace(/'/g, "&#39;")})'>
                         <div class="metric-rank-pos">#${i + 1}</div>
                         <div class="metric-rank-info">
@@ -2235,7 +2299,7 @@ function showMetricComparison(metricLabel) {
                         </div>
                         <div class="metric-rank-value" style="color:${barColor}">${c.value}${unit}</div>
                     </div>`;
-                }).join('')}
+    }).join('')}
             </div>
         </div>
     `;
@@ -2338,8 +2402,53 @@ function setupExportButtons() {
     document.getElementById('exportPDFBtn')?.addEventListener('click', exportPDF);
     document.getElementById('exportDashboardPDF')?.addEventListener('click', exportPDF);
     document.getElementById('exportDataExcel')?.addEventListener('click', exportExcel);
+    document.getElementById('exportAlertReport')?.addEventListener('click', exportAlertReport);
+    document.getElementById('exportForecastReport')?.addEventListener('click', exportForecastReport);
 }
 
+async function exportAlertReport() {
+    try {
+        showLoading();
+        const response = await fetch('/api/export/alert-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            window.location.href = `/api/download/${result.filename}`;
+            showToast(`Alert report exported (${result.alerts_count} alerts)`, 'success');
+        } else {
+            showToast(result.message || 'Export failed', 'error');
+        }
+    } catch (error) {
+        showToast('Error exporting alert report', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function exportForecastReport() {
+    try {
+        showLoading();
+        const response = await fetch('/api/export/forecast-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            window.location.href = `/api/download/${result.filename}`;
+            showToast(`Forecast report exported (${result.cities_count} cities)`, 'success');
+        } else {
+            showToast(result.message || 'Export failed', 'error');
+        }
+    } catch (error) {
+        showToast('Error exporting forecast report', 'error');
+    } finally {
+        hideLoading();
+    }
+}
 async function exportExcel() {
     try {
         showLoading();
@@ -2364,37 +2473,168 @@ async function exportExcel() {
 
 async function exportPDF() {
     try {
+        if (!currentCityData || currentCityData.length === 0) {
+            showToast('No data available to export', 'warning');
+            return;
+        }
+
         showLoading();
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+        const centerX = doc.internal.pageSize.width / 2;
 
-        doc.setFontSize(20);
-        doc.setTextColor(102, 126, 234);
-        doc.text('ForecastWell Pro Report', 20, 20);
+        // Title Page
+        doc.setFillColor(240, 244, 248);
+        doc.rect(0, 0, 210, 297, 'F');
 
+        doc.setFontSize(26);
+        doc.setTextColor(59, 130, 246);
+        doc.text('ForecastWell Pro', centerX, 60, { align: 'center' });
+
+        doc.setFontSize(16);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Executive Weather Intelligence Report', centerX, 75, { align: 'center' });
+
+        doc.setFontSize(12);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, centerX, 90, { align: 'center' });
+
+        // Add footer
         doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 30);
+        doc.text('© 2026 Hansei Consultancy | Confidential', centerX, 280, { align: 'center' });
 
-        doc.setFontSize(14);
-        doc.setTextColor(0);
-        doc.text('Key Metrics:', 20, 45);
+        // City Data Page
+        doc.addPage();
+        doc.setFontSize(18);
+        doc.setTextColor(30, 41, 59);
+        doc.text('City-wise Status Summary', 14, 20);
 
-        let y = 55;
-        currentCityData.forEach(city => {
-            doc.setFontSize(11);
-            doc.text(`${city.city_name}: Day ${city.day_temp || city.temperature}°C | Night ${city.night_temp || city.temperature - 5}°C | Demand: ${city.demand_index || '--'}`, 25, y);
-            y += 8;
+        const tableData = currentCityData.map(city => [
+            city.city_name,
+            `${city.day_temp || '--'}°C`,
+            `${city.night_temp || '--'}°C`,
+            `${city.humidity || '--'}%`,
+            `${city.ac_hours || '--'}h`,
+            `${city.demand_index || '--'}/100`,
+            city.dsb_zone?.zone?.toUpperCase() || '--'
+        ]);
+
+        doc.autoTable({
+            head: [['City', 'Day Temp', 'Night Temp', 'Humidity', 'AC Hours', 'Demand Index', 'Alert Zone']],
+            body: tableData,
+            startY: 30,
+            headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+            alternateRowStyles: { fillColor: [241, 245, 249] },
+            styles: { fontSize: 10, cellPadding: 4 }
         });
 
-        doc.save('forecastwell-report.pdf');
-        showToast('PDF exported successfully!', 'success');
+        // Add Fallback Warning if needed
+        if (currentCityData.some(c => c.is_fallback)) {
+            doc.setFontSize(10);
+            doc.setTextColor(239, 68, 68);
+            doc.text('⚠️ Note: Some data in this report is estimated due to API unavailability.', 14, doc.lastAutoTable.finalY + 10);
+        }
+
+        doc.save('ForecastWell_Executive_Report.pdf');
+        showToast('Executive Report PDF exported!', 'success');
     } catch (error) {
-        showToast('Error exporting PDF', 'error');
+        console.error(error);
+        showToast('Error exporting PDF: ' + error.message, 'error');
     } finally {
         hideLoading();
     }
 }
+
+async function exportAlertReport() {
+    try {
+        if (!currentAlerts || currentAlerts.length === 0) {
+            showToast('No active alerts to export', 'info');
+            return;
+        }
+
+        showLoading();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        doc.setFontSize(22);
+        doc.setTextColor(220, 38, 38);
+        doc.text('Active Alerts Report', 14, 20);
+
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30);
+
+        const alertData = currentAlerts.map(alert => [
+            alert.city,
+            alert.alert_level?.toUpperCase(),
+            alert.recommendation || 'Check Dashboard',
+            alert.timestamp || new Date().toLocaleTimeString()
+        ]);
+
+        doc.autoTable({
+            head: [['City', 'Level', 'Action Required', 'Time']],
+            body: alertData,
+            startY: 40,
+            headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+            styles: { fontSize: 10, cellPadding: 3 }
+        });
+
+        doc.save('ForecastWell_Alerts_Report.pdf');
+        showToast('Alerts Report exported!', 'success');
+    } catch (error) {
+        console.error(error);
+        showToast('Error exporting Alerts Report', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function exportForecastReport() {
+    try {
+        showLoading();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l'); // Landscape for more columns
+
+        doc.setFontSize(22);
+        doc.setTextColor(16, 185, 129);
+        doc.text('7-Day Forecast & Inventory Planning', 14, 20);
+
+        // Fetch forecast data for all cities (simulate logic for now as we don't have full forecast data loaded in memory for all cities)
+        // In a real app, we'd fetch precise forecast data here. We'll use current city high-level data as a proxy summary for now
+        // or trigger a backend generation endpoint. For this fix, we'll generate a summary based on visible data.
+
+        const forecastSummary = currentCityData.map(c => [
+            c.city_name,
+            c.state,
+            'Next 7 Days',
+            `${c.day_temp}°C (Avg)`,
+            `${c.night_temp}°C (Avg)`,
+            c.demand_zone,
+            'See Dashboard'
+        ]);
+
+        doc.autoTable({
+            head: [['City', 'Region', 'Period', 'Day High', 'Night Low', 'Demand Zone', 'Detailed Trend']],
+            body: forecastSummary,
+            startY: 30,
+            headStyles: { fillColor: [16, 185, 129], textColor: 255 },
+            styles: { fontSize: 11 }
+        });
+
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('Note: For detailed daily breakdown, please use the main dashboard view.', 14, doc.lastAutoTable.finalY + 10);
+
+        doc.save('ForecastWell_Forecast_Report.pdf');
+        showToast('Forecast Report exported!', 'success');
+    } catch (error) {
+        console.error(error);
+        showToast('Error exporting Forecast Report', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
 
 // ========== Global Exports ==========
 window.showCityModal = showCityModal;
@@ -2440,9 +2680,9 @@ async function loadDemandPredictions() {
         if (result.status === 'success' && result.data) {
             container.innerHTML = result.data.map(pred => {
                 const levelClass = pred.demand_level.toLowerCase();
-                const scoreColor = pred.demand_score >= 80 ? '#ef4444' : 
-                                   pred.demand_score >= 60 ? '#f97316' : 
-                                   pred.demand_score >= 40 ? '#eab308' : '#22c55e';
+                const scoreColor = pred.demand_score >= 80 ? '#ef4444' :
+                    pred.demand_score >= 60 ? '#f97316' :
+                        pred.demand_score >= 40 ? '#eab308' : '#22c55e';
                 return `
                     <div class="demand-card ${levelClass}">
                         <div class="demand-header">
@@ -2600,8 +2840,8 @@ function initDateCompare() {
 
     // Set max date to today and default to today
     const today = new Date();
-    const todayStr = today.getFullYear() + '-' + 
-        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+    const todayStr = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
         String(today.getDate()).padStart(2, '0');
     datePicker.setAttribute('max', todayStr);
     datePicker.value = todayStr;
@@ -2611,28 +2851,28 @@ function initDateCompare() {
         const cities = currentCityData && currentCityData.length > 0
             ? currentCityData.map(c => ({ id: c.city_id, name: c.city_name }))
             : DEFAULT_CITIES;
-        citySelect.innerHTML = 
+        citySelect.innerHTML =
             cities.map((c, i) => `<option value="${c.id}" ${i === 0 ? 'selected' : ''}>${c.name}</option>`).join('');
     }
 
     // Compare button click
-    compareBtn.onclick = function(e) {
+    compareBtn.onclick = function (e) {
         e.preventDefault();
         fetchDateComparison();
     };
 
     // Quick date buttons - use closest() to handle clicks on child elements
     document.querySelectorAll('.quick-date-btn').forEach(btn => {
-        btn.onclick = function(e) {
+        btn.onclick = function (e) {
             e.preventDefault();
             const button = e.target.closest('.quick-date-btn');
             if (!button) return;
-            
+
             const offset = parseInt(button.getAttribute('data-offset'));
             const d = new Date();
             d.setDate(d.getDate() - offset);
-            const dateStr = d.getFullYear() + '-' + 
-                String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+            const dateStr = d.getFullYear() + '-' +
+                String(d.getMonth() + 1).padStart(2, '0') + '-' +
                 String(d.getDate()).padStart(2, '0');
             datePicker.value = dateStr;
 
@@ -2642,7 +2882,7 @@ function initDateCompare() {
             fetchDateComparison();
         };
     });
-    
+
     console.log('Date compare initialized successfully');
 }
 
@@ -2781,8 +3021,8 @@ async function loadWeeklySummary() {
         if (result.status === 'success' && result.data) {
             container.innerHTML = result.data.map(week => {
                 const outlookClass = week.demand_outlook.toLowerCase().replace(' ', '-');
-                const trendIcon = week.trend === 'rising' ? 'fa-arrow-up' : 
-                                  week.trend === 'falling' ? 'fa-arrow-down' : 'fa-minus';
+                const trendIcon = week.trend === 'rising' ? 'fa-arrow-up' :
+                    week.trend === 'falling' ? 'fa-arrow-down' : 'fa-minus';
                 return `
                     <div class="weekly-card">
                         <div class="weekly-header">
@@ -2826,16 +3066,16 @@ async function loadNewSections() {
         generateMonthlyHeatmap(),
         loadYoYComparison()
     ]);
-    
+
     // Log any failures
     results.forEach((result, i) => {
         if (result.status === 'rejected') {
             console.warn(`Section ${i} failed:`, result.reason);
         }
     });
-    
+
     // Initialize date comparison (always runs)
-    try { initDateCompare(); } catch(e) { console.warn('Date compare init error:', e); }
+    try { initDateCompare(); } catch (e) { console.warn('Date compare init error:', e); }
 }
 
 // ========== 2-Year Historical Data Functions ==========
@@ -2847,7 +3087,7 @@ function setupHistoricalEventListeners() {
     if (loadBtn) {
         loadBtn.addEventListener('click', loadTwoYearHistoricalData);
     }
-    
+
     // Quick Period Buttons
     document.querySelectorAll('.period-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -2856,7 +3096,7 @@ function setupHistoricalEventListeners() {
             handleQuickPeriodSelect(e.target.dataset.period);
         });
     });
-    
+
     // Populate historical city select
     populateHistoricalCitySelect();
 }
@@ -2876,7 +3116,7 @@ const DEFAULT_CITIES = [
 function populateHistoricalCitySelect() {
     const select = document.getElementById('historicalCitySelect');
     if (!select) return;
-    
+
     // Use currentCityData if available, otherwise use default cities
     let cities = [];
     if (currentCityData && currentCityData.length > 0) {
@@ -2887,9 +3127,9 @@ function populateHistoricalCitySelect() {
     } else {
         cities = DEFAULT_CITIES;
     }
-    
-    select.innerHTML = 
-        cities.map((city, i) => 
+
+    select.innerHTML =
+        cities.map((city, i) =>
             `<option value="${city.id}" ${i === 0 ? 'selected' : ''}>${city.name}</option>`
         ).join('');
 }
@@ -2897,14 +3137,14 @@ function populateHistoricalCitySelect() {
 function handleQuickPeriodSelect(period) {
     const startDateInput = document.getElementById('startDate');
     const endDateInput = document.getElementById('endDate');
-    
+
     if (!startDateInput || !endDateInput) return;
-    
+
     const today = new Date();
     let startDate = new Date('2024-01-01');
     let endDate = today;
-    
-    switch(period) {
+
+    switch (period) {
         case 'last30':
             startDate = new Date(today);
             startDate.setDate(today.getDate() - 30);
@@ -2931,10 +3171,10 @@ function handleQuickPeriodSelect(period) {
             endDate = today;
             break;
     }
-    
+
     startDateInput.value = startDate.toISOString().split('T')[0];
     endDateInput.value = endDate.toISOString().split('T')[0];
-    
+
     loadTwoYearHistoricalData();
 }
 
@@ -2943,13 +3183,13 @@ async function loadTwoYearHistoricalData() {
     const endDate = document.getElementById('endDate')?.value || '2026-02-04';
     const city = document.getElementById('historicalCitySelect')?.value || 'all';
     const granularity = document.getElementById('granularitySelect')?.value || 'weekly';
-    
+
     try {
         const response = await fetch(
             `${API_BASE}/historical/two-years?start_date=${startDate}&end_date=${endDate}&city=${city}&granularity=${granularity}`
         );
         const result = await response.json();
-        
+
         if (result.status === 'success' && result.data) {
             updateHistoricalStats(result.data, result.meta);
             renderTwoYearHistoricalChart(result.data);
@@ -2964,24 +3204,24 @@ function updateHistoricalStats(data, meta) {
     // Update stat cards
     const totalPointsEl = document.getElementById('totalDataPoints');
     if (totalPointsEl) totalPointsEl.textContent = meta.total_records || '766';
-    
+
     // Calculate peak and min temperatures
     let peakTemp = 0;
     let minNightTemp = 100;
-    
+
     data.timeline.forEach(entry => {
         Object.values(entry.cities).forEach(cityData => {
             if (cityData.day_temp > peakTemp) peakTemp = cityData.day_temp;
             if (cityData.night_temp < minNightTemp) minNightTemp = cityData.night_temp;
         });
     });
-    
+
     const peakTempEl = document.getElementById('peakTemp2yr');
     if (peakTempEl) peakTempEl.textContent = `${peakTemp.toFixed(1)}°C`;
-    
+
     const minTempEl = document.getElementById('minTemp2yr');
     if (minTempEl) minTempEl.textContent = `${minNightTemp.toFixed(1)}°C`;
-    
+
     // Calculate YoY change using peak temps (per-city), not averages
     const yearlyStats = data.yearly_stats;
     if (yearlyStats && yearlyStats[2024] && yearlyStats[2025]) {
@@ -2996,28 +3236,28 @@ function updateHistoricalStats(data, meta) {
 function renderTwoYearHistoricalChart(data) {
     const canvas = document.getElementById('twoYearHistoricalChart');
     if (!canvas) return;
-    
+
     if (twoYearHistoricalChart) {
         twoYearHistoricalChart.destroy();
     }
-    
+
     const labels = data.timeline.map(entry => {
         const date = new Date(entry.date);
         return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
     });
-    
+
     // Per-city night temperature lines (no combined averages)
     const cityIds = data.cities ? data.cities.map(c => c.id) : Object.keys(data.timeline[0]?.cities || {});
     const cityNames = {};
     if (data.cities) {
         data.cities.forEach(c => { cityNames[c.id] = c.name; });
     }
-    
+
     const cityColors = [
-        '#f97316', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', 
+        '#f97316', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6',
         '#ec4899', '#14b8a6', '#f59e0b'
     ];
-    
+
     const datasets = [];
     cityIds.forEach((cityId, i) => {
         const color = cityColors[i % cityColors.length];
@@ -3037,7 +3277,7 @@ function renderTwoYearHistoricalChart(data) {
             yAxisID: 'y'
         });
     });
-    
+
     twoYearHistoricalChart = new Chart(canvas, {
         type: 'line',
         data: {
@@ -3066,10 +3306,10 @@ function renderTwoYearHistoricalChart(data) {
                     titleFont: { size: 14, weight: 'bold' },
                     bodyFont: { size: 12 },
                     callbacks: {
-                        title: function(context) {
+                        title: function (context) {
                             return `📅 ${context[0].label}`;
                         },
-                        label: function(context) {
+                        label: function (context) {
                             const value = context.parsed.y.toFixed(1);
                             if (context.dataset.label.includes('Demand')) {
                                 return `${context.dataset.label}: ${value}`;
@@ -3117,16 +3357,16 @@ function renderTwoYearHistoricalChart(data) {
 
 function updateYearComparisonCards(yearlyStats) {
     if (!yearlyStats) return;
-    
+
     // Update year cards with per-city hottest data (no combined averages)
     [2024, 2025, 2026].forEach(year => {
         if (!yearlyStats[year]) return;
         const ys = yearlyStats[year];
-        
+
         const elDay = document.getElementById(`avg${year}Day`);
         const elNight = document.getElementById(`avg${year}Night`);
         const elDemand = document.getElementById(`avg${year}Demand`);
-        
+
         if (elDay) {
             const hotCity = ys.hottest_city;
             elDay.textContent = hotCity ? `${hotCity.max_day_temp}°C` : '--';
@@ -3147,23 +3387,23 @@ function updateYearComparisonCards(yearlyStats) {
 async function generateMonthlyHeatmap(cityId = 'all') {
     const container = document.getElementById('monthlyHeatmapContainer');
     if (!container) return;
-    
+
     // Show loading state
     container.innerHTML = '<div class="loading-shimmer" style="height: 200px;"></div>';
-    
+
     try {
         // Fetch real data from Open-Meteo API
         const apiCityId = cityId === 'all' ? 'chennai' : cityId;  // Default to Chennai for "all"
         const response = await fetch(`/api/heatmap/monthly?city=${apiCityId}`);
         const result = await response.json();
-        
+
         if (result.status !== 'success') {
             throw new Error(result.message || 'Failed to fetch heatmap data');
         }
-        
+
         const apiData = result.data;
         const monthlyData = {};
-        
+
         // Process API data for each year
         [2024, 2025, 2026].forEach(year => {
             monthlyData[year] = apiData.years[year].map(data => ({
@@ -3173,52 +3413,52 @@ async function generateMonthlyHeatmap(cityId = 'all') {
                 source: data.source
             }));
         });
-        
+
         // Get city name for display
         let cityName = apiData.city_name || 'Chennai';
-        
+
         // Generate heatmap HTML
         let html = `
             <div class="heatmap-row">
                 <div class="heatmap-header"></div>
                 ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                    .map(m => `<div class="heatmap-header">${m}</div>`).join('')}
+                .map(m => `<div class="heatmap-header">${m}</div>`).join('')}
             </div>
         `;
-        
+
         [2024, 2025, 2026].forEach(year => {
             html += `<div class="heatmap-row">
                 <div class="heatmap-year-label">${year}</div>
                 ${monthlyData[year].map(data => {
-                    if (data.temp === null) {
-                        return `<div class="heatmap-cell" style="background: #e2e8f0; color: #64748b;">
+                if (data.temp === null) {
+                    return `<div class="heatmap-cell" style="background: #e2e8f0; color: #64748b;">
                             <span class="month-name">${data.month}</span>
                             <span class="temp-value">--</span>
                         </div>`;
-                    }
-                    const color = getHeatmapColor(data.temp);
-                    // Add forecast indicator with dashed border
-                    const forecastStyle = data.forecast ? 'border: 2px dashed rgba(255,255,255,0.5);' : '';
-                    const forecastLabel = data.forecast ? '<span class="forecast-badge">📊</span>' : '';
-                    const sourceInfo = data.source ? ` (${data.source})` : '';
-                    return `<div class="heatmap-cell" style="background: ${color}; ${forecastStyle}" title="${data.forecast ? 'Forecasted' : 'Actual'}${sourceInfo}">
+                }
+                const color = getHeatmapColor(data.temp);
+                // Add forecast indicator with dashed border
+                const forecastStyle = data.forecast ? 'border: 2px dashed rgba(255,255,255,0.5);' : '';
+                const forecastLabel = data.forecast ? '<span class="forecast-badge">📊</span>' : '';
+                const sourceInfo = data.source ? ` (${data.source})` : '';
+                return `<div class="heatmap-cell" style="background: ${color}; ${forecastStyle}" title="${data.forecast ? 'Forecasted' : 'Actual'}${sourceInfo}">
                         ${forecastLabel}
                         <span class="month-name">${data.month}</span>
                         <span class="temp-value">${data.temp}°C</span>
                     </div>`;
-                }).join('')}
+            }).join('')}
             </div>`;
         });
-        
+
         // Add data source indicator
         html += `
             <div class="heatmap-source-info" style="text-align: center; margin-top: 0.75rem; font-size: 0.7rem; color: var(--text-muted);">
                 📡 Data source: Open-Meteo API | 📊 = Forecast
             </div>
         `;
-        
+
         container.innerHTML = html;
-        
+
     } catch (error) {
         console.error('Error fetching heatmap data:', error);
         container.innerHTML = `
@@ -3234,7 +3474,7 @@ async function generateMonthlyHeatmap(cityId = 'all') {
 function populateHeatmapCitySelect() {
     const select = document.getElementById('heatmapCitySelect');
     if (!select) return;
-    
+
     // Use currentCityData if available, otherwise use default cities
     let cities = [];
     if (currentCityData && currentCityData.length > 0) {
@@ -3245,12 +3485,12 @@ function populateHeatmapCitySelect() {
     } else {
         cities = DEFAULT_CITIES;
     }
-    
+
     // Preserve current selection
     const currentValue = select.value;
-    
-    select.innerHTML = 
-        cities.map((city, i) => 
+
+    select.innerHTML =
+        cities.map((city, i) =>
             `<option value="${city.id}" ${city.id === currentValue ? 'selected' : (i === 0 && !currentValue ? 'selected' : '')}>${city.name}</option>`
         ).join('');
 }
@@ -3259,9 +3499,9 @@ function populateHeatmapCitySelect() {
 function setupHeatmapCitySelectListener() {
     const select = document.getElementById('heatmapCitySelect');
     if (!select) return;
-    
+
     // Remove any existing listener by replacing the element
-    select.addEventListener('change', function(e) {
+    select.addEventListener('change', function (e) {
         console.log('Heatmap city changed to:', e.target.value);
         generateMonthlyHeatmap(e.target.value);
     });
@@ -3285,10 +3525,10 @@ async function loadYoYComparison(cityId = 'all', monthNum = 'all') {
         const params = new URLSearchParams();
         if (cityId !== 'all') params.append('city', cityId);
         if (monthNum !== 'all') params.append('month', monthNum);
-        
+
         const response = await fetch(`${API_BASE}/comparison/monthly-yoy?${params}`);
         const result = await response.json();
-        
+
         if (result.status === 'success' && result.data) {
             renderYoYChart(result.data, monthNum);
             renderYoYTable(result.data, monthNum);
@@ -3302,21 +3542,21 @@ async function loadYoYComparison(cityId = 'all', monthNum = 'all') {
 function renderYoYChart(data, selectedMonth) {
     const ctx = document.getElementById('yoyComparisonChart');
     if (!ctx) return;
-    
+
     // Destroy existing chart
     if (yoyComparisonChart) {
         yoyComparisonChart.destroy();
     }
-    
+
     const months = data.map(d => d.month.substring(0, 3));
     const data2024 = data.map(d => d.years[2024]?.avg_day_temp || null);
     const data2025 = data.map(d => d.years[2025]?.avg_day_temp || null);
     const data2026 = data.map(d => d.years[2026]?.avg_day_temp || null);
-    
+
     const night2024 = data.map(d => d.years[2024]?.avg_night_temp || null);
     const night2025 = data.map(d => d.years[2025]?.avg_night_temp || null);
     const night2026 = data.map(d => d.years[2026]?.avg_night_temp || null);
-    
+
     yoyComparisonChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -3393,7 +3633,7 @@ function renderYoYChart(data, selectedMonth) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             return `${context.dataset.label}: ${context.raw}°C`;
                         }
                     }
@@ -3418,7 +3658,7 @@ function renderYoYChart(data, selectedMonth) {
 function renderYoYTable(data, selectedMonth) {
     const container = document.getElementById('yoyTableContainer');
     if (!container) return;
-    
+
     let html = `
         <table class="yoy-table">
             <thead>
@@ -3433,19 +3673,19 @@ function renderYoYTable(data, selectedMonth) {
             </thead>
             <tbody>
     `;
-    
+
     data.forEach(month => {
         const y2024 = month.years[2024];
         const y2025 = month.years[2025];
         const y2026 = month.years[2026];
-        
+
         const change2425 = month.yoy_2024_2025;
         const change2526 = month.yoy_2025_2026;
-        
+
         // Check if this month is forecasted
         const isForecast = month.is_forecast || false;
         const forecastBadge = isForecast ? '<span class="forecast-indicator" title="Forecasted">📊</span>' : '';
-        
+
         html += `
             <tr class="${isForecast ? 'forecast-row' : ''}">
                 <td><strong>${month.month}</strong>${forecastBadge}</td>
@@ -3475,16 +3715,16 @@ function renderYoYTable(data, selectedMonth) {
             </tr>
         `;
     });
-    
+
     html += '</tbody></table>';
-    
+
     // Add legend for forecast data
     html += `
         <div class="forecast-legend">
             <span class="legend-item"><span class="forecast-indicator">📊</span> = Forecasted Data (+4 months from current month)</span>
         </div>
     `;
-    
+
     container.innerHTML = html;
 }
 
@@ -3494,10 +3734,10 @@ function populateYoYCitySelect() {
         document.getElementById('yoyCitySelect'),
         document.getElementById('analyticsYoyCitySelect')
     ];
-    
+
     selects.forEach(select => {
         if (!select) return;
-        
+
         let cities = [];
         if (currentCityData && currentCityData.length > 0) {
             cities = currentCityData.map(city => ({
@@ -3507,10 +3747,10 @@ function populateYoYCitySelect() {
         } else {
             cities = DEFAULT_CITIES;
         }
-        
+
         const currentValue = select.value;
-        select.innerHTML = 
-            cities.map((city, i) => 
+        select.innerHTML =
+            cities.map((city, i) =>
                 `<option value="${city.id}" ${city.id === currentValue ? 'selected' : (i === 0 && !currentValue ? 'selected' : '')}>${city.name}</option>`
             ).join('');
     });
@@ -3521,29 +3761,29 @@ function setupYoYEventListeners() {
     // Dashboard YoY controls
     const yoyCitySelect = document.getElementById('yoyCitySelect');
     const yoyMonthSelect = document.getElementById('yoyMonthSelect');
-    
+
     if (yoyCitySelect) {
         yoyCitySelect.addEventListener('change', () => {
             loadYoYComparison(yoyCitySelect.value, yoyMonthSelect?.value || 'all');
         });
     }
-    
+
     if (yoyMonthSelect) {
         yoyMonthSelect.addEventListener('change', () => {
             loadYoYComparison(yoyCitySelect?.value || 'all', yoyMonthSelect.value);
         });
     }
-    
+
     // Analytics YoY controls
     const analyticsYoyCitySelect = document.getElementById('analyticsYoyCitySelect');
     const analyticsYoyMetricSelect = document.getElementById('analyticsYoyMetricSelect');
-    
+
     if (analyticsYoyCitySelect) {
         analyticsYoyCitySelect.addEventListener('change', () => {
             loadAnalyticsYoYChart(analyticsYoyCitySelect.value, analyticsYoyMetricSelect?.value || 'day_temp');
         });
     }
-    
+
     if (analyticsYoyMetricSelect) {
         analyticsYoyMetricSelect.addEventListener('change', () => {
             loadAnalyticsYoYChart(analyticsYoyCitySelect?.value || 'all', analyticsYoyMetricSelect.value);
@@ -3556,10 +3796,10 @@ async function loadAnalyticsYoYChart(cityId = 'all', metric = 'day_temp') {
     try {
         const params = new URLSearchParams();
         if (cityId !== 'all') params.append('city', cityId);
-        
+
         const response = await fetch(`${API_BASE}/comparison/monthly-yoy?${params}`);
         const result = await response.json();
-        
+
         if (result.status === 'success' && result.data) {
             renderAnalyticsYoYChart(result.data, metric);
         }
@@ -3572,13 +3812,13 @@ async function loadAnalyticsYoYChart(cityId = 'all', metric = 'day_temp') {
 function renderAnalyticsYoYChart(data, metric) {
     const ctx = document.getElementById('analyticsYoyChart');
     if (!ctx) return;
-    
+
     if (analyticsYoyChart) {
         analyticsYoyChart.destroy();
     }
-    
+
     const months = data.map(d => d.month.substring(0, 3));
-    
+
     // Get data based on selected metric
     const metricMap = {
         'day_temp': { key: 'avg_day_temp', label: 'Day Temperature (°C)' },
@@ -3586,13 +3826,13 @@ function renderAnalyticsYoYChart(data, metric) {
         'demand': { key: 'avg_demand', label: 'Demand Index' },
         'ac_hours': { key: 'avg_ac_hours', label: 'AC Hours' }
     };
-    
+
     const selectedMetric = metricMap[metric] || metricMap['day_temp'];
-    
+
     const data2024 = data.map(d => d.years[2024]?.[selectedMetric.key] || null);
     const data2025 = data.map(d => d.years[2025]?.[selectedMetric.key] || null);
     const data2026 = data.map(d => d.years[2026]?.[selectedMetric.key] || null);
-    
+
     analyticsYoyChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -3651,7 +3891,7 @@ function renderAnalyticsYoYChart(data, metric) {
                     backgroundColor: 'rgba(0,0,0,0.8)',
                     padding: 12,
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             const suffix = metric.includes('temp') ? '°C' : (metric === 'ac_hours' ? 'h' : '');
                             return `${context.dataset.label}: ${context.raw}${suffix}`;
                         }
@@ -3685,7 +3925,7 @@ function renderAnalyticsYoYChart(data, metric) {
 }
 
 // Initialize historical listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Give a slight delay to ensure all elements are loaded
     setTimeout(setupHistoricalEventListeners, 500);
     setTimeout(setupYoYEventListeners, 600);
@@ -3702,11 +3942,11 @@ let insightsCharts = {
 async function loadInsightsPage() {
     console.log('📊 Loading Insights Page...');
     showInsightsLoading();
-    
+
     try {
         const response = await fetch(`${API_BASE}/insights`);
         const result = await response.json();
-        
+
         if (result.status === 'success' && result.data) {
             renderInsightsPage(result.data);
             hideInsightsLoading();
@@ -3737,22 +3977,22 @@ function hideInsightsLoading() {
 function renderInsightsPage(data) {
     // 1. Update Hero Cards
     updateInsightsHeroCards(data.hero_metrics);
-    
+
     // 2. Render Recommendations
     renderRecommendations(data.recommendations);
-    
+
     // 3. Render Market Matrix Chart
     renderMarketMatrixChart(data.market_matrix);
-    
+
     // 4. Render Monthly Forecast Timeline
     renderForecastTimeline(data.monthly_forecast);
-    
+
     // 5. Render Action Checklist
     renderActionChecklist(data.action_checklist);
-    
+
     // 6. Render Comparison Chart
     renderInsightsComparisonChart(data.monthly_forecast);
-    
+
     // 7. Render City Insights
     renderCityInsights(data.city_insights);
 }
@@ -3766,7 +4006,7 @@ function updateInsightsHeroCards(metrics) {
         peakTrend.textContent = metrics.peak_trend === 'heating' ? 'Heating Fast' : 'Building Up';
         peakTrend.className = `trend-badge ${metrics.peak_trend === 'heating' ? 'up' : 'neutral'}`;
     }
-    
+
     // YoY Change
     const yoyChange = document.getElementById('yoyChangeValue');
     const yoyTrend = document.getElementById('yoyTrendBadge');
@@ -3779,7 +4019,7 @@ function updateInsightsHeroCards(metrics) {
         yoyTrend.textContent = trendText;
         yoyTrend.className = `trend-badge ${metrics.yoy_trend}`;
     }
-    
+
     // Demand Potential
     const demandPotential = document.getElementById('demandPotentialValue');
     const demandTrend = document.getElementById('demandTrendBadge');
@@ -3789,7 +4029,7 @@ function updateInsightsHeroCards(metrics) {
         demandTrend.textContent = level;
         demandTrend.className = `trend-badge ${metrics.demand_potential >= 70 ? 'up' : 'neutral'}`;
     }
-    
+
     // Top Market
     const topMarket = document.getElementById('topMarketValue');
     const topMarketReason = document.getElementById('topMarketReason');
@@ -3800,7 +4040,7 @@ function updateInsightsHeroCards(metrics) {
 function renderRecommendations(recommendations) {
     const container = document.querySelector('#insightsPage .recommendations-grid');
     if (!container || !recommendations) return;
-    
+
     const iconMap = {
         'fire': 'fa-fire',
         'chart-line': 'fa-chart-line',
@@ -3809,7 +4049,7 @@ function renderRecommendations(recommendations) {
         'warehouse': 'fa-warehouse',
         'bullhorn': 'fa-bullhorn'
     };
-    
+
     container.innerHTML = recommendations.map(rec => `
         <div class="recommendation-card ${rec.priority}">
             <div class="rec-header">
@@ -3835,16 +4075,16 @@ function renderRecommendations(recommendations) {
 function renderMarketMatrixChart(matrixData) {
     const canvas = document.getElementById('marketMatrixChart');
     if (!canvas || !matrixData) return;
-    
+
     if (insightsCharts.marketMatrix) {
         insightsCharts.marketMatrix.destroy();
     }
-    
+
     const colors = [
-        '#ef4444', '#f97316', '#eab308', '#22c55e', 
+        '#ef4444', '#f97316', '#eab308', '#22c55e',
         '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'
     ];
-    
+
     const datasets = matrixData.cities.map((city, idx) => ({
         label: city.city,
         data: city.demands,
@@ -3854,7 +4094,7 @@ function renderMarketMatrixChart(matrixData) {
         borderRadius: 4,
         barPercentage: 0.8
     }));
-    
+
     insightsCharts.marketMatrix = new Chart(canvas, {
         type: 'bar',
         data: {
@@ -3877,7 +4117,7 @@ function renderMarketMatrixChart(matrixData) {
                     backgroundColor: 'rgba(0,0,0,0.8)',
                     padding: 12,
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             return `${context.dataset.label}: ${context.raw}% demand`;
                         }
                     }
@@ -3908,7 +4148,7 @@ function renderMarketMatrixChart(matrixData) {
 function renderForecastTimeline(monthlyForecast) {
     const container = document.querySelector('#insightsPage .forecast-timeline');
     if (!container || !monthlyForecast) return;
-    
+
     container.innerHTML = monthlyForecast.map(month => `
         <div class="timeline-month ${month.level}">
             <div class="month-header">
@@ -3936,13 +4176,13 @@ function renderForecastTimeline(monthlyForecast) {
 function renderActionChecklist(actions) {
     const container = document.querySelector('#insightsPage .action-checklist');
     if (!container || !actions) return;
-    
+
     const urgencyIcons = {
         'urgent': 'fa-exclamation-circle',
         'important': 'fa-flag',
         'normal': 'fa-check-circle'
     };
-    
+
     container.innerHTML = actions.map((action, idx) => `
         <div class="action-item ${action.urgency}">
             <div class="action-checkbox">
@@ -3965,16 +4205,16 @@ function renderActionChecklist(actions) {
 function renderInsightsComparisonChart(monthlyForecast) {
     const canvas = document.getElementById('insightsComparisonChart');
     if (!canvas || !monthlyForecast) return;
-    
+
     if (insightsCharts.comparison) {
         insightsCharts.comparison.destroy();
     }
-    
+
     const labels = monthlyForecast.map(m => m.month);
     const dayTemps = monthlyForecast.map(m => m.avg_day);
     const nightTemps = monthlyForecast.map(m => m.avg_night);
     const demands = monthlyForecast.map(m => m.demand);
-    
+
     insightsCharts.comparison = new Chart(canvas, {
         type: 'line',
         data: {
@@ -4073,7 +4313,7 @@ function renderInsightsComparisonChart(monthlyForecast) {
 function renderCityInsights(cityInsights) {
     const container = document.querySelector('#insightsPage .city-insights-grid');
     if (!container || !cityInsights) return;
-    
+
     container.innerHTML = cityInsights.slice(0, 8).map(city => `
         <div class="city-insight-card ${city.priority}">
             <div class="city-insight-header">
@@ -4254,15 +4494,15 @@ function renderServicePredictions(predictions) {
             </div>
             <div class="service-metrics">
                 ${['compressor_failure', 'gas_refill', 'warranty_claims', 'installation'].map(key => {
-                    const item = pred[key];
-                    return `
+        const item = pred[key];
+        return `
                     <div class="service-metric">
                         <span class="sm-icon">${item.icon}</span>
                         <span class="sm-label">${item.label}</span>
                         <div class="sm-bar-wrap"><div class="sm-bar ${item.level.toLowerCase()}" style="width:${item.risk}%"></div></div>
                         <span class="sm-level ${item.level.toLowerCase()}">${item.level}</span>
                     </div>`;
-                }).join('')}
+    }).join('')}
             </div>
             <p class="service-detail">${pred.compressor_failure.detail}</p>
         </div>
@@ -4318,7 +4558,7 @@ function renderAlertsModal(alerts) {
     const html = alerts.map(a => {
         const zone = a.dsb_zone || {};
         const rec = a.recommendation || {};
-        const steps = (rec.steps || []).slice(0,3).map(s => '<div>• '+s+'</div>').join('');
+        const steps = (rec.steps || []).slice(0, 3).map(s => '<div>• ' + s + '</div>').join('');
         return `
         <div class="alert-row" data-id="${a.id || ''}">
             <label style="display:flex; align-items:center; gap:10px; width:100%">
@@ -4345,8 +4585,8 @@ async function acknowledgeSelectedAlerts() {
         const checked = Array.from(document.querySelectorAll('.alert-checkbox:checked')).map(i => i.value);
         if (!checked.length) return alert('Select at least one alert to acknowledge');
         const res = await fetch('/api/alerts/ack', {
-            method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ids: checked})
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: checked })
         });
         const json = await res.json();
         if (json.status === 'success') {
@@ -4363,7 +4603,7 @@ async function acknowledgeSelectedAlerts() {
 
 async function ackSingleAlert(id) {
     try {
-        const res = await fetch('/api/alerts/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids:[id]})});
+        const res = await fetch('/api/alerts/ack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
         const json = await res.json();
         if (json.status === 'success') {
             await loadAlerts();

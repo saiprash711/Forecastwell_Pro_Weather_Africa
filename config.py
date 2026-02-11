@@ -5,13 +5,40 @@ load_dotenv()
 
 class Config:
     """Application configuration"""
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or os.urandom(32).hex()
     FLASK_APP = os.environ.get('FLASK_APP') or 'app.py'
     FLASK_ENV = os.environ.get('FLASK_ENV') or 'development'
     IMD_API_KEY = os.environ.get('IMD_API_KEY') or ''
     # OpenWeatherMap API (FREE - Get key from https://openweathermap.org/api)
     OPENWEATHER_API_KEY = os.environ.get('OPENWEATHER_API_KEY') or ''
+    
+    # Supabase Configuration
+    SUPABASE_URL = os.environ.get('SUPABASE_URL') or ''
+    SUPABASE_KEY = os.environ.get('SUPABASE_KEY') or ''
+    
     PORT = int(os.environ.get('PORT', 5000))
+
+    
+    # ---- Notification Configuration ----
+    # Email (SMTP)
+    EMAIL_ENABLED = os.environ.get('EMAIL_ENABLED', 'false').lower() == 'true'
+    EMAIL_SMTP_SERVER = os.environ.get('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
+    EMAIL_SMTP_PORT = int(os.environ.get('EMAIL_SMTP_PORT', 587))
+    EMAIL_SENDER = os.environ.get('EMAIL_SENDER', '')
+    EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')
+    EMAIL_RECIPIENTS = [r.strip() for r in os.environ.get('EMAIL_RECIPIENTS', '').split(',') if r.strip()]
+    
+    # SMS via Twilio
+    SMS_ENABLED = os.environ.get('SMS_ENABLED', 'false').lower() == 'true'
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+    TWILIO_FROM_NUMBER = os.environ.get('TWILIO_FROM_NUMBER', '')
+    SMS_RECIPIENTS = [r.strip() for r in os.environ.get('SMS_RECIPIENTS', '').split(',') if r.strip()]
+    
+    # WhatsApp via Twilio
+    WHATSAPP_ENABLED = os.environ.get('WHATSAPP_ENABLED', 'false').lower() == 'true'
+    WHATSAPP_FROM_NUMBER = os.environ.get('WHATSAPP_FROM_NUMBER', '')
+    WHATSAPP_RECIPIENTS = [r.strip() for r in os.environ.get('WHATSAPP_RECIPIENTS', '').split(',') if r.strip()]
     
     # Temperature thresholds for alerts (in Celsius) - Per Guide Specifications
     # Day Temperature Color Coding

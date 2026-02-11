@@ -84,21 +84,9 @@ class WeatherService:
             if weather_data:
                 return weather_data
 
-        # Fallback to simulated data if all APIs unavailable
-        base_temp = random.uniform(28, 42)
-        return {
-            'city_id': city_id,
-            'city_name': city['name'],
-            'state': city['state'],
-            'temperature': round(base_temp, 1),
-            'day_temp': round(base_temp + random.uniform(1, 3), 1),
-            'night_temp': round(base_temp - random.uniform(3, 5), 1),
-            'humidity': round(random.uniform(45, 85), 1),
-            'feels_like': round(base_temp + random.uniform(1, 3), 1),
-            'wind_speed': round(random.uniform(5, 25), 1),
-            'timestamp': datetime.now().isoformat(),
-            'source': 'Simulated'
-        }
+        # CRITICAL: All APIs failed - return None to force error handling
+        print(f"⚠️ CRITICAL: All weather APIs failed for {city['name']}")
+        return None
     
     def get_forecast(self, city_id, days=7):
         """
@@ -128,8 +116,9 @@ class WeatherService:
             if forecast:
                 return forecast
         
-        # Fallback to simulated data only if API fails
-        return self._generate_fallback_forecast(city_id, days)
+        # CRITICAL: API failed - return empty list to force error handling
+        print(f"⚠️ CRITICAL: Forecast API failed for {city['name']}")
+        return []
     
     def _fetch_openmeteo_seasonal_forecast(self, city, days):
         """
@@ -344,8 +333,9 @@ class WeatherService:
         if historical:
             return historical
         
-        # Fallback to simulated data only if API fails
-        return self._generate_fallback_historical(city_id, days)
+        # CRITICAL: API failed - return empty list to force error handling
+        print(f"⚠️ CRITICAL: Historical API failed for {city['name']}")
+        return []
     
     def _fetch_openmeteo_historical(self, city, days):
         """

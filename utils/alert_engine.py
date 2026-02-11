@@ -27,6 +27,41 @@ class AlertEngine:
         self.kerala_night_threshold = Config.KERALA_NIGHT_THRESHOLD
         self.kerala_cities = Config.KERALA_CITIES
         
+        # Track sent alerts to avoid spam
+        self.sent_alerts = set()
+    
+    def should_send_notification(self, alert):
+        """Determine if notification should be sent for this alert"""
+        # Only send for critical/high alerts
+        if alert['alert_level'] not in ['red', 'orange', 'kerala_special']:
+            return False
+        
+        # Create unique key for this alert
+        alert_key = f"{alert['city_id']}_{alert['alert_level']}_{alert['night_temp']}"
+        
+        # Check if already sent
+        if alert_key in self.sent_alerts:
+            return False
+        
+        # Mark as sent
+        self.sent_alerts.add(alert_key)
+        return True
+    
+    def send_alert_notification(self, alert):
+        """Send notification for critical alert"""
+        try:
+            from utils.notification_service import NotificationService
+            
+            if not self.should_send_notification(alert):
+                return
+            
+            # Send notification
+            results = NotificationService.notify_alert(alert)
+            print(f"📧 Alert notification sent for {alert['city']}: {results}")
+            
+        except Exception as e:
+            print(f"⚠️ Failed to send alert notification: {e}")
+        
     def analyze_temperature(self, day_temp, night_temp, city_name, city_id):
         """
         Analyze day AND night temperature and generate alerts
@@ -89,8 +124,12 @@ class AlertEngine:
             'zone_icon': city_config.get('zone_icon', '📍'),
             'recommendation': self._get_recommendation(
                 night_color, day_color, city_name, ac_hours, is_kerala_special
-            )
+            ),
+            'reason': f"Night temp {night_temp}°C ({night_color['trigger']})"
         }
+        
+        # Send notification if critical
+        self.send_alert_notification(alert)
         
         return alert
     

@@ -1,43 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ForecastWell Pro - Premium Weather Intelligence Dashboard</title>
-    
+
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@500;700&display=swap"
+        rel="stylesheet">
+
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
+
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
     <!-- Animate.css -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
-    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+
     <!-- SheetJS for Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-    
+
     <!-- jsPDF for PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
+
 <body class="light-mode">
     <!-- Animated Background -->
     <div class="animated-bg">
@@ -57,7 +62,7 @@
                 <i class="fas fa-chevron-left"></i>
             </button>
         </div>
-        
+
         <nav class="sidebar-nav">
             <a href="#" class="nav-item active" data-page="dashboard">
                 <i class="fas fa-th-large"></i>
@@ -95,8 +100,12 @@
                 <span>Reports</span>
             </a>
         </nav>
-        
+
         <div class="sidebar-footer">
+            <a href="{{ url_for('logout') }}" class="logout-btn" title="Logout">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </a>
             <button class="theme-toggle" id="themeToggle">
                 <i class="fas fa-moon"></i>
                 <span>Dark Mode</span>
@@ -121,7 +130,7 @@
                     <div class="search-results-dropdown" id="searchResultsDropdown"></div>
                 </div>
             </div>
-            
+
             <div class="header-center">
                 <div class="data-range-indicator">
                     <i class="fas fa-calendar-alt"></i>
@@ -133,7 +142,7 @@
                 </div>
                 <div class="current-time" id="currentTime"></div>
             </div>
-            
+
             <div class="header-right">
                 <button class="header-btn" id="refreshBtn" title="Refresh Data">
                     <i class="fas fa-sync-alt"></i>
@@ -158,7 +167,7 @@
 
         <!-- Page Content Container -->
         <div class="page-container">
-            
+
             <!-- ========== DASHBOARD PAGE ========== -->
             <div class="page active" id="dashboardPage">
                 <!-- Dashboard Sub-Tabs Navigation -->
@@ -199,7 +208,7 @@
                                 <i class="fas fa-arrow-up"></i>
                             </div>
                         </div>
-                        
+
                         <div class="stat-card glass-card highlight">
                             <div class="stat-icon pulse-glow">
                                 <i class="fas fa-moon"></i>
@@ -210,7 +219,7 @@
                             </div>
                             <div class="stat-badge">PRIORITY</div>
                         </div>
-                        
+
                         <div class="stat-card glass-card">
                             <div class="stat-icon">
                                 <i class="fas fa-leaf"></i>
@@ -220,7 +229,7 @@
                                 <span class="stat-value stat-value-loading" id="seasonStatus">Loading...</span>
                             </div>
                         </div>
-                        
+
                         <div class="stat-card glass-card">
                             <div class="stat-icon">
                                 <i class="fas fa-calendar-alt"></i>
@@ -292,7 +301,8 @@
                             </div>
                         </div>
                         <div class="chart-container large">
-                            <div class="skeleton-chart" id="temperatureChartSkeleton"><i class="fas fa-chart-line"></i> Loading trends...</div>
+                            <div class="skeleton-chart" id="temperatureChartSkeleton"><i class="fas fa-chart-line"></i>
+                                Loading trends...</div>
                             <canvas id="temperatureChart" style="display:none"></canvas>
                         </div>
                     </section>
@@ -302,7 +312,8 @@
                         <div class="section-header standalone">
                             <h2><i class="fas fa-city"></i> Cities Overview</h2>
                             <div class="view-controls">
-                                <button class="view-btn active" data-view="grid"><i class="fas fa-th-large"></i></button>
+                                <button class="view-btn active" data-view="grid"><i
+                                        class="fas fa-th-large"></i></button>
                                 <button class="view-btn" data-view="list"><i class="fas fa-list"></i></button>
                             </div>
                         </div>
@@ -418,275 +429,284 @@
                 <!-- ===== HISTORICAL DATA SUB-TAB ===== -->
                 <div class="dashboard-subtab" id="historical-subtab">
 
-                <!-- Date Comparison Section - Compare any date across 3 years -->
-                <section class="date-compare-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-calendar-check"></i> Date Temperature Comparison</h2>
-                        <span class="section-subtitle">Compare any date's weather with the same date last year &amp; year before</span>
-                    </div>
+                    <!-- Date Comparison Section - Compare any date across 3 years -->
+                    <section class="date-compare-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-calendar-check"></i> Date Temperature Comparison</h2>
+                            <span class="section-subtitle">Compare any date's weather with the same date last year &amp;
+                                year before</span>
+                        </div>
 
-                    <!-- Date Picker Controls -->
-                    <div class="date-compare-controls">
-                        <div class="date-compare-input-group">
-                            <div class="date-compare-field">
-                                <label for="compareDatePicker"><i class="fas fa-calendar-day"></i> Pick a Date</label>
-                                <input type="date" id="compareDatePicker" max="" value="">
-                            </div>
-                            <div class="date-compare-field">
-                                <label for="compareCitySelect"><i class="fas fa-city"></i> City</label>
-                                <select id="compareCitySelect">
-                                    <option value="chennai">Chennai</option>
-                                </select>
-                            </div>
-                            <button type="button" class="date-compare-btn" id="dateCompareBtn">
-                                <i class="fas fa-balance-scale"></i> Compare
-                            </button>
-                        </div>
-                        <!-- Quick Date Picks -->
-                        <div class="date-compare-quick-picks">
-                            <button type="button" class="quick-date-btn" data-offset="0">Today</button>
-                            <button type="button" class="quick-date-btn" data-offset="7">7 Days Ago</button>
-                            <button type="button" class="quick-date-btn" data-offset="30">30 Days Ago</button>
-                            <button type="button" class="quick-date-btn" data-offset="90">90 Days Ago</button>
-                        </div>
-                    </div>
-
-                    <!-- Results Container -->
-                    <div class="date-compare-results" id="dateCompareResults">
-                        <div class="date-compare-placeholder">
-                            <i class="fas fa-search"></i>
-                            <p>Select a date and click <strong>Compare</strong> to see year-over-year temperature changes</p>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 2-Year Historical Analysis Section -->
-                <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-calendar-alt"></i> 2-Year Historical Analysis</h2>
-                        <span class="section-subtitle">Comprehensive data from January 2024 to February 2026</span>
-                    </div>
-                    
-                    <!-- Date Range Picker -->
-                    <div class="date-range-picker">
-                        <div class="date-picker-group">
-                            <label for="startDate">From</label>
-                            <input type="date" id="startDate" min="2024-01-01" max="2026-02-04" value="2024-01-01">
-                        </div>
-                        <div class="date-picker-group">
-                            <label for="endDate">To</label>
-                            <input type="date" id="endDate" min="2024-01-01" max="2026-02-04" value="2026-02-04">
-                        </div>
-                        <div class="date-picker-group">
-                            <label for="historicalCitySelect">City</label>
-                            <select id="historicalCitySelect">
-                                <option value="chennai">Chennai</option>
-                            </select>
-                        </div>
-                        <div class="date-picker-group">
-                            <label for="granularitySelect">Granularity</label>
-                            <select id="granularitySelect">
-                                <option value="daily">Daily</option>
-                                <option value="weekly" selected>Weekly</option>
-                                <option value="monthly">Monthly</option>
-                            </select>
-                        </div>
-                        <button class="load-historical-btn" id="loadHistoricalBtn">
-                            <i class="fas fa-chart-line"></i> Load Data
-                        </button>
-                    </div>
-                    
-                    <!-- Quick Period Buttons -->
-                    <div class="quick-period-buttons">
-                        <button class="period-btn" data-period="last30">Last 30 Days</button>
-                        <button class="period-btn" data-period="last90">Last 90 Days</button>
-                        <button class="period-btn" data-period="last6m">Last 6 Months</button>
-                        <button class="period-btn" data-period="2024">Year 2024</button>
-                        <button class="period-btn" data-period="2025">Year 2025</button>
-                        <button class="period-btn active" data-period="all">All Data (2 Years)</button>
-                    </div>
-                    
-                    <!-- Historical Stats Cards -->
-                    <div class="historical-stats-grid" id="historicalStatsGrid">
-                        <div class="historical-stat-card glass-card">
-                            <div class="stat-icon-lg"><i class="fas fa-database"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-number" id="totalDataPoints">766</span>
-                                <span class="stat-desc">Data Points</span>
-                            </div>
-                        </div>
-                        <div class="historical-stat-card glass-card">
-                            <div class="stat-icon-lg hot"><i class="fas fa-fire"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-number" id="peakTemp2yr">42.3°C</span>
-                                <span class="stat-desc">Peak Temperature</span>
-                            </div>
-                        </div>
-                        <div class="historical-stat-card glass-card">
-                            <div class="stat-icon-lg cool"><i class="fas fa-snowflake"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-number" id="minTemp2yr">18.5°C</span>
-                                <span class="stat-desc">Lowest Night Temp</span>
-                            </div>
-                        </div>
-                        <div class="historical-stat-card glass-card">
-                            <div class="stat-icon-lg trend"><i class="fas fa-chart-line"></i></div>
-                            <div class="stat-info">
-                                <span class="stat-number" id="yoyChange">+1.2°C</span>
-                                <span class="stat-desc">YoY Change</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Main Historical Chart -->
-                    <div class="chart-container extra-large">
-                        <canvas id="twoYearHistoricalChart"></canvas>
-                    </div>
-                    
-                    <!-- Year Comparison Cards -->
-                    <div class="year-comparison-grid" id="yearComparisonGrid">
-                        <div class="year-card glass-card year-2024">
-                            <div class="year-header">
-                                <h3>📅 2024</h3>
-                                <span class="year-badge complete">Complete</span>
-                            </div>
-                            <div class="year-stats">
-                                <div class="year-stat">
-                                    <span class="label">Peak Day Temp</span>
-                                    <span class="value" id="avg2024Day">34.2°C</span>
+                        <!-- Date Picker Controls -->
+                        <div class="date-compare-controls">
+                            <div class="date-compare-input-group">
+                                <div class="date-compare-field">
+                                    <label for="compareDatePicker"><i class="fas fa-calendar-day"></i> Pick a
+                                        Date</label>
+                                    <input type="date" id="compareDatePicker" max="" value="">
                                 </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Night Temp</span>
-                                    <span class="value" id="avg2024Night">23.8°C</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Season</span>
-                                    <span class="value">Apr-Jun</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Demand</span>
-                                    <span class="value" id="avg2024Demand">62</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="year-card glass-card year-2025">
-                            <div class="year-header">
-                                <h3>📅 2025</h3>
-                                <span class="year-badge complete">Complete</span>
-                            </div>
-                            <div class="year-stats">
-                                <div class="year-stat">
-                                    <span class="label">Peak Day Temp</span>
-                                    <span class="value" id="avg2025Day">34.8°C</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Night Temp</span>
-                                    <span class="value" id="avg2025Night">24.3°C</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Season</span>
-                                    <span class="value">Apr-Jun</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Demand</span>
-                                    <span class="value" id="avg2025Demand">67</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="year-card glass-card year-2026">
-                            <div class="year-header">
-                                <h3>📅 2026</h3>
-                                <span class="year-badge current">Current</span>
-                            </div>
-                            <div class="year-stats">
-                                <div class="year-stat">
-                                    <span class="label">Peak Day Temp</span>
-                                    <span class="value" id="avg2026Day">31.5°C</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Night Temp</span>
-                                    <span class="value" id="avg2026Night">21.2°C</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Season</span>
-                                    <span class="value">Expected Apr-Jun</span>
-                                </div>
-                                <div class="year-stat">
-                                    <span class="label">Peak Demand</span>
-                                    <span class="value" id="avg2026Demand">58</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Monthly Heatmap Section -->
-                <section class="monthly-heatmap-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-th"></i> Monthly Temperature Heatmap</h2>
-                        <div class="section-header-controls">
-                            <span class="section-subtitle">Visual representation of temperature patterns (Jan 2024 - Feb 2026)</span>
-                            <div class="heatmap-city-selector">
-                                <label for="heatmapCitySelect"><i class="fas fa-city"></i> City:</label>
-                                <select id="heatmapCitySelect">
-                                    <option value="chennai">Chennai</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="heatmap-container-large" id="monthlyHeatmapContainer">
-                        <!-- Generated dynamically -->
-                    </div>
-                    <div class="heatmap-legend">
-                        <span class="legend-item"><span class="legend-color" style="background: #3b82f6"></span> &lt;25°C</span>
-                        <span class="legend-item"><span class="legend-color" style="background: #22c55e"></span> 25-30°C</span>
-                        <span class="legend-item"><span class="legend-color" style="background: #eab308"></span> 30-35°C</span>
-                        <span class="legend-item"><span class="legend-color" style="background: #f97316"></span> 35-40°C</span>
-                        <span class="legend-item"><span class="legend-color" style="background: #ef4444"></span> &gt;40°C</span>
-                    </div>
-                </section>
-
-                <!-- Year-over-Year Monthly Comparison Section -->
-                <section class="yoy-comparison-section glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-balance-scale"></i> Year-over-Year Monthly Comparison</h2>
-                        <div class="section-header-controls">
-                            <span class="section-subtitle">Compare same month across 2024 vs 2025 vs 2026</span>
-                            <div class="yoy-controls">
-                                <div class="yoy-city-selector">
-                                    <label for="yoyCitySelect"><i class="fas fa-city"></i> City:</label>
-                                    <select id="yoyCitySelect">
+                                <div class="date-compare-field">
+                                    <label for="compareCitySelect"><i class="fas fa-city"></i> City</label>
+                                    <select id="compareCitySelect">
                                         <option value="chennai">Chennai</option>
                                     </select>
                                 </div>
-                                <div class="yoy-month-selector">
-                                    <label for="yoyMonthSelect"><i class="fas fa-calendar"></i> Month:</label>
-                                    <select id="yoyMonthSelect">
-                                        <option value="all">All Months</option>
-                                        <option value="1">January</option>
-                                        <option value="2">February</option>
-                                        <option value="3">March</option>
-                                        <option value="4">April</option>
-                                        <option value="5">May</option>
-                                        <option value="6">June</option>
-                                        <option value="7">July</option>
-                                        <option value="8">August</option>
-                                        <option value="9">September</option>
-                                        <option value="10">October</option>
-                                        <option value="11">November</option>
-                                        <option value="12">December</option>
+                                <button type="button" class="date-compare-btn" id="dateCompareBtn">
+                                    <i class="fas fa-balance-scale"></i> Compare
+                                </button>
+                            </div>
+                            <!-- Quick Date Picks -->
+                            <div class="date-compare-quick-picks">
+                                <button type="button" class="quick-date-btn" data-offset="0">Today</button>
+                                <button type="button" class="quick-date-btn" data-offset="7">7 Days Ago</button>
+                                <button type="button" class="quick-date-btn" data-offset="30">30 Days Ago</button>
+                                <button type="button" class="quick-date-btn" data-offset="90">90 Days Ago</button>
+                            </div>
+                        </div>
+
+                        <!-- Results Container -->
+                        <div class="date-compare-results" id="dateCompareResults">
+                            <div class="date-compare-placeholder">
+                                <i class="fas fa-search"></i>
+                                <p>Select a date and click <strong>Compare</strong> to see year-over-year temperature
+                                    changes</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 2-Year Historical Analysis Section -->
+                    <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-calendar-alt"></i> 2-Year Historical Analysis</h2>
+                            <span class="section-subtitle">Comprehensive data from January 2024 to February 2026</span>
+                        </div>
+
+                        <!-- Date Range Picker -->
+                        <div class="date-range-picker">
+                            <div class="date-picker-group">
+                                <label for="startDate">From</label>
+                                <input type="date" id="startDate" min="2024-01-01" max="2026-02-04" value="2024-01-01">
+                            </div>
+                            <div class="date-picker-group">
+                                <label for="endDate">To</label>
+                                <input type="date" id="endDate" min="2024-01-01" max="2026-02-04" value="2026-02-04">
+                            </div>
+                            <div class="date-picker-group">
+                                <label for="historicalCitySelect">City</label>
+                                <select id="historicalCitySelect">
+                                    <option value="chennai">Chennai</option>
+                                </select>
+                            </div>
+                            <div class="date-picker-group">
+                                <label for="granularitySelect">Granularity</label>
+                                <select id="granularitySelect">
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly" selected>Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                            </div>
+                            <button class="load-historical-btn" id="loadHistoricalBtn">
+                                <i class="fas fa-chart-line"></i> Load Data
+                            </button>
+                        </div>
+
+                        <!-- Quick Period Buttons -->
+                        <div class="quick-period-buttons">
+                            <button class="period-btn" data-period="last30">Last 30 Days</button>
+                            <button class="period-btn" data-period="last90">Last 90 Days</button>
+                            <button class="period-btn" data-period="last6m">Last 6 Months</button>
+                            <button class="period-btn" data-period="2024">Year 2024</button>
+                            <button class="period-btn" data-period="2025">Year 2025</button>
+                            <button class="period-btn active" data-period="all">All Data (2 Years)</button>
+                        </div>
+
+                        <!-- Historical Stats Cards -->
+                        <div class="historical-stats-grid" id="historicalStatsGrid">
+                            <div class="historical-stat-card glass-card">
+                                <div class="stat-icon-lg"><i class="fas fa-database"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="totalDataPoints">766</span>
+                                    <span class="stat-desc">Data Points</span>
+                                </div>
+                            </div>
+                            <div class="historical-stat-card glass-card">
+                                <div class="stat-icon-lg hot"><i class="fas fa-fire"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="peakTemp2yr">42.3°C</span>
+                                    <span class="stat-desc">Peak Temperature</span>
+                                </div>
+                            </div>
+                            <div class="historical-stat-card glass-card">
+                                <div class="stat-icon-lg cool"><i class="fas fa-snowflake"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="minTemp2yr">18.5°C</span>
+                                    <span class="stat-desc">Lowest Night Temp</span>
+                                </div>
+                            </div>
+                            <div class="historical-stat-card glass-card">
+                                <div class="stat-icon-lg trend"><i class="fas fa-chart-line"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="yoyChange">+1.2°C</span>
+                                    <span class="stat-desc">YoY Change</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Main Historical Chart -->
+                        <div class="chart-container extra-large">
+                            <canvas id="twoYearHistoricalChart"></canvas>
+                        </div>
+
+                        <!-- Year Comparison Cards -->
+                        <div class="year-comparison-grid" id="yearComparisonGrid">
+                            <div class="year-card glass-card year-2024">
+                                <div class="year-header">
+                                    <h3>📅 2024</h3>
+                                    <span class="year-badge complete">Complete</span>
+                                </div>
+                                <div class="year-stats">
+                                    <div class="year-stat">
+                                        <span class="label">Peak Day Temp</span>
+                                        <span class="value" id="avg2024Day">34.2°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Night Temp</span>
+                                        <span class="value" id="avg2024Night">23.8°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Season</span>
+                                        <span class="value">Apr-Jun</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Demand</span>
+                                        <span class="value" id="avg2024Demand">62</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="year-card glass-card year-2025">
+                                <div class="year-header">
+                                    <h3>📅 2025</h3>
+                                    <span class="year-badge complete">Complete</span>
+                                </div>
+                                <div class="year-stats">
+                                    <div class="year-stat">
+                                        <span class="label">Peak Day Temp</span>
+                                        <span class="value" id="avg2025Day">34.8°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Night Temp</span>
+                                        <span class="value" id="avg2025Night">24.3°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Season</span>
+                                        <span class="value">Apr-Jun</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Demand</span>
+                                        <span class="value" id="avg2025Demand">67</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="year-card glass-card year-2026">
+                                <div class="year-header">
+                                    <h3>📅 2026</h3>
+                                    <span class="year-badge current">Current</span>
+                                </div>
+                                <div class="year-stats">
+                                    <div class="year-stat">
+                                        <span class="label">Peak Day Temp</span>
+                                        <span class="value" id="avg2026Day">31.5°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Night Temp</span>
+                                        <span class="value" id="avg2026Night">21.2°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Season</span>
+                                        <span class="value">Expected Apr-Jun</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Demand</span>
+                                        <span class="value" id="avg2026Demand">58</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Monthly Heatmap Section -->
+                    <section class="monthly-heatmap-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-th"></i> Monthly Temperature Heatmap</h2>
+                            <div class="section-header-controls">
+                                <span class="section-subtitle">Visual representation of temperature patterns (Jan 2024 -
+                                    Feb 2026)</span>
+                                <div class="heatmap-city-selector">
+                                    <label for="heatmapCitySelect"><i class="fas fa-city"></i> City:</label>
+                                    <select id="heatmapCitySelect">
+                                        <option value="chennai">Chennai</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="yoy-chart-container">
-                        <canvas id="yoyComparisonChart"></canvas>
-                    </div>
-                    <div class="yoy-table-container" id="yoyTableContainer">
-                        <!-- Generated dynamically -->
-                    </div>
-                </section>
+                        <div class="heatmap-container-large" id="monthlyHeatmapContainer">
+                            <!-- Generated dynamically -->
+                        </div>
+                        <div class="heatmap-legend">
+                            <span class="legend-item"><span class="legend-color" style="background: #3b82f6"></span>
+                                &lt;25°C</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #22c55e"></span>
+                                25-30°C</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #eab308"></span>
+                                30-35°C</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #f97316"></span>
+                                35-40°C</span>
+                            <span class="legend-item"><span class="legend-color" style="background: #ef4444"></span>
+                                &gt;40°C</span>
+                        </div>
+                    </section>
+
+                    <!-- Year-over-Year Monthly Comparison Section -->
+                    <section class="yoy-comparison-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-balance-scale"></i> Year-over-Year Monthly Comparison</h2>
+                            <div class="section-header-controls">
+                                <span class="section-subtitle">Compare same month across 2024 vs 2025 vs 2026</span>
+                                <div class="yoy-controls">
+                                    <div class="yoy-city-selector">
+                                        <label for="yoyCitySelect"><i class="fas fa-city"></i> City:</label>
+                                        <select id="yoyCitySelect">
+                                            <option value="chennai">Chennai</option>
+                                        </select>
+                                    </div>
+                                    <div class="yoy-month-selector">
+                                        <label for="yoyMonthSelect"><i class="fas fa-calendar"></i> Month:</label>
+                                        <select id="yoyMonthSelect">
+                                            <option value="all">All Months</option>
+                                            <option value="1">January</option>
+                                            <option value="2">February</option>
+                                            <option value="3">March</option>
+                                            <option value="4">April</option>
+                                            <option value="5">May</option>
+                                            <option value="6">June</option>
+                                            <option value="7">July</option>
+                                            <option value="8">August</option>
+                                            <option value="9">September</option>
+                                            <option value="10">October</option>
+                                            <option value="11">November</option>
+                                            <option value="12">December</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="yoy-chart-container">
+                            <canvas id="yoyComparisonChart"></canvas>
+                        </div>
+                        <div class="yoy-table-container" id="yoyTableContainer">
+                            <!-- Generated dynamically -->
+                        </div>
+                    </section>
                 </div>
             </div>
 
@@ -707,41 +727,41 @@
                     <div class="analytics-stat-card glass-card">
                         <div class="stat-ring" id="avgTempRing">
                             <svg viewBox="0 0 100 100">
-                                <circle class="ring-bg" cx="50" cy="50" r="45"/>
-                                <circle class="ring-progress" cx="50" cy="50" r="45" id="tempProgress"/>
+                                <circle class="ring-bg" cx="50" cy="50" r="45" />
+                                <circle class="ring-progress" cx="50" cy="50" r="45" id="tempProgress" />
                             </svg>
                             <div class="ring-value" id="avgTempValue">--°C</div>
                         </div>
                         <span class="stat-title">Peak Temperature</span>
                     </div>
-                    
+
                     <div class="analytics-stat-card glass-card">
                         <div class="stat-ring">
                             <svg viewBox="0 0 100 100">
-                                <circle class="ring-bg" cx="50" cy="50" r="45"/>
-                                <circle class="ring-progress humidity" cx="50" cy="50" r="45" id="humidityProgress"/>
+                                <circle class="ring-bg" cx="50" cy="50" r="45" />
+                                <circle class="ring-progress humidity" cx="50" cy="50" r="45" id="humidityProgress" />
                             </svg>
                             <div class="ring-value" id="avgHumidityValue">--%</div>
                         </div>
                         <span class="stat-title">Peak Humidity</span>
                     </div>
-                    
+
                     <div class="analytics-stat-card glass-card">
                         <div class="stat-ring">
                             <svg viewBox="0 0 100 100">
-                                <circle class="ring-bg" cx="50" cy="50" r="45"/>
-                                <circle class="ring-progress demand" cx="50" cy="50" r="45" id="demandProgress"/>
+                                <circle class="ring-bg" cx="50" cy="50" r="45" />
+                                <circle class="ring-progress demand" cx="50" cy="50" r="45" id="demandProgress" />
                             </svg>
                             <div class="ring-value" id="avgDemandValue">--</div>
                         </div>
                         <span class="stat-title">Demand Index</span>
                     </div>
-                    
+
                     <div class="analytics-stat-card glass-card">
                         <div class="stat-ring">
                             <svg viewBox="0 0 100 100">
-                                <circle class="ring-bg" cx="50" cy="50" r="45"/>
-                                <circle class="ring-progress ac-hours" cx="50" cy="50" r="45" id="acHoursProgress"/>
+                                <circle class="ring-bg" cx="50" cy="50" r="45" />
+                                <circle class="ring-progress ac-hours" cx="50" cy="50" r="45" id="acHoursProgress" />
                             </svg>
                             <div class="ring-value" id="avgAcHoursValue">--h</div>
                         </div>
@@ -757,7 +777,8 @@
                             <h2><i class="fas fa-th"></i> City Temperature Heatmap</h2>
                         </div>
                         <div class="heatmap-container" id="heatmapContainer">
-                            <div class="skeleton-chart" style="min-height: 300px"><i class="fas fa-th"></i> Loading heatmap...</div>
+                            <div class="skeleton-chart" style="min-height: 300px"><i class="fas fa-th"></i> Loading
+                                heatmap...</div>
                         </div>
                     </section>
 
@@ -984,7 +1005,7 @@
                         </div>
                         <span class="trend-badge up" id="peakTrendBadge">Heating Fast</span>
                     </div>
-                    
+
                     <div class="insight-hero-card glass-card gradient-blue">
                         <div class="hero-icon"><i class="fas fa-chart-line"></i></div>
                         <div class="hero-content">
@@ -994,7 +1015,7 @@
                         </div>
                         <span class="trend-badge neutral" id="yoyTrendBadge">Stable</span>
                     </div>
-                    
+
                     <div class="insight-hero-card glass-card gradient-green">
                         <div class="hero-icon"><i class="fas fa-percentage"></i></div>
                         <div class="hero-content">
@@ -1004,7 +1025,7 @@
                         </div>
                         <span class="trend-badge up" id="demandTrendBadge">High</span>
                     </div>
-                    
+
                     <div class="insight-hero-card glass-card gradient-purple">
                         <div class="hero-icon"><i class="fas fa-map-marked-alt"></i></div>
                         <div class="hero-content">
@@ -1094,8 +1115,12 @@
                 <div class="page-header" style="display:none" id="demandIntelContent">
                     <h1><i class="fas fa-bolt"></i> Demand Intelligence Hub</h1>
                     <div style="display:flex; align-items:center; gap:12px">
-                        <p style="margin:0">DSB methodology, demand correlation, service predictions & refresh cadence</p>
-                        <button id="alertsButton" class="btn btn-sm" style="margin-left:12px; display:flex; align-items:center; gap:8px;">🔔 Alerts <span id="alertsCount" class="badge" style="background:#dc3545;color:#fff;border-radius:999px;padding:2px 8px;display:inline-block;">0</span></button>
+                        <p style="margin:0">DSB methodology, demand correlation, service predictions & refresh cadence
+                        </p>
+                        <button id="alertsButton" class="btn btn-sm"
+                            style="margin-left:12px; display:flex; align-items:center; gap:8px;">🔔 Alerts <span
+                                id="alertsCount" class="badge"
+                                style="background:#dc3545;color:#fff;border-radius:999px;padding:2px 8px;display:inline-block;">0</span></button>
                     </div>
                 </div>
 
@@ -1211,7 +1236,8 @@
                 <section class="glass-card animate__animated animate__fadeInUp">
                     <div class="section-header">
                         <h2><i class="fas fa-tools"></i> Service Demand Predictions</h2>
-                        <span class="section-subtitle">Compressor failures, gas refills, warranty claims, installations</span>
+                        <span class="section-subtitle">Compressor failures, gas refills, warranty claims,
+                            installations</span>
                     </div>
                     <div class="service-predictions-grid" id="servicePredictionsGrid">
                         <!-- Generated dynamically -->
@@ -1351,12 +1377,14 @@
                     <span>© 2026 Hansei Consultancy | ForecastWell Pro v2.1</span>
                 </div>
                 <div class="footer-center">
-                    <span class="data-source"><i class="fas fa-database"></i> Data: IMD Official | Jan 2024 - Feb 2026</span>
+                    <span class="data-source"><i class="fas fa-database"></i> Data: IMD Official | Jan 2024 - Feb
+                        2026</span>
                     <span class="separator">|</span>
                     <span class="last-update">Last Update: <span id="lastUpdate">--</span></span>
                 </div>
                 <div class="footer-right">
-                    <span class="footer-hint"><i class="fas fa-moon"></i> Night Temp = Primary Demand Driver | <i class="fas fa-calendar"></i> 2 Years Data</span>
+                    <span class="footer-hint"><i class="fas fa-moon"></i> Night Temp = Primary Demand Driver | <i
+                            class="fas fa-calendar"></i> 2 Years Data</span>
                 </div>
             </div>
         </footer>
@@ -1384,8 +1412,11 @@
             </div>
             <h3 style="margin: 0 0 0.5rem 0; font-weight: 600;">ForecastWell Pro</h3>
             <p style="margin: 0; opacity: 0.8;">Fetching live weather intelligence...</p>
-            <div style="margin-top: 1rem; width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden;">
-                <div style="height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent-primary), #a855f7); border-radius: 2px; animation: loadProgress 2s ease-in-out infinite;"></div>
+            <div
+                style="margin-top: 1rem; width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden;">
+                <div
+                    style="height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent-primary), #a855f7); border-radius: 2px; animation: loadProgress 2s ease-in-out infinite;">
+                </div>
             </div>
         </div>
     </div>
@@ -1396,4 +1427,5 @@
     <!-- Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
+
 </html>

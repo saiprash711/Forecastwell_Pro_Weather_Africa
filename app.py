@@ -3,7 +3,8 @@ ForecastWell Dashboard - Flask Application
 Weather-based demand forecasting for HVAC/Consumer Durables
 Enhanced per ForecastWell Guide - Night Temperature Priority!
 """
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, session, redirect, url_for
+from functools import wraps
 from flask_cors import CORS
 from datetime import datetime, timedelta
 import random
@@ -15,15 +16,31 @@ from config import Config
 from utils.weather_service import WeatherService
 from utils.alert_engine import AlertEngine
 from utils.data_processor import DataProcessor
+from utils.supabase_client import SupabaseHandler
 
 app = Flask(__name__)
 app.config.from_object(Config)
 CORS(app)
 
+# ---- Dummy credentials for login ----
+DUMMY_USERNAME = 'admin'
+DUMMY_PASSWORD = 'forecast2026'
+
+
+def login_required(f):
+    """Decorator to require login for a route"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # Initialize services
 weather_service = WeatherService()
 alert_engine = AlertEngine()
 data_processor = DataProcessor()
+supabase_handler = SupabaseHandler()
 
 # Simple in-memory cache for faster responses
 cache = {
@@ -103,6 +120,17 @@ def get_cached_weather():
     
     cache['weather_data'] = cities_weather
     cache['weather_timestamp'] = now
+
+    # Persist weather data to Supabase (non-blocking)
+    if supabase_handler.enabled:
+        def _persist_weather(data):
+            for city in data:
+                try:
+                    supabase_handler.save_weather_log(city)
+                except Exception as e:
+                    print(f"[Supabase] Weather persist error for {city.get('city_id')}: {e}")
+        threading.Thread(target=_persist_weather, args=(cities_weather,), daemon=True).start()
+
     return cities_weather
 
 
@@ -118,7 +146,34 @@ def get_cached_alerts(cities_weather):
     return alerts
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page"""
+    if session.get('logged_in'):
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '')
+        password = request.form.get('password', '')
+        if username == DUMMY_USERNAME and password == DUMMY_PASSWORD:
+            session['logged_in'] = True
+            session['username'] = username
+            return jsonify({'success': True, 'redirect': url_for('index')})
+        else:
+            return jsonify({'success': False, 'message': 'Invalid username or password.'})
+
+    return render_template('login.html', error=None)
+
+
+@app.route('/logout')
+def logout():
+    """Logout and redirect to login"""
+    session.clear()
+    return redirect(url_for('login'))
+
+
 @app.route('/')
+@login_required
 def index():
     """Main dashboard page"""
     return render_template('index.html')
@@ -446,6 +501,159 @@ def download_file(filename):
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/export/alert-report', methods=['POST'])
+def export_alert_report():
+    """Export alert-specific report to Excel"""
+    try:
+        cities_weather = get_cached_weather()
+        alerts = alert_engine.get_all_alerts(cities_weather)
+        
+        # Filter for critical alerts only
+        critical_alerts = [a for a in alerts if a['alert_level'] in ['red', 'orange', 'kerala_special']]
+        
+        # Create Excel file
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Critical Alerts"
+        
+        # Header
+        headers = ['City', 'Alert Level', 'Night Temp', 'Day Temp', 'Demand Index', 'DSB Zone', 'AC Hours', 'Recommendation']
+        ws.append(headers)
+        
+        # Style header
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Data rows
+        for alert in critical_alerts:
+            ws.append([
+                alert['city'],
+                alert['alert_level'].upper(),
+                f"{alert['night_temp']}°C",
+                f"{alert['day_temp']}°C",
+                alert['demand_index'],
+                alert['dsb_zone'],
+                alert['ac_hours_estimated'],
+                alert['recommendation']['action']
+            ])
+        
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(cell.value)
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save file
+        filename = f"Alert_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filepath = f"exports/{filename}"
+        
+        import os
+        os.makedirs('exports', exist_ok=True)
+        wb.save(filepath)
+        
+        return jsonify({
+            'status': 'success',
+            'filename': filename,
+            'alerts_count': len(critical_alerts)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/export/forecast-report', methods=['POST'])
+def export_forecast_report():
+    """Export forecast report for all cities"""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        wb = openpyxl.Workbook()
+        
+        # Create sheet for each city
+        for city in Config.CITIES[:5]:  # Limit to 5 cities for performance
+            forecast = get_cached_forecast(city['id'], days=30)
+            
+            if not forecast:
+                continue
+            
+            ws = wb.create_sheet(title=city['name'][:31])  # Excel sheet name limit
+            
+            # Header
+            headers = ['Date', 'Day', 'Day Temp', 'Night Temp', 'Humidity', 'Wind Speed', 'Source']
+            ws.append(headers)
+            
+            # Style header
+            for cell in ws[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center")
+            
+            # Data rows
+            for day in forecast:
+                ws.append([
+                    day['date'],
+                    day['day'],
+                    f"{day['day_temp']}°C",
+                    f"{day['night_temp']}°C",
+                    f"{day.get('humidity', 'N/A')}%",
+                    f"{day.get('wind_speed', 'N/A')} km/h",
+                    day.get('source', 'Unknown')
+                ])
+            
+            # Auto-adjust column widths
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value)
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 30)
+                ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Remove default sheet
+        if 'Sheet' in wb.sheetnames:
+            wb.remove(wb['Sheet'])
+        
+        # Save file
+        filename = f"Forecast_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filepath = f"exports/{filename}"
+        
+        import os
+        os.makedirs('exports', exist_ok=True)
+        wb.save(filepath)
+        
+        return jsonify({
+            'status': 'success',
+            'filename': filename,
+            'cities_count': len([s for s in wb.sheetnames])
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 
 @app.route('/api/alerts/city/<city_id>')
@@ -2148,6 +2356,18 @@ def refresh_alerts(force=False):
         cache['alerts_data'] = alerts
         cache['alerts_timestamp'] = now
 
+        # Persist critical alerts to Supabase (non-blocking)
+        if supabase_handler.enabled:
+            critical = [a for a in alerts if a.get('alert_level') in ('red', 'orange', 'kerala_special')]
+            if critical:
+                def _persist_alerts(alert_list):
+                    for alert in alert_list:
+                        try:
+                            supabase_handler.save_alert(alert)
+                        except Exception as e:
+                            print(f"[Supabase] Alert persist error: {e}")
+                threading.Thread(target=_persist_alerts, args=(critical,), daemon=True).start()
+
         # send webhooks for newly discovered alerts (non-blocking)
         if new_alerts_to_send:
             try:
@@ -2431,6 +2651,81 @@ def warm_cache():
         print("[Cache] All caches warmed successfully!")
     except Exception as e:
         print(f"[Cache] Warning: Pre-warming failed: {e}")
+
+
+# ---- Supabase Database API Endpoints ----
+
+@app.route('/api/supabase/weather-history')
+def supabase_weather_history():
+    """Get historical weather data from Supabase. Query: city=<city_id>, limit=<n>"""
+    try:
+        city_id = request.args.get('city', 'chennai')
+        limit = int(request.args.get('limit', 24))
+        data = supabase_handler.get_recent_logs(city_id, limit=limit)
+        return jsonify({
+            'status': 'success',
+            'supabase_enabled': supabase_handler.enabled,
+            'data': data,
+            'count': len(data)
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/supabase/alerts')
+def supabase_alerts():
+    """Get alerts from Supabase. Query: active_only=true|false"""
+    try:
+        active_only = request.args.get('active_only', 'true').lower() == 'true'
+        if active_only:
+            data = supabase_handler.get_active_alerts()
+        else:
+            # Fetch all alerts (up to 100)
+            if supabase_handler.enabled:
+                response = supabase_handler.client.table("alerts")\
+                    .select("*")\
+                    .order("created_at", desc=True)\
+                    .limit(100)\
+                    .execute()
+                data = response.data
+            else:
+                data = []
+        return jsonify({
+            'status': 'success',
+            'supabase_enabled': supabase_handler.enabled,
+            'data': data,
+            'count': len(data)
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/supabase/alerts/ack', methods=['POST'])
+def supabase_ack_alert():
+    """Acknowledge an alert in Supabase by UUID. Body: { "id": "<uuid>" }"""
+    try:
+        body = request.get_json() or {}
+        alert_id = body.get('id')
+        if not alert_id:
+            return jsonify({'status': 'error', 'message': 'Missing alert id'}), 400
+        result = supabase_handler.acknowledge_alert(alert_id)
+        if result is not None:
+            return jsonify({'status': 'success', 'acknowledged': alert_id})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to acknowledge or Supabase disabled'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/supabase/status')
+def supabase_status():
+    """Check Supabase connection health."""
+    status = supabase_handler.get_connection_status()
+    return jsonify({
+        'status': 'success',
+        'supabase_enabled': supabase_handler.enabled,
+        'connection': status
+    })
 
 
 if __name__ == '__main__':

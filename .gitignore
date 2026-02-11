@@ -7,7 +7,15 @@ venv/
 env/
 ENV/
 .venv
+
+# CRITICAL: Never commit API keys or secrets
 .env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+
 *.log
 instance/
 .pytest_cache/
@@ -18,3 +26,6 @@ build/
 *.egg-info/
 node_modules/
 .DS_Store
+uploads/
+exports/
+
