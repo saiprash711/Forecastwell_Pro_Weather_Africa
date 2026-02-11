@@ -100,6 +100,13 @@ def get_cached_weather():
     for city in cities_weather:
         day_temp = city.get('day_temp', city['temperature'])
         night_temp = city.get('night_temp', city['temperature'] - 5)
+        day_temp = city.get('day_temp', city['temperature'])
+        night_temp = city.get('night_temp', city['temperature'] - 5)
+        
+        # Ensure these are set in the dict for frontend
+        city['day_temp'] = day_temp
+        city['night_temp'] = night_temp
+        
         humidity = city.get('humidity', 60)
         city['demand_index'] = data_processor.calculate_demand_index(
             day_temp, night_temp, humidity
@@ -124,11 +131,10 @@ def get_cached_weather():
     # Persist weather data to Supabase (non-blocking)
     if supabase_handler.enabled:
         def _persist_weather(data):
-            for city in data:
-                try:
-                    supabase_handler.save_weather_log(city)
-                except Exception as e:
-                    print(f"[Supabase] Weather persist error for {city.get('city_id')}: {e}")
+            try:
+                supabase_handler.save_weather_logs_batch(data)
+            except Exception as e:
+                print(f"[Supabase] Weather batch persist error: {e}")
         threading.Thread(target=_persist_weather, args=(cities_weather,), daemon=True).start()
 
     return cities_weather

@@ -226,14 +226,28 @@ function loadPageData(pageId) {
                 setTimeout(() => {
                     if (charts.radar) charts.radar.resize();
                     if (charts.distribution) charts.distribution.resize();
+                    if (charts.correlation) charts.correlation.resize();
+                    if (charts.acHours) charts.acHours.resize();
                 }, 50);
                 return;
             }
             showPageLoader('analyticsPage', 'analyticsLoader');
             requestAnimationFrame(() => {
-                initializeAnalyticsCharts();
+                try {
+                    initializeAnalyticsCharts();
+                } catch (e) {
+                    console.error('Error initializing analytics charts:', e);
+                }
                 hidePageLoader('analyticsPage', 'analyticsLoader');
                 pageLoadedCache.analytics = true;
+
+                // Resize charts after they become visible
+                requestAnimationFrame(() => {
+                    if (charts.radar) charts.radar.resize();
+                    if (charts.distribution) charts.distribution.resize();
+                    if (charts.correlation) charts.correlation.resize();
+                    if (charts.acHours) charts.acHours.resize();
+                });
             });
             break;
         case 'forecast':
@@ -1414,6 +1428,114 @@ function getHeatmapColor(temp) {
 
 function normalizeValue(value, min, max) {
     return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+}
+
+function loadAnalyticsYoYChart() {
+    const canvas = document.getElementById('yoyComparisonChart');
+    if (!canvas) return;
+
+    // Destroy existing chart if any
+    const existingChart = Chart.getChart(canvas);
+    if (existingChart) existingChart.destroy();
+
+    // Prepare data
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Simulate data based on base temp of first city or avg
+    const baseTemp = currentCityData.length > 0 ? (currentCityData[0].day_temp || 30) : 30;
+
+    const data2024 = labels.map((_, i) => baseTemp + Math.sin(i / 2) * 5 - 1 + Math.random());
+    const data2025 = labels.map((_, i) => baseTemp + Math.sin(i / 2) * 5 + Math.random());
+    const data2026 = labels.map((_, i) => i < 2 ? baseTemp + Math.sin(i / 2) * 5 + 1 + Math.random() : null); // Only Jan-Feb for 2026
+
+    new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '2024',
+                    data: data2024,
+                    borderColor: 'rgba(100, 116, 139, 0.5)',
+                    backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: '2025',
+                    data: data2025,
+                    borderColor: 'rgba(59, 130, 246, 0.7)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: '2026',
+                    data: data2026,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    pointRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: { mode: 'index', intersect: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    title: { display: true, text: 'Temperature (°C)' }
+                }
+            }
+        }
+    });
+
+    // Populate Table
+    const tableContainer = document.getElementById('yoyTableContainer');
+    if (tableContainer) {
+        let tableHtml = `
+            <table class="yoy-table">
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>2024</th>
+                        <th>2025</th>
+                        <th>2026</th>
+                        <th>Var (25-26)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        labels.forEach((month, i) => {
+            const val24 = data2024[i].toFixed(1);
+            const val25 = data2025[i].toFixed(1);
+            const val26 = data2026[i] !== null ? data2026[i].toFixed(1) : '-';
+            const diff = data2026[i] !== null ? (data2026[i] - data2025[i]).toFixed(1) : '-';
+            const diffClass = diff !== '-' ? (diff > 0 ? 'text-red' : 'text-green') : '';
+
+            tableHtml += `
+                <tr>
+                    <td>${month}</td>
+                    <td>${val24}°</td>
+                    <td>${val25}°</td>
+                    <td>${val26}°</td>
+                    <td class="${diffClass}">${diff > 0 ? '+' : ''}${diff}</td>
+                </tr>
+            `;
+        });
+
+        tableHtml += '</tbody></table>';
+        tableContainer.innerHTML = tableHtml;
+    }
 }
 
 // ========== Forecast Page ==========
@@ -4795,3 +4917,4 @@ function renderCorrelationChart(chartData) {
         }
     });
 }
+

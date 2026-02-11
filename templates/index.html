@@ -159,7 +159,9 @@
                 <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display: none;">
                 <div class="user-menu">
                     <div class="user-avatar">
-                        <i class="fas fa-user"></i>
+                        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Profile"
+                            style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;"
+                            onerror="this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">
                     </div>
                 </div>
             </div>

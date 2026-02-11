@@ -39,6 +39,40 @@ class SupabaseHandler:
             
         try:
             # Prepare data for insertion matching schema
+            record = self._prepare_weather_record(weather_data)
+            data, count = self.client.table("weather_logs").insert(record).execute()
+            return data
+        except Exception as e:
+            print(f"❌ Error saving weather log to Supabase: {e}")
+            return None
+
+    def save_weather_logs_batch(self, weather_data_list):
+        """
+        Save multiple weather records in a single batch.
+        
+        Args:
+            weather_data_list (list): List of weather data dictionaries
+        """
+        if not self.enabled or not weather_data_list:
+            return None
+            
+        try:
+            records = [self._prepare_weather_record(wd) for wd in weather_data_list]
+            records = [r for r in records if r] # Remove None records
+            
+            if not records:
+                return None
+                
+            data, count = self.client.table("weather_logs").insert(records).execute()
+            print(f"✅ Batch saved {len(records)} weather logs to Supabase")
+            return data
+        except Exception as e:
+            print(f"❌ Error batch saving weather logs to Supabase: {e}")
+            return None
+
+    def _prepare_weather_record(self, weather_data):
+        """Helper to prepare a weather record dictionary"""
+        try:
             record = {
                 "city_id": weather_data.get('city_id'),
                 "city_name": weather_data.get('city_name'),
@@ -47,18 +81,13 @@ class SupabaseHandler:
                 "night_temp": weather_data.get('night_temp'),
                 "humidity": weather_data.get('humidity'),
                 "wind_speed": weather_data.get('wind_speed'),
-                "demand_index": weather_data.get('demand_index'), # Calculated field
+                "demand_index": weather_data.get('demand_index'),
                 "source": weather_data.get('source', 'Unknown'),
                 "timestamp": datetime.now().isoformat()
             }
-            
-            # Remove None values to let DB defaults handle them (though most are required)
-            record = {k: v for k, v in record.items() if v is not None}
-            
-            data, count = self.client.table("weather_logs").insert(record).execute()
-            return data
-        except Exception as e:
-            print(f"❌ Error saving weather log to Supabase: {e}")
+            # Remove None values
+            return {k: v for k, v in record.items() if v is not None}
+        except Exception:
             return None
 
     def save_alert(self, alert_data):
