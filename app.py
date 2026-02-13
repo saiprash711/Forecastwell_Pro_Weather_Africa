@@ -1095,24 +1095,33 @@ def get_business_insights_page():
 
 @app.route('/api/weekly-summary')
 def get_weekly_summary():
-    """Get weekly summary statistics"""
+    """Get weekly summary statistics using real forecast data"""
     try:
         cities_weather = get_cached_weather()
         
-        # Use current data to project weekly outlook (avoids slow forecast API calls)
         weekly_data = []
         for city in cities_weather:
-            day_temp = city.get('day_temp', city['temperature'])
-            night_temp = city.get('night_temp', city['temperature'] - 5)
+            city_id = city['city_id']
+            # Get 7-day forecast
+            forecast = get_cached_forecast(city_id, days=7)
             
-            # Simulate weekly variations based on current temps
-            avg_day = round(day_temp + random.uniform(-1, 1), 1)
-            avg_night = round(night_temp + random.uniform(-0.5, 0.5), 1)
-            max_temp = round(day_temp + random.uniform(1, 3), 1)
-            min_night = round(night_temp - random.uniform(1, 2), 1)
-            
-            # Determine trend based on temperature level
-            trend = 'rising' if day_temp >= 36 else ('stable' if day_temp >= 32 else 'falling')
+            if forecast:
+                avg_day = round(sum(d['day_temp'] for d in forecast) / len(forecast), 1)
+                avg_night = round(sum(d['night_temp'] for d in forecast) / len(forecast), 1)
+                max_temp = max(d['day_temp'] for d in forecast)
+                min_night = min(d['night_temp'] for d in forecast)
+                
+                # Determine trend based on first vs last day
+                start_temp = forecast[0]['day_temp']
+                end_temp = forecast[-1]['day_temp']
+                trend = 'rising' if end_temp > start_temp + 1 else ('falling' if end_temp < start_temp - 1 else 'stable')
+            else:
+                # Fallback to current if forecast fails (no random)
+                avg_day = city.get('day_temp', 35)
+                avg_night = city.get('night_temp', 25)
+                max_temp = avg_day
+                min_night = avg_night
+                trend = 'stable'
             
             weekly_data.append({
                 'city': city['city_name'],
@@ -1134,6 +1143,65 @@ def get_weekly_summary():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+@app.route('/api/forecast')
+def get_forecast():
+    """Get forecast data for a specific city. Query: city=<city_id>, days=<int>"""
+    try:
+        city_id = request.args.get('city')
+        if not city_id:
+            return jsonify({'status': 'error', 'message': 'City ID required'}), 400
+            
+        days = int(request.args.get('days', 30))
+        forecast = get_cached_forecast(city_id, days=days)
+        
+        return jsonify({
+            'status': 'success',
+            'data': forecast,
+            'city_id': city_id,
+            'days': days
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/history')
+def get_history():
+    """Get daily historical data. Query: city=<city_id>, days=<int>"""
+    try:
+        city_id = request.args.get('city')
+        days = int(request.args.get('days', 30))
+        if not city_id:
+             return jsonify({'status': 'error', 'message': 'City ID required'}), 400
+             
+        data = weather_service.get_historical_data(city_id, days=days)
+        
+        return jsonify({
+            'status': 'success',
+            'data': data
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/monthly-history')
+def get_monthly_history():
+    """Get monthly historical data for a specific year. Query: city=<city_id>, year=<int>"""
+    try:
+        city_id = request.args.get('city', 'chennai')
+        year = int(request.args.get('year', 2024))
+        
+        data = get_cached_monthly_data(city_id, year)
+        
+        return jsonify({
+            'status': 'success',
+            'data': data,
+            'city_id': city_id,
+            'year': year
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/demand-prediction')

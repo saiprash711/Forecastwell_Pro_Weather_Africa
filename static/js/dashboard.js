@@ -1430,7 +1430,7 @@ function normalizeValue(value, min, max) {
     return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
 }
 
-function loadAnalyticsYoYChart() {
+async function loadAnalyticsYoYChart() {
     const canvas = document.getElementById('yoyComparisonChart');
     if (!canvas) return;
 
@@ -1438,115 +1438,166 @@ function loadAnalyticsYoYChart() {
     const existingChart = Chart.getChart(canvas);
     if (existingChart) existingChart.destroy();
 
-    // Prepare data
-    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // Use selected city from other tabs or default
+    const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
 
-    // Simulate data based on base temp of first city or avg
-    const baseTemp = currentCityData.length > 0 ? (currentCityData[0].day_temp || 30) : 30;
+    try {
+        // Fetch data for 3 years
+        const [resp24, resp25, resp26] = await Promise.all([
+            fetch(`/api/monthly-history?city=${cityId}&year=2024`).then(r => r.json()),
+            fetch(`/api/monthly-history?city=${cityId}&year=2025`).then(r => r.json()),
+            fetch(`/api/monthly-history?city=${cityId}&year=2026`).then(r => r.json())
+        ]);
 
-    const data2024 = labels.map((_, i) => baseTemp + Math.sin(i / 2) * 5 - 1 + Math.random());
-    const data2025 = labels.map((_, i) => baseTemp + Math.sin(i / 2) * 5 + Math.random());
-    const data2026 = labels.map((_, i) => i < 2 ? baseTemp + Math.sin(i / 2) * 5 + 1 + Math.random() : null); // Only Jan-Feb for 2026
-
-    new Chart(canvas, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: '2024',
-                    data: data2024,
-                    borderColor: 'rgba(100, 116, 139, 0.5)',
-                    backgroundColor: 'rgba(100, 116, 139, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true
-                },
-                {
-                    label: '2025',
-                    data: data2025,
-                    borderColor: 'rgba(59, 130, 246, 0.7)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true
-                },
-                {
-                    label: '2026',
-                    data: data2026,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    pointRadius: 4
+        const mapData = (resp) => {
+            if (resp.status !== 'success' || !resp.data) return Array(12).fill(null);
+            // resp.data is usually array of month objects
+            const arr = Array(12).fill(null);
+            resp.data.forEach(m => {
+                if (m.month >= 1 && m.month <= 12) {
+                    arr[m.month - 1] = m.avg_day_temp;
                 }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top' },
-                tooltip: { mode: 'index', intersect: false }
+            });
+            return arr;
+        };
+
+        const data2024 = mapData(resp24);
+        const data2025 = mapData(resp25);
+        const data2026 = mapData(resp26);
+
+        const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '2024',
+                        data: data2024,
+                        borderColor: 'rgba(100, 116, 139, 0.5)',
+                        backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: '2025',
+                        data: data2025,
+                        borderColor: 'rgba(59, 130, 246, 0.7)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: '2026',
+                        data: data2026,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        pointRadius: 4
+                    }
+                ]
             },
-            scales: {
-                y: {
-                    beginAtZero: false,
-                    title: { display: true, text: 'Temperature (°C)' }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: { display: true, text: 'Temperature (°C)' }
+                    }
                 }
             }
-        }
-    });
-
-    // Populate Table
-    const tableContainer = document.getElementById('yoyTableContainer');
-    if (tableContainer) {
-        let tableHtml = `
-            <table class="yoy-table">
-                <thead>
-                    <tr>
-                        <th>Month</th>
-                        <th>2024</th>
-                        <th>2025</th>
-                        <th>2026</th>
-                        <th>Var (25-26)</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-
-        labels.forEach((month, i) => {
-            const val24 = data2024[i].toFixed(1);
-            const val25 = data2025[i].toFixed(1);
-            const val26 = data2026[i] !== null ? data2026[i].toFixed(1) : '-';
-            const diff = data2026[i] !== null ? (data2026[i] - data2025[i]).toFixed(1) : '-';
-            const diffClass = diff !== '-' ? (diff > 0 ? 'text-red' : 'text-green') : '';
-
-            tableHtml += `
-                <tr>
-                    <td>${month}</td>
-                    <td>${val24}°</td>
-                    <td>${val25}°</td>
-                    <td>${val26}°</td>
-                    <td class="${diffClass}">${diff > 0 ? '+' : ''}${diff}</td>
-                </tr>
-            `;
         });
 
-        tableHtml += '</tbody></table>';
-        tableContainer.innerHTML = tableHtml;
+        // Populate Table
+        const tableContainer = document.getElementById('yoyTableContainer');
+        if (tableContainer) {
+            let tableHtml = `
+                <table class="yoy-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>2024</th>
+                            <th>2025</th>
+                            <th>2026</th>
+                            <th>Var (25-26)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            labels.forEach((month, i) => {
+                const val24 = data2024[i] ? data2024[i].toFixed(1) + '°' : '-';
+                const val25 = data2025[i] ? data2025[i].toFixed(1) + '°' : '-';
+                const val26 = data2026[i] ? data2026[i].toFixed(1) + '°' : '-';
+
+                let diff = '-';
+                let diffClass = '';
+
+                if (data2026[i] !== null && data2025[i] !== null) {
+                    const d = (data2026[i] - data2025[i]).toFixed(1);
+                    diff = (d > 0 ? '+' : '') + d;
+                    diffClass = d > 0 ? 'text-red' : 'text-green';
+                }
+
+                tableHtml += `
+                    <tr>
+                        <td>${month}</td>
+                        <td>${val24}</td>
+                        <td>${val25}</td>
+                        <td>${val26}</td>
+                        <td class="${diffClass}">${diff}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += '</tbody></table>';
+            tableContainer.innerHTML = tableHtml;
+        }
+
+    } catch (e) {
+        console.error('Error fetching YoY data:', e);
     }
 }
 
 // ========== Forecast Page ==========
 let selectedForecastCity = null;
 let selectedForecastDays = 7;
+// Peak season start dates (Month-Day)
 
-function loadForecastPage() {
+
+/*
+ * Load Forecast Page
+ */
+async function loadForecastPage() {
+    console.log('Loading forecast page...');
     populateForecastCitySelect();
     setupForecastEventListeners();
-    generateForecastCards();
-    initializeForecastChart();
+
+    // Fetch real forecast data
+    const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
+    try {
+        const response = await fetch(`/api/forecast?city=${cityId}&days=${selectedForecastDays}`);
+        const result = await response.json();
+
+        if (result.status === 'success' && result.data) {
+            generateForecastCards(result.data);
+            initializeForecastChart(result.data);
+        } else {
+            console.error('Failed to load forecast', result);
+        }
+    } catch (e) {
+        console.error('Error fetching forecast:', e);
+    }
+
     generatePredictions();
 }
 
@@ -1554,10 +1605,20 @@ function setupForecastEventListeners() {
     // City dropdown change event
     const citySelect = document.getElementById('forecastCitySelect');
     if (citySelect) {
-        citySelect.addEventListener('change', function () {
+        citySelect.addEventListener('change', async function () {
             selectedForecastCity = this.value;
-            generateForecastCards();
-            initializeForecastChart();
+
+            // Fetch and update
+            try {
+                const response = await fetch(`/api/forecast?city=${selectedForecastCity}&days=${selectedForecastDays}`);
+                const result = await response.json();
+                if (result.status === 'success' && result.data) {
+                    generateForecastCards(result.data);
+                    initializeForecastChart(result.data);
+                }
+            } catch (e) {
+                console.error(e);
+            }
             generatePredictions();
         });
     }
@@ -1572,8 +1633,17 @@ function setupForecastEventListeners() {
 
             // Update selected days and refresh
             selectedForecastDays = parseInt(this.dataset.days);
-            generateForecastCards();
-            initializeForecastChart();
+
+            // Fetch and update
+            const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
+            fetch(`/api/forecast?city=${cityId}&days=${selectedForecastDays}`)
+                .then(r => r.json())
+                .then(result => {
+                    if (result.status === 'success') {
+                        generateForecastCards(result.data);
+                        initializeForecastChart(result.data);
+                    }
+                });
         });
     });
 }
@@ -1600,30 +1670,23 @@ function getSelectedCityData() {
     return currentCityData[0];
 }
 
-function generateForecastCards() {
+function generateForecastCards(forecastData) {
     const container = document.getElementById('forecastCarousel');
-    if (!container) return;
+    if (!container || !forecastData) return;
 
-    const cityData = getSelectedCityData();
-    const baseTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 35;
-    const baseNightTemp = cityData ? (cityData.night_temp || baseTemp - 5) : 28;
-
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date();
-
-    // Show cards based on selected range (max 7 visible, but generate based on selection)
-    const cardsToShow = Math.min(selectedForecastDays, 7);
+    // Use fetched data (max 7 visible)
+    const cardsToShow = Math.min(forecastData.length, 7);
 
     let html = '';
     for (let i = 0; i < cardsToShow; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() + i);
-        const dayName = i === 0 ? 'Today' : days[date.getDay()];
+        const day = forecastData[i];
+        const dateObj = new Date(day.date);
 
-        // Generate realistic temperature variations based on city's base temp
-        const tempVariation = Math.sin(i * 0.5) * 3 + (Math.random() - 0.5) * 2;
-        const dayHigh = Math.round(baseTemp + tempVariation);
-        const dayLow = Math.round(baseNightTemp + tempVariation * 0.7);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayName = i === 0 ? 'Today' : days[dateObj.getDay()];
+
+        const dayHigh = Math.round(day.day_temp);
+        const dayLow = Math.round(day.night_temp);
 
         // Determine icon based on temperature
         let icon = '☀️';
@@ -1633,15 +1696,13 @@ function generateForecastCards() {
         else if (dayHigh >= 28) icon = '⛅';
         else icon = '🌥️';
 
-        // Add rain chance for variety
-        const rainChance = Math.random();
-        if (rainChance > 0.85) icon = '🌧️';
-        else if (rainChance > 0.75) icon = '⛈️';
+        // Check for rain if available in future data
+        if (day.precipitation_sum > 0) icon = '🌧️';
 
         html += `
             <div class="forecast-card glass-card" data-day="${i}">
                 <div class="forecast-day">${dayName}</div>
-                <div class="forecast-date">${date.getDate()}/${date.getMonth() + 1}</div>
+                <div class="forecast-date">${dateObj.getDate()}/${dateObj.getMonth() + 1}</div>
                 <div class="forecast-icon">${icon}</div>
                 <div class="forecast-temps">
                     <span class="forecast-temp-high">${dayHigh}°</span>
@@ -1657,42 +1718,31 @@ function generateForecastCards() {
     container.innerHTML = html;
 }
 
-function initializeForecastChart() {
+function initializeForecastChart(forecastData) {
     const canvas = document.getElementById('forecastChart');
-    if (!canvas) return;
+    if (!canvas || !forecastData) return;
 
     if (charts.forecast) charts.forecast.destroy();
 
     const cityData = getSelectedCityData();
-    const baseTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 35;
-    const baseNightTemp = cityData ? (cityData.night_temp || baseTemp - 5) : 28;
-
-    const labels = [];
+    const headers = [];
     const dayData = [];
     const nightData = [];
     const demandData = [];
-    const today = new Date();
 
-    // Generate data based on selected forecast range
-    for (let i = 0; i < selectedForecastDays; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() + i);
-        labels.push(`${date.getDate()}/${date.getMonth() + 1}`);
-
-        // More realistic temperature variations
-        const tempVariation = Math.sin(i * 0.3) * 3 + (Math.random() - 0.5) * 2;
-        const dayTemp = Math.round(baseTemp + tempVariation);
-        const nightTemp = Math.round(baseNightTemp + tempVariation * 0.7);
-
-        dayData.push(dayTemp);
-        nightData.push(nightTemp);
-        demandData.push(Math.round((dayTemp - 20) * 2.5)); // Demand index based on temp
-    }
+    // Process forecast data
+    forecastData.forEach(day => {
+        const d = new Date(day.date);
+        headers.push(`${d.getDate()}/${d.getMonth() + 1}`);
+        dayData.push(day.day_temp);
+        nightData.push(day.night_temp);
+        demandData.push(Math.round((day.day_temp - 20) * 2.5));
+    });
 
     charts.forecast = new Chart(canvas, {
         type: 'line',
         data: {
-            labels,
+            labels: headers,
             datasets: [
                 {
                     label: 'Day Temp (°C)',
@@ -1767,6 +1817,35 @@ function initializeForecastChart() {
     });
 }
 
+// Peak season start dates (Month-Day)
+const peakSeasonMap = {
+    'chennai': '04-20',
+    'bangalore': '04-01',
+    'hyderabad': '04-10',
+    'kochi': '03-15',
+    'mumbai': '04-01',
+    'pune': '04-01',
+    'delhi': '05-01',
+    'lucknow': '05-01',
+    'jaipur': '04-20',
+    'kolkata': '04-10',
+    'ahmedabad': '04-15',
+    'bhubaneswar': '04-01',
+    'visakhapatnam': '04-01',
+    'vijayawada': '04-05',
+    'tirupati': '04-01',
+    'madurai': '04-05',
+    'coimbatore': '03-25',
+    'trichy': '04-05',
+    'salem': '04-05',
+    'nellore': '04-05',
+    'guntur': '04-05',
+    'kurnool': '04-01',
+    'warangal': '04-10',
+    'rajahmundry': '04-01',
+    'kakinada': '04-01'
+};
+
 function generatePredictions() {
     const container = document.getElementById('predictionGrid');
     if (!container) return;
@@ -1782,7 +1861,28 @@ function generatePredictions() {
     const humidity = cityData ? (cityData.humidity || 50) : 50;
 
     // Calculate predictions
-    const peakDays = avgTemp >= 38 ? Math.round(Math.random() * 5 + 2) : Math.round(30 - avgDemand / 3);
+    // Calculate predictions - Target Peak based on City
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const peakConfig = peakSeasonMap[(cityName || 'chennai').toLowerCase()] || '04-20';
+    const [pMonth, pDay] = peakConfig.split('-').map(Number);
+    let peakDate = new Date(currentYear, pMonth - 1, pDay);
+    const summerEnd = new Date(currentYear, 5, 1); // June 1
+
+    let peakDays;
+
+    // Reset hours for accurate day calc
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (todayStart >= peakDate && todayStart < summerEnd) {
+        peakDays = 0;
+    } else {
+        if (todayStart >= summerEnd) {
+            peakDate = new Date(currentYear + 1, pMonth - 1, pDay);
+        }
+        const diffTime = peakDate - todayStart;
+        peakDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
     const estimatedSales = Math.round(avgDemand * 150);
     const heatWaveRisk = avgTemp >= 40 ? 'Very High' : avgTemp >= 38 ? 'High' : avgTemp >= 35 ? 'Moderate' : 'Low';
     const riskColor = avgTemp >= 40 ? '#ef4444' : avgTemp >= 38 ? '#f97316' : avgTemp >= 35 ? '#eab308' : '#22c55e';
@@ -2029,12 +2129,8 @@ async function updateTemperatureTrends() {
 
     try {
         // Generate date labels
-        const dateLabels = [];
-        for (let i = days - 1; i >= 0; i--) {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            dateLabels.push(date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
-        }
+        // Generate date labels (will be populated from API)
+        let dateLabels = [];
 
         const cityColors = [
             { border: 'rgb(239, 68, 68)', bg: 'rgba(239, 68, 68, 0.1)' },
@@ -2048,68 +2144,75 @@ async function updateTemperatureTrends() {
         let datasets = [];
 
         if (selectedCity === 'all') {
-            // Show all cities
-            currentCityData.forEach((city, index) => {
-                const baseTemp = city.day_temp || city.temperature;
-                const color = cityColors[index % cityColors.length];
+            // Fetch for all current cities
+            const promises = currentCityData.map(city =>
+                fetch(`/api/history?city=${city.city_id}&days=${days}`).then(r => r.json())
+            );
 
-                const tempData = [];
-                for (let i = days - 1; i >= 0; i--) {
-                    const variation = (Math.sin(i * 0.5) * 2) + (Math.random() * 1.5 - 0.75);
-                    tempData.push(Math.round((baseTemp + variation) * 10) / 10);
+            const results = await Promise.all(promises);
+
+            results.forEach((res, index) => {
+                if (res.status === 'success' && res.data && res.data.length > 0) {
+                    const city = currentCityData[index];
+                    const color = cityColors[index % cityColors.length];
+
+                    // Use dates from first successful response for labels
+                    if (dateLabels.length === 0) {
+                        dateLabels.push(...res.data.map(d => {
+                            const date = new Date(d.date);
+                            return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                        }));
+                    }
+
+                    datasets.push({
+                        label: city.city_name,
+                        data: res.data.map(d => d.day_temp),
+                        borderColor: color.border,
+                        backgroundColor: color.bg,
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    });
                 }
-
-                datasets.push({
-                    label: city.city_name,
-                    data: tempData,
-                    borderColor: color.border,
-                    backgroundColor: color.bg,
-                    tension: 0.4,
-                    fill: false,
-                    pointRadius: 3,
-                    pointHoverRadius: 5
-                });
             });
         } else {
-            // Show single city with Day and Night temperatures
-            const cityData = currentCityData.find(c => c.city_id === selectedCity);
-            if (cityData) {
-                const baseDay = cityData.day_temp || cityData.temperature;
-                const baseNight = cityData.night_temp || cityData.temperature - 5;
+            // Single city
+            try {
+                const response = await fetch(`/api/history?city=${selectedCity}&days=${days}`);
+                const res = await response.json();
 
-                const dayTempData = [];
-                const nightTempData = [];
+                if (res.status === 'success' && res.data && res.data.length > 0) {
+                    const cityData = currentCityData.find(c => c.city_id === selectedCity);
+                    const cityName = cityData ? cityData.city_name : selectedCity;
 
-                for (let i = days - 1; i >= 0; i--) {
-                    const dayVariation = (Math.sin(i * 0.6) * 2) + (Math.random() * 1.5 - 0.75);
-                    const nightVariation = (Math.sin(i * 0.6) * 1.5) + (Math.random() * 1 - 0.5);
-                    dayTempData.push(Math.round((baseDay + dayVariation) * 10) / 10);
-                    nightTempData.push(Math.round((baseNight + nightVariation) * 10) / 10);
+                    dateLabels.push(...res.data.map(d => {
+                        const date = new Date(d.date);
+                        return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                    }));
+
+                    datasets = [
+                        {
+                            label: `${cityName} - Day Temp`,
+                            data: res.data.map(d => d.day_temp),
+                            borderColor: 'rgb(249, 115, 22)',
+                            backgroundColor: 'rgba(249, 115, 22, 0.2)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 4
+                        },
+                        {
+                            label: `${cityName} - Night Temp`,
+                            data: res.data.map(d => d.night_temp),
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 4
+                        }
+                    ];
                 }
-
-                datasets = [
-                    {
-                        label: `${cityData.city_name} - Day Temp`,
-                        data: dayTempData,
-                        borderColor: 'rgb(249, 115, 22)',
-                        backgroundColor: 'rgba(249, 115, 22, 0.2)',
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    },
-                    {
-                        label: `${cityData.city_name} - Night Temp`,
-                        data: nightTempData,
-                        borderColor: 'rgb(59, 130, 246)',
-                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }
-                ];
-            }
+            } catch (e) { console.error(e); }
         }
 
         // Update chart
