@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ForecastWell Pro - Premium Weather Intelligence Dashboard</title>
-    
+
     <!-- DNS Prefetch for faster third-party resources -->
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link rel="dns-prefetch" href="https://fonts.gstatic.com">
@@ -32,10 +32,11 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
     <!-- Custom CSS (minified with cache busting) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.min.css') }}?v={{ cache_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ cache_version }}">
 
     <!-- Animate.css (non-critical — load async) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" media="print" onload="this.media='all'" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" media="print"
+        onload="this.media='all'" />
 
     <!-- Chart.js + Leaflet (needed before DOMContentLoaded, but defer parse) -->
     <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
@@ -46,7 +47,7 @@
     <!-- SheetJS + jsPDF (only needed for export — load async, non-blocking) -->
     <script async src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
+
     <!-- Performance: Preload critical assets -->
     <link rel="preload" href="{{ url_for('static', filename='css/style.min.css') }}?v={{ cache_version }}" as="style">
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js">
@@ -1206,7 +1207,8 @@
                         <div class="di-ring-wrap">
                             <svg class="di-ring-svg" viewBox="0 0 120 120">
                                 <circle class="di-ring-bg" cx="60" cy="60" r="52" />
-                                <circle class="di-ring-progress di-ring-amber" cx="60" cy="60" r="52" id="diRingAmber" />
+                                <circle class="di-ring-progress di-ring-amber" cx="60" cy="60" r="52"
+                                    id="diRingAmber" />
                             </svg>
                             <div class="di-ring-value" id="intelKpiAmber">0</div>
                         </div>
@@ -1219,7 +1221,8 @@
                         <div class="di-ring-wrap">
                             <svg class="di-ring-svg" viewBox="0 0 120 120">
                                 <circle class="di-ring-bg" cx="60" cy="60" r="52" />
-                                <circle class="di-ring-progress di-ring-green" cx="60" cy="60" r="52" id="diRingGreen" />
+                                <circle class="di-ring-progress di-ring-green" cx="60" cy="60" r="52"
+                                    id="diRingGreen" />
                             </svg>
                             <div class="di-ring-value" id="intelKpiGreen">0</div>
                         </div>
@@ -1232,7 +1235,8 @@
                         <div class="di-ring-wrap">
                             <svg class="di-ring-svg" viewBox="0 0 120 120">
                                 <circle class="di-ring-bg" cx="60" cy="60" r="52" />
-                                <circle class="di-ring-progress di-ring-purple" cx="60" cy="60" r="52" id="diRingTotal" />
+                                <circle class="di-ring-progress di-ring-purple" cx="60" cy="60" r="52"
+                                    id="diRingTotal" />
                             </svg>
                             <div class="di-ring-value" id="intelKpiTotal">0</div>
                         </div>
@@ -1301,14 +1305,16 @@
 
                 <!-- Business Decision Cards -->
                 <section class="demand-intel-decisions animate__animated animate__fadeInUp">
-                    <h2 class="intel-section-title"><i class="fas fa-chess-king"></i> Business Decisions at a Glance</h2>
+                    <h2 class="intel-section-title"><i class="fas fa-chess-king"></i> Business Decisions at a Glance
+                    </h2>
                     <div class="decision-cards-grid">
                         <div class="decision-card decision-push glass-card">
                             <div class="decision-card-header">
                                 <i class="fas fa-box-open"></i>
                                 <h3>Where to Push Inventory</h3>
                             </div>
-                            <p class="decision-desc">Markets with extreme heat or hot nights — maximize stock and service capacity.</p>
+                            <p class="decision-desc">Markets with extreme heat or hot nights — maximize stock and
+                                service capacity.</p>
                             <div class="decision-list" id="decisionPushList"><span class="muted">Loading...</span></div>
                             <div class="decision-footer">
                                 <span class="allocation-badge">Recommended: 50–60% of regional allocation</span>
@@ -1320,7 +1326,8 @@
                                 <h3>Where to Accelerate</h3>
                             </div>
                             <p class="decision-desc">Pre-position inventory; demand likely to rise in 1–2 weeks.</p>
-                            <div class="decision-list" id="decisionAccelerateList"><span class="muted">Loading...</span></div>
+                            <div class="decision-list" id="decisionAccelerateList"><span class="muted">Loading...</span>
+                            </div>
                             <div class="decision-footer">
                                 <span class="allocation-badge">Recommended: 30–40% of regional allocation</span>
                             </div>
@@ -1407,7 +1414,8 @@
                 <!-- Key Takeaways -->
                 <section class="di-takeaways glass-card animate__animated animate__fadeInUp">
                     <div class="di-takeaways-header">
-                        <h2 class="intel-section-title"><i class="fas fa-bullseye"></i> Key Takeaways for Leadership</h2>
+                        <h2 class="intel-section-title"><i class="fas fa-bullseye"></i> Key Takeaways for Leadership
+                        </h2>
                     </div>
                     <div class="di-takeaways-grid" id="intelTakeawaysList">
                         <div class="loading-shimmer"></div>
@@ -1673,7 +1681,7 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- Custom JavaScript (minified with cache busting) -->
-    <script defer src="{{ url_for('static', filename='js/dashboard.min.js') }}?v={{ cache_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/dashboard.js') }}?v={{ cache_version }}"></script>
 </body>
 
 </html>

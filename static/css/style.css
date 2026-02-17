@@ -7774,31 +7774,38 @@ section+section {
     text-align: left;
 }
 
+/* Modern Table - Force Styles for Visibility */
 .modern-table th {
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--bg-secondary) !important;
     position: sticky;
     top: 0;
     padding: 1rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     z-index: 10;
     backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--glass-border) !important;
 }
 
 .modern-table td {
     padding: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    color: var(--text-primary);
+    border-bottom: 1px solid var(--glass-border) !important;
+    color: var(--text-primary) !important;
     vertical-align: middle;
     transition: background 0.2s;
+    background: transparent;
+    /* Ensure no dark background leaks */
 }
 
 .modern-table tbody tr:hover td {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--glass-border) !important;
+}
+
+.modern-table tbody tr:hover td {
+    background: var(--glass-border);
 }
 
 /* Table Cell specific styles */

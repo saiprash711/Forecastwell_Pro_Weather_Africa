@@ -152,6 +152,8 @@ let charts = {
 let currentCityData = [];
 let currentWeeklyData = [];
 let currentAlerts = [];
+let lastIntelCities = []; // Demand Intel cache
+let lastIntelSummary = {}; // Demand Intel summary cache
 
 // ========== Initialization ==========
 document.addEventListener('DOMContentLoaded', function () {
@@ -2679,9 +2681,31 @@ function toggleTheme() {
             : '<i class="fas fa-moon"></i><span>Dark Mode</span>';
     }
 
-    // Re-render charts for theme
+    // Update Chart.js defaults globally
+    const theme = getChartTheme(); // Ensure this helper exists and returns correct colors
+    Chart.defaults.color = theme.textColor;
+    Chart.defaults.scale.grid.color = theme.gridColor;
+
+    // Re-render Main Dashboard charts
     if (currentCityData.length > 0) {
         initializeDashboardCharts(currentCityData);
+    }
+
+    // Re-render Demand Intel charts if data is available
+    // We check if the demand intel container is visible or if we have data cached
+    if (typeof lastIntelCities !== 'undefined' && lastIntelCities && lastIntelCities.length > 0) {
+        console.log('[Theme] Re-rendering Demand Intel charts...');
+        renderDiDemandRankingChart(lastIntelCities);
+        renderDiZoneDonutChart(lastIntelSummary);
+        renderDiTempDemandBubbleChart(lastIntelCities);
+        renderDiAcHoursStackedChart(lastIntelCities);
+
+        // Check for other charts if data exists
+        if (typeof renderDiEnergyCostChart === 'function' && document.getElementById('diEnergyCostChart')) {
+            // We might not have energyData easily accessible here unless we stored it globally.
+            // Ideally, store it in a global variable like `lastEnergyData` during load.
+            // For now, these main ones are the critical ones.
+        }
     }
 }
 
@@ -5033,8 +5057,7 @@ let diAcHoursStackedChart = null;
 let diEnergyCostChart = null;
 let diDemandFactorsChart = null;
 
-let lastIntelCities = [];
-let lastIntelSummary = null;
+
 
 function setupDemandIntelDelegation() {
     const page = document.getElementById('demand-intelPage');
@@ -5192,12 +5215,30 @@ function renderDiMetricsTicker(cities) {
 }
 
 // ─── Demand Ranking Horizontal Bar Chart ───
+// Helper to get current theme colors for charts
+function getChartTheme() {
+    const style = getComputedStyle(document.body);
+    const isDark = document.body.classList.contains('dark-mode'); // Corrected class name
+
+    // In light mode, use Slate 600/400 for text/grid. In dark, use White/White-opacity.
+    // If CSS vars are reliable, use them. Fallback to hardcoded for safety.
+    return {
+        textColor: isDark ? 'rgba(255,255,255,0.8)' : '#475569', // Slate 600
+        gridColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+        tooltipBg: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
+        tooltipText: isDark ? '#fff' : '#1e293b'
+    };
+}
+
+// ─── Demand Ranking Horizontal Bar Chart ───
 function renderDiDemandRankingChart(cities) {
     const ctx = document.getElementById('diDemandRankingChart');
     if (!ctx) return;
     if (diDemandRankingChart) diDemandRankingChart.destroy();
 
-    const sorted = [...cities].sort((a, b) => (b.demand_index || 0) - (a.demand_index || 0));
+    // Sort and Take Top 15 Only (Reduce Clutter)
+    const sorted = [...cities].sort((a, b) => (b.demand_index || 0) - (a.demand_index || 0)).slice(0, 15);
+
     const labels = sorted.map(c => c.city_name || c.name || '');
     const data = sorted.map(c => c.demand_index || 0);
     const colors = sorted.map(c => {
@@ -5205,6 +5246,8 @@ function renderDiDemandRankingChart(cities) {
         if (c.dsb_zone_color === 'amber') return '#f59e0b';
         return '#22c55e';
     });
+
+    const theme = getChartTheme();
 
     diDemandRankingChart = new Chart(ctx, {
         type: 'bar',
@@ -5228,7 +5271,8 @@ function renderDiDemandRankingChart(cities) {
             plugins: {
                 legend: { display: false },
                 datalabels: {
-                    anchor: 'end', align: 'end', color: '#fff',
+                    anchor: 'end', align: 'end',
+                    color: theme.textColor,
                     font: { weight: 'bold', size: 11 },
                     formatter: v => v + '%'
                 }
@@ -5236,12 +5280,12 @@ function renderDiDemandRankingChart(cities) {
             scales: {
                 x: {
                     max: 100,
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 11 } }
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor, font: { size: 11 } }
                 },
                 y: {
                     grid: { display: false },
-                    ticks: { color: 'rgba(255,255,255,0.8)', font: { size: 12, weight: '500' } }
+                    ticks: { color: theme.textColor, font: { size: 12, weight: '500' } }
                 }
             }
         },
@@ -5258,6 +5302,8 @@ function renderDiZoneDonutChart(summary) {
     const r = summary.red_count || 0;
     const a = summary.amber_count || 0;
     const g = summary.green_count || 0;
+
+    const theme = getChartTheme(); // Use helper
 
     diZoneDonutChart = new Chart(ctx, {
         type: 'doughnut',
@@ -5290,18 +5336,21 @@ function renderDiZoneDonutChart(summary) {
     const legend = document.getElementById('diZoneLegend');
     if (legend) {
         legend.innerHTML = `
-            <div class="di-legend-item"><span class="di-legend-dot" style="background:#ef4444"></span>Critical: ${r}</div>
-            <div class="di-legend-item"><span class="di-legend-dot" style="background:#f59e0b"></span>Accelerate: ${a}</div>
-            <div class="di-legend-item"><span class="di-legend-dot" style="background:#22c55e"></span>Monitor: ${g}</div>
+            <div class="di-legend-item" style="color:${theme.textColor}"><span class="di-legend-dot" style="background:#ef4444"></span>Critical: ${r}</div>
+            <div class="di-legend-item" style="color:${theme.textColor}"><span class="di-legend-dot" style="background:#f59e0b"></span>Accelerate: ${a}</div>
+            <div class="di-legend-item" style="color:${theme.textColor}"><span class="di-legend-dot" style="background:#22c55e"></span>Monitor: ${g}</div>
         `;
     }
 }
 
 // ─── Temperature vs Demand Bubble Chart ───
+// ─── Temperature vs Demand Bubble Chart ───
 function renderDiTempDemandBubbleChart(cities) {
     const ctx = document.getElementById('diTempDemandBubbleChart');
     if (!ctx) return;
     if (diTempDemandBubbleChart) diTempDemandBubbleChart.destroy();
+
+    const theme = getChartTheme();
 
     const datasets = [
         { label: 'Critical', color: '#ef4444', cities: cities.filter(c => c.dsb_zone_color === 'red') },
@@ -5328,9 +5377,12 @@ function renderDiTempDemandBubbleChart(cities) {
             maintainAspectRatio: false,
             animation: { duration: 1200, easing: 'easeOutQuart' },
             plugins: {
-                legend: { labels: { color: 'rgba(255,255,255,0.7)', usePointStyle: true, pointStyle: 'circle' } },
+                legend: { labels: { color: theme.textColor, usePointStyle: true, pointStyle: 'circle' } },
                 datalabels: { display: false },
                 tooltip: {
+                    backgroundColor: theme.tooltipBg,
+                    titleColor: theme.tooltipText,
+                    bodyColor: theme.tooltipText,
                     callbacks: {
                         label: ctx => {
                             const p = ctx.raw;
@@ -5341,14 +5393,14 @@ function renderDiTempDemandBubbleChart(cities) {
             },
             scales: {
                 x: {
-                    title: { display: true, text: 'Day Temperature (°C)', color: 'rgba(255,255,255,0.6)' },
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    ticks: { color: 'rgba(255,255,255,0.5)' }
+                    title: { display: true, text: 'Day Temperature (°C)', color: theme.textColor },
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor }
                 },
                 y: {
-                    title: { display: true, text: 'Demand Index (%)', color: 'rgba(255,255,255,0.6)' },
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    ticks: { color: 'rgba(255,255,255,0.5)' }
+                    title: { display: true, text: 'Demand Index (%)', color: theme.textColor },
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor }
                 }
             }
         }
@@ -5371,6 +5423,8 @@ function renderDiAcHoursStackedChart(cities) {
         return +(total * nightPct).toFixed(1);
     });
     const dayHours = sorted.map((c, i) => +((c.ac_hours || 0) - nightHours[i]).toFixed(1));
+
+    const theme = getChartTheme();
 
     diAcHoursStackedChart = new Chart(ctx, {
         type: 'bar',
@@ -5400,20 +5454,25 @@ function renderDiAcHoursStackedChart(cities) {
             maintainAspectRatio: false,
             animation: { duration: 1000, easing: 'easeOutQuart' },
             plugins: {
-                legend: { labels: { color: 'rgba(255,255,255,0.7)', usePointStyle: true } },
-                datalabels: { display: false }
+                legend: { labels: { color: theme.textColor, usePointStyle: true } },
+                datalabels: { display: false },
+                tooltip: {
+                    backgroundColor: theme.tooltipBg,
+                    titleColor: theme.tooltipText,
+                    bodyColor: theme.tooltipText
+                }
             },
             scales: {
                 x: {
                     stacked: true,
                     grid: { display: false },
-                    ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 }, maxRotation: 45 }
+                    ticks: { color: theme.textColor, font: { size: 10 }, maxRotation: 45 }
                 },
                 y: {
                     stacked: true,
-                    title: { display: true, text: 'Hours', color: 'rgba(255,255,255,0.6)' },
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    ticks: { color: 'rgba(255,255,255,0.5)' }
+                    title: { display: true, text: 'Hours', color: theme.textColor },
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor }
                 }
             }
         }
@@ -5434,6 +5493,8 @@ function renderDiEnergyCostChart(energyData) {
     const labels = sorted.map(c => c.city || '');
     const costs = sorted.map(c => parseFloat((c.estimated_monthly_cost || '0').replace(/[^0-9.]/g, '')));
     const maxCost = Math.max(...costs, 1);
+
+    const theme = getChartTheme();
 
     diEnergyCostChart = new Chart(ctx, {
         type: 'bar',
@@ -5460,6 +5521,9 @@ function renderDiEnergyCostChart(energyData) {
                 legend: { display: false },
                 datalabels: { display: false },
                 tooltip: {
+                    backgroundColor: theme.tooltipBg,
+                    titleColor: theme.tooltipText,
+                    bodyColor: theme.tooltipText,
                     callbacks: {
                         label: ctx => `Rs ${ctx.parsed.y.toLocaleString('en-IN')}/month`
                     }
@@ -5468,12 +5532,12 @@ function renderDiEnergyCostChart(energyData) {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 }, maxRotation: 45 }
+                    ticks: { color: theme.textColor, font: { size: 10 }, maxRotation: 45 }
                 },
                 y: {
-                    title: { display: true, text: 'Rs/month', color: 'rgba(255,255,255,0.6)' },
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    ticks: { color: 'rgba(255,255,255,0.5)', callback: v => 'Rs ' + v.toLocaleString('en-IN') }
+                    title: { display: true, text: 'Rs/month', color: theme.textColor },
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor, callback: v => 'Rs ' + v.toLocaleString('en-IN') }
                 }
             }
         }
@@ -5488,6 +5552,8 @@ function renderDiDemandFactorsChart(predictions) {
 
     const sorted = [...predictions].sort((a, b) => (b.demand_score || 0) - (a.demand_score || 0));
     const labels = sorted.map(c => c.city || '');
+
+    const theme = getChartTheme();
 
     diDemandFactorsChart = new Chart(ctx, {
         type: 'bar',
@@ -5522,9 +5588,12 @@ function renderDiDemandFactorsChart(predictions) {
             maintainAspectRatio: false,
             animation: { duration: 1000, easing: 'easeOutQuart' },
             plugins: {
-                legend: { labels: { color: 'rgba(255,255,255,0.7)', usePointStyle: true } },
+                legend: { labels: { color: theme.textColor, usePointStyle: true } },
                 datalabels: { display: false },
                 tooltip: {
+                    backgroundColor: theme.tooltipBg,
+                    titleColor: theme.tooltipText,
+                    bodyColor: theme.tooltipText,
                     callbacks: {
                         afterBody: (items) => {
                             const idx = items[0].dataIndex;
@@ -5537,13 +5606,13 @@ function renderDiDemandFactorsChart(predictions) {
                 x: {
                     stacked: true,
                     grid: { display: false },
-                    ticks: { color: 'rgba(255,255,255,0.6)', font: { size: 10 }, maxRotation: 45 }
+                    ticks: { color: theme.textColor, font: { size: 10 }, maxRotation: 45 }
                 },
                 y: {
                     stacked: true,
-                    title: { display: true, text: 'Demand Score', color: 'rgba(255,255,255,0.6)' },
-                    grid: { color: 'rgba(255,255,255,0.06)' },
-                    ticks: { color: 'rgba(255,255,255,0.5)' }
+                    title: { display: true, text: 'Demand Score', color: theme.textColor },
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor }
                 }
             }
         }
