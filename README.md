@@ -13,8 +13,10 @@ Weather-based demand forecasting tool for HVAC and consumer durables companies t
 ## Setup Instructions
 
 ### Prerequisites
-- Python 3.9 or higher
+- Python 3.11 (recommended) — older/newer Python may cause binary wheel build issues for numpy/pandas
 - pip (Python package manager)
+
+> Important: the app runs in "real-data-only" mode by default — synthetic/fallback weather records have been removed from the backend. If the live weather APIs are unavailable the server will return no fabricated data.
 
 ### Installation
 

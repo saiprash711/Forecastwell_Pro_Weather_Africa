@@ -4,12 +4,40 @@ Handles IMD data integration and weather data processing
 """
 import requests
 import random
+import time
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from config import Config
 
 # Global variable to hold imported Excel data
 EXCEL_IMPORTED_DATA = None
+
+def _create_retry_session(retries=2, backoff_factor=1.0, status_forcelist=(500, 502, 503, 504)):
+    """
+    Create a requests session with automatic retry and exponential backoff.
+    Note: 429 (rate limit) is NOT in status_forcelist - we handle it separately with longer delays.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=retries,
+        read=retries,
+        connect=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+        allowed_methods=['GET'],
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
+    return session
+
+# Global session for connection pooling and retries
+_SHARED_SESSION = _create_retry_session()
+
+def _get_session():
+    return _SHARED_SESSION
 
 class WeatherService:
     """Service for fetching and processing weather data from IMD"""
@@ -24,69 +52,20 @@ class WeatherService:
         
     def get_current_weather(self, city_id):
         """
-        Get current weather data for a specific city
-
-        Args:
-            city_id: City identifier
-
-        Returns:
-            dict: Current weather data
+        Get current weather data for a specific city using ONLY Open-Meteo API.
+        No Excel, OpenWeatherMap, or IMD fallback.
         """
-        # Check if we have imported Excel data for this city
-        try:
-            from .data_processor import EXCEL_IMPORTED_DATA as excel_data
-            if excel_data and city_id in excel_data:
-                # Use the most recent data from Excel import
-                city_data_list = excel_data[city_id]
-                if city_data_list:
-                    latest_data = city_data_list[-1]  # Most recent
-                    city = self._get_city_config(city_id)
-                    if city:  # Make sure city exists
-                        return {
-                            'city_id': city_id,
-                            'city_name': city['name'],
-                            'state': city['state'],
-                            'temperature': latest_data['temperature'],
-                            'day_temp': latest_data['day_temp'],
-                            'night_temp': latest_data['night_temp'],
-                            'humidity': latest_data.get('humidity', round(random.uniform(45, 85), 1)),
-                            'feels_like': round(latest_data['temperature'] + random.uniform(1, 3), 1),
-                            'wind_speed': round(random.uniform(5, 25), 1),
-                            'timestamp': latest_data['timestamp'],
-                            'source': 'Excel Import'
-                        }
-        except ImportError:
-            # If import fails, continue with default behavior
-            pass
-        except Exception:
-            # If any other error occurs, continue with default behavior
-            pass
-
-        # Get city configuration
         city = self._get_city_config(city_id)
         if not city:
             return None
 
-        # Try Open-Meteo API first (FREE, no key needed!)
+        # Only use Open-Meteo API
         weather_data = self._fetch_openmeteo_current(city)
         if weather_data:
             return weather_data
 
-        # Try OpenWeatherMap API (FREE, needs key)
-        if self.openweather_api_key:
-            weather_data = self._fetch_openweather_current(city)
-            if weather_data:
-                return weather_data
-        
-        # Fallback to IMD API if available
-        if self.imd_api_key:
-            weather_data = self._fetch_imd_current(city)
-            if weather_data:
-                return weather_data
-
-        # CRITICAL: All APIs failed - return None to force error handling
-        print(f"⚠️ CRITICAL: All weather APIs failed for {city['name']}")
-        return None
+        # If Open-Meteo fails, raise error
+        raise Exception(f"Weather API unavailable for city {city['name']} (Open-Meteo failed)")
     
     def get_forecast(self, city_id, days=7):
         """
@@ -116,9 +95,8 @@ class WeatherService:
             if forecast:
                 return forecast
         
-        # CRITICAL: API failed - return empty list to force error handling
-        print(f"⚠️ CRITICAL: Forecast API failed for {city['name']}")
-        return []
+        # CRITICAL: API failed - raise error instead of returning empty list
+        raise Exception(f"Forecast API failed for {city['name']}")
     
     def _fetch_openmeteo_seasonal_forecast(self, city, days):
         """
@@ -138,7 +116,8 @@ class WeatherService:
                 'forecast_days': forecast_days
             }
             
-            response = requests.get(
+            # Use retry session
+            response = _get_session().get(
                 self.openmeteo_seasonal_url,
                 params=params,
                 timeout=30  # Longer timeout for seasonal data
@@ -182,18 +161,22 @@ class WeatherService:
                     })
                 
                 if forecast:
-                    print(f"Seasonal forecast: {len(forecast)} days fetched for {city['name']}")
                     return forecast
                 else:
-                    print(f"Seasonal API returned empty forecast")
-                    return None
+                    raise Exception("Seasonal API returned no daily data")
+            elif response.status_code == 429:
+                # Rate limit - raise error instead of returning None
+                raise Exception("API rate limit exceeded - too many requests")
             else:
-                print(f"Open-Meteo Seasonal API Error: {response.status_code} - {response.text}")
-                return None
+                # Suppress verbose error logging
+                raise Exception(f"Seasonal API returned status code {response.status_code}")
                 
         except Exception as e:
-            print(f"Error fetching Open-Meteo seasonal forecast: {str(e)}")
-            return None
+            error_str = str(e)
+            # Suppress verbose logging for rate limit errors
+            if '429' not in error_str and 'too many' not in error_str.lower():
+                pass  # Log other errors if needed
+            raise
     
     def _fetch_openmeteo_forecast(self, city, days):
         """
@@ -209,7 +192,8 @@ class WeatherService:
                 'forecast_days': days
             }
             
-            response = requests.get(
+            # Use retry session
+            response = _get_session().get(
                 f"{self.openmeteo_base_url}/forecast",
                 params=params,
                 timeout=15
@@ -240,78 +224,23 @@ class WeatherService:
                     })
                 
                 return forecast
+            elif response.status_code == 429:
+                # Rate limit - raise error instead of returning None
+                raise Exception("API rate limit exceeded - too many requests")
             else:
-                print(f"Open-Meteo Forecast API Error: {response.status_code}")
-                return None
+                # Only log non-429 errors if needed
+                raise Exception(f"API returned status code {response.status_code}")
                 
         except Exception as e:
-            print(f"Error fetching Open-Meteo forecast: {str(e)}")
-            return None
+            error_str = str(e)
+            # Suppress verbose logging for rate limit errors
+            if '429' not in error_str and 'too many' not in error_str.lower():
+                pass  # Log other errors if needed
+            raise
     
     def _generate_fallback_forecast(self, city_id, days):
-        """Fallback forecast generation if API fails"""
-        city = self._get_city_config(city_id)
-        if not city:
-            return []
-            
-        # City-specific base temperatures (used only as fallback)
-        city_base_temps = {
-            'chennai': {'day': 33, 'night': 25},
-            'hyderabad': {'day': 32, 'night': 22},
-            'bangalore': {'day': 28, 'night': 19},
-            'visakhapatnam': {'day': 31, 'night': 24},
-            'vijayawada': {'day': 34, 'night': 25},
-            'tirupati': {'day': 33, 'night': 24},
-            'madurai': {'day': 34, 'night': 26},
-            'coimbatore': {'day': 30, 'night': 21},
-            'trichy': {'day': 35, 'night': 26},
-            'nellore': {'day': 33, 'night': 24},
-            'guntur': {'day': 34, 'night': 24},
-            'kurnool': {'day': 35, 'night': 23},
-            'warangal': {'day': 33, 'night': 22},
-            'rajahmundry': {'day': 33, 'night': 24},
-            'kakinada': {'day': 32, 'night': 24},
-            'vijayawada': {'day': 34, 'night': 25}
-        }
-        
-        monthly_variations = {
-            1: {'day': -4, 'night': -5}, 2: {'day': -2, 'night': -3},
-            3: {'day': 2, 'night': 0}, 4: {'day': 5, 'night': 3},
-            5: {'day': 8, 'night': 5}, 6: {'day': 6, 'night': 4},
-            7: {'day': 2, 'night': 2}, 8: {'day': 1, 'night': 1},
-            9: {'day': 1, 'night': 1}, 10: {'day': 0, 'night': 0},
-            11: {'day': -2, 'night': -2}, 12: {'day': -4, 'night': -4}
-        }
-        
-        base = city_base_temps.get(city_id, {'day': 32, 'night': 23})
-        forecast = []
-        
-        for i in range(days):
-            date = datetime.now() + timedelta(days=i)
-            month = date.month
-            variation = monthly_variations[month]
-            
-            random.seed(f"{city_id}_{date.strftime('%Y%m%d')}")
-            daily_noise = random.uniform(-1.5, 1.5)
-            
-            day_temp = base['day'] + variation['day'] + daily_noise
-            night_temp = base['night'] + variation['night'] + daily_noise * 0.7
-            
-            forecast.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'day': date.strftime('%A'),
-                'temperature': round((day_temp + night_temp) / 2, 1),
-                'day_temp': round(day_temp, 1),
-                'night_temp': round(night_temp, 1),
-                'min_temp': round(night_temp - 1, 1),
-                'max_temp': round(day_temp + 2, 1),
-                'humidity': round(random.uniform(50, 80), 1),
-                'source': 'Simulated (API Fallback)',
-                'is_forecast': True
-            })
-        
-        random.seed()
-        return forecast
+        """Fallback forecast generation if API fails - now raises error instead of simulating"""
+        raise Exception("Forecast API unavailable - cannot generate simulated data")
     
     def get_historical_data(self, city_id, days=30):
         """
@@ -333,9 +262,8 @@ class WeatherService:
         if historical:
             return historical
         
-        # CRITICAL: API failed - return empty list to force error handling
-        print(f"⚠️ CRITICAL: Historical API failed for {city['name']}")
-        return []
+        # CRITICAL: API failed - raise error instead of returning empty list
+        raise Exception(f"Historical API failed for {city['name']}")
     
     def _fetch_openmeteo_historical(self, city, days):
         """
@@ -355,7 +283,8 @@ class WeatherService:
                 'timezone': 'Asia/Kolkata'
             }
             
-            response = requests.get(
+            # Use retry session
+            response = _get_session().get(
                 "https://archive-api.open-meteo.com/v1/archive",
                 params=params,
                 timeout=15
@@ -383,40 +312,23 @@ class WeatherService:
                     })
                 
                 return historical
+            elif response.status_code == 429:
+                # Rate limit - raise error instead of returning None
+                raise Exception("API rate limit exceeded - too many requests")
             else:
-                print(f"Open-Meteo Archive API Error: {response.status_code}")
-                return None
+                # Suppress verbose error logging
+                raise Exception(f"Historical API returned status code {response.status_code}")
                 
         except Exception as e:
-            print(f"Error fetching Open-Meteo historical: {str(e)}")
-            return None
+            error_str = str(e)
+            # Suppress verbose logging for rate limit errors
+            if '429' not in error_str and 'too many' not in error_str.lower():
+                pass  # Log other errors if needed
+            raise
     
     def _generate_fallback_historical(self, city_id, days):
-        """Fallback historical data if API fails"""
-        city = self._get_city_config(city_id)
-        if not city:
-            return []
-            
-        historical = []
-        base_temp = random.uniform(30, 36)
-        
-        for i in range(days, 0, -1):
-            date = datetime.now() - timedelta(days=i)
-            temp_variation = random.uniform(-4, 4)
-            day_temp = base_temp + temp_variation + random.uniform(2, 4)
-            night_temp = base_temp + temp_variation - random.uniform(3, 5)
-            
-            historical.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'temperature': round(base_temp + temp_variation, 1),
-                'day_temp': round(day_temp, 1),
-                'night_temp': round(night_temp, 1),
-                'min_temp': round(night_temp - 1, 1),
-                'max_temp': round(day_temp + 2, 1),
-                'source': 'Simulated (API Fallback)'
-            })
-            
-        return historical
+        """Fallback historical data if API fails - now raises error instead of simulating"""
+        raise Exception("Historical API unavailable - cannot generate simulated data")
     
     def get_monthly_averages(self, city_id, year):
         """
@@ -468,7 +380,8 @@ class WeatherService:
                 'timezone': 'Asia/Kolkata'
             }
             
-            response = requests.get(
+            # Use retry session
+            response = _get_session().get(
                 "https://archive-api.open-meteo.com/v1/archive",
                 params=params,
                 timeout=30
@@ -479,7 +392,7 @@ class WeatherService:
                 daily = data.get('daily', {})
                 
                 if not daily or 'time' not in daily:
-                    return self._generate_fallback_monthly(year, current_year, current_month)
+                    return [] # No data
                 
                 # Group data by month
                 monthly_temps = {}
@@ -531,70 +444,146 @@ class WeatherService:
                 
                 return monthly_data
             else:
-                print(f"Open-Meteo Archive API Error for {year}: {response.status_code}")
-                return self._generate_fallback_monthly(year, current_year, current_month)
+                raise Exception(f"Open-Meteo Archive API Error for {year}: {response.status_code}")
                 
         except Exception as e:
-            print(f"Error fetching yearly data for {year}: {str(e)}")
-            return self._generate_fallback_monthly(year, current_year, current_month)
+            raise Exception(f"Error fetching yearly data for {year}: {str(e)}")
     
     def _generate_fallback_monthly(self, year, current_year, current_month):
-        """Generate fallback monthly data when API fails"""
-        # South India climate-based estimates
-        base_temps = {
-            1: {'day': 29, 'night': 21}, 2: {'day': 31, 'night': 22},
-            3: {'day': 33, 'night': 24}, 4: {'day': 35, 'night': 26},
-            5: {'day': 38, 'night': 28}, 6: {'day': 36, 'night': 27},
-            7: {'day': 34, 'night': 25}, 8: {'day': 33, 'night': 25},
-            9: {'day': 33, 'night': 24}, 10: {'day': 32, 'night': 24},
-            11: {'day': 30, 'night': 23}, 12: {'day': 29, 'night': 21}
-        }
-        
-        monthly_data = []
-        for month in range(1, 13):
-            if year == current_year and month > current_month:
-                monthly_data.append({
-                    'month': month,
-                    'month_name': datetime(year, month, 1).strftime('%b'),
-                    'avg_day_temp': None,
-                    'avg_night_temp': None,
-                    'source': None,
-                    'is_forecast': False
-                })
-            else:
-                temps = base_temps[month]
-                monthly_data.append({
-                    'month': month,
-                    'month_name': datetime(year, month, 1).strftime('%b'),
-                    'avg_day_temp': temps['day'],
-                    'avg_night_temp': temps['night'],
-                    'source': 'Climate Estimate',
-                    'is_forecast': False
-                })
-        return monthly_data
+        """Generate fallback monthly data when API fails - now raises error instead of simulating"""
+        raise Exception("Monthly data API unavailable - cannot generate simulated data")
     
     def get_all_cities_current(self):
-        """Get current weather for all configured cities (parallel fetching)"""
+        """
+        Get current weather for all configured cities using Open-Meteo batch API.
+        OPTIMIZED: Single HTTP request for all 60 cities instead of 60 individual calls.
+        Open-Meteo supports comma-separated lat/lon for multi-location queries.
+        Falls back to parallel individual calls if batch fails.
+        """
+        cities = Config.CITIES
+        t_start = time.time()
+
+        # Try batch API first (single request for all cities)
+        cities_data = self._fetch_batch_current(cities)
+
+        if cities_data and len(cities_data) >= len(cities) * 0.5:
+            elapsed = time.time() - t_start
+            print(f"[Weather] Batch fetched {len(cities_data)}/{len(cities)} cities in {elapsed:.1f}s")
+            return cities_data
+
+        # Fallback: parallel individual calls if batch failed
+        print("[Weather] Batch failed, falling back to parallel individual calls...")
         cities_data = []
 
         def fetch_city(city):
-            data = self.get_current_weather(city['id'])
-            if data:
-                data['lat'] = city['lat']
-                data['lon'] = city['lon']
-            return data
+            try:
+                time.sleep(random.uniform(0.02, 0.08))
+                data = self.get_current_weather(city['id'])
+                if data:
+                    data['lat'] = city['lat']
+                    data['lon'] = city['lon']
+                return data
+            except Exception:
+                return None
 
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            futures = {executor.submit(fetch_city, city): city for city in Config.CITIES}
-            for future in as_completed(futures):
+        with ThreadPoolExecutor(max_workers=15) as executor:
+            future_to_city = {executor.submit(fetch_city, city): city for city in cities}
+            for future in as_completed(future_to_city, timeout=90):
                 try:
-                    data = future.result()
+                    data = future.result(timeout=15)
                     if data:
                         cities_data.append(data)
-                except Exception as e:
-                    print(f"Error fetching city weather: {e}")
+                except Exception:
+                    continue
 
+        elapsed = time.time() - t_start
+        print(f"[Weather] Fallback fetched {len(cities_data)}/{len(cities)} cities in {elapsed:.1f}s")
         return cities_data
+
+    def _fetch_batch_current(self, cities):
+        """
+        Fetch current weather for multiple cities in a single Open-Meteo API call.
+        Open-Meteo supports comma-separated latitude/longitude for batch queries.
+        Returns list of city weather dicts, or None on failure.
+        """
+        try:
+            # Build comma-separated lat/lon strings
+            lats = ','.join(str(c['lat']) for c in cities)
+            lons = ','.join(str(c['lon']) for c in cities)
+
+            params = {
+                'latitude': lats,
+                'longitude': lons,
+                'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
+                'daily': 'temperature_2m_max,temperature_2m_min',
+                'timezone': 'Asia/Kolkata',
+                'forecast_days': 1
+            }
+
+            response = _get_session().get(
+                f"{self.openmeteo_base_url}/forecast",
+                params=params,
+                timeout=30
+            )
+
+            if response.status_code != 200:
+                print(f"[Weather] Batch API returned {response.status_code}")
+                return None
+
+            results = response.json()
+
+            # Single city returns a dict, multiple cities returns a list
+            if isinstance(results, dict) and 'current' in results:
+                # Single result — wrap in list
+                results = [results]
+
+            if not isinstance(results, list):
+                print(f"[Weather] Unexpected batch response type: {type(results)}")
+                return None
+
+            cities_data = []
+            for i, data in enumerate(results):
+                if i >= len(cities):
+                    break
+                city = cities[i]
+                try:
+                    current = data.get('current', {})
+                    daily = data.get('daily', {})
+
+                    if not current or not daily:
+                        continue
+
+                    current_temp = current.get('temperature_2m')
+                    day_temp = daily.get('temperature_2m_max', [None])[0]
+                    night_temp = daily.get('temperature_2m_min', [None])[0]
+
+                    if current_temp is None:
+                        continue
+
+                    cities_data.append({
+                        'city_id': city['id'],
+                        'city_name': city['name'],
+                        'state': city['state'],
+                        'lat': city['lat'],
+                        'lon': city['lon'],
+                        'temperature': round(current_temp, 1),
+                        'day_temp': round(day_temp, 1) if day_temp is not None else round(current_temp + 2, 1),
+                        'night_temp': round(night_temp, 1) if night_temp is not None else round(current_temp - 5, 1),
+                        'humidity': round(current.get('relative_humidity_2m', 60), 1),
+                        'feels_like': round(current.get('apparent_temperature', current_temp), 1),
+                        'wind_speed': round(current.get('wind_speed_10m', 0), 1),
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'Open-Meteo'
+                    })
+                except Exception as e:
+                    print(f"[Weather] Batch parse error for {city['name']}: {e}")
+                    continue
+
+            return cities_data if cities_data else None
+
+        except Exception as e:
+            print(f"[Weather] Batch API error: {e}")
+            return None
     
     def _get_city_config(self, city_id):
         """Get city configuration by ID"""
@@ -603,57 +592,88 @@ class WeatherService:
                 return city
         return None
     
+
     def _fetch_openmeteo_current(self, city):
         """
         Fetch current weather from Open-Meteo API
         FREE - No API key required, unlimited calls!
-        Best coverage for global data
+        Uses retry session with exponential backoff for reliability
+        Handles 429 rate limit errors gracefully with longer delays
+        Adds detailed logging for debugging failures.
         """
-        try:
-            params = {
-                'latitude': city['lat'],
-                'longitude': city['lon'],
-                'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
-                'daily': 'temperature_2m_max,temperature_2m_min',
-                'timezone': 'Asia/Kolkata',
-                'forecast_days': 1
-            }
-            
-            response = requests.get(
-                f"{self.openmeteo_base_url}/forecast",
-                params=params,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                current = data['current']
-                daily = data['daily']
-                
-                current_temp = current['temperature_2m']
-                day_temp = daily['temperature_2m_max'][0]
-                night_temp = daily['temperature_2m_min'][0]
-                
-                return {
-                    'city_id': city['id'],
-                    'city_name': city['name'],
-                    'state': city['state'],
-                    'temperature': round(current_temp, 1),
-                    'day_temp': round(day_temp, 1),
-                    'night_temp': round(night_temp, 1),
-                    'humidity': round(current['relative_humidity_2m'], 1),
-                    'feels_like': round(current['apparent_temperature'], 1),
-                    'wind_speed': round(current['wind_speed_10m'], 1),
-                    'timestamp': datetime.now().isoformat(),
-                    'source': 'Open-Meteo'
+        max_retries = 2
+        base_delay = 2.0
+        for attempt in range(max_retries + 1):
+            try:
+                session = _get_session()
+                params = {
+                    'latitude': city['lat'],
+                    'longitude': city['lon'],
+                    'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
+                    'daily': 'temperature_2m_max,temperature_2m_min',
+                    'timezone': 'Asia/Kolkata',
+                    'forecast_days': 1
                 }
-            else:
-                print(f"Open-Meteo API Error: {response.status_code}")
+                if attempt > 0:
+                    print(f"[Open-Meteo] Retry {attempt+1} for {city['name']}")
+                response = session.get(
+                    f"{self.openmeteo_base_url}/forecast",
+                    params=params,
+                    timeout=15
+                )
+                # Only log non-200 status codes
+                if response.status_code != 200:
+                    print(f"[Open-Meteo] Status {response.status_code} for {city['name']}")
+                if response.status_code == 429:
+                    print(f"[Open-Meteo] 429 Rate limit for {city['name']} (attempt {attempt+1})")
+                    if attempt < max_retries:
+                        wait_time = base_delay * (2 ** attempt)
+                        print(f"[Open-Meteo] Waiting {wait_time}s before retry...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print(f"[Open-Meteo] Max retries reached for {city['name']}")
+                        raise Exception("API rate limit exceeded - too many requests")
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        # Success — logged in summary by get_all_cities_current
+                        current = data['current']
+                        daily = data['daily']
+                        current_temp = current['temperature_2m']
+                        day_temp = daily['temperature_2m_max'][0]
+                        night_temp = daily['temperature_2m_min'][0]
+                        return {
+                            'city_id': city['id'],
+                            'city_name': city['name'],
+                            'state': city['state'],
+                            'temperature': round(current_temp, 1),
+                            'day_temp': round(day_temp, 1),
+                            'night_temp': round(night_temp, 1),
+                            'humidity': round(current['relative_humidity_2m'], 1),
+                            'feels_like': round(current['apparent_temperature'], 1),
+                            'wind_speed': round(current['wind_speed_10m'], 1),
+                            'timestamp': datetime.now().isoformat(),
+                            'source': 'Open-Meteo'
+                        }
+                    except Exception as parse_exc:
+                        print(f"[Open-Meteo] JSON parse error for {city['name']}: {parse_exc}")
+                        print(f"[Open-Meteo] Raw response: {response.text}")
+                        raise
+                else:
+                    print(f"[Open-Meteo] Non-200 status for {city['name']}: {response.status_code}")
+                    print(f"[Open-Meteo] Response text: {response.text}")
+                    raise Exception(f"Open-Meteo API returned status code {response.status_code}")
+            except Exception as e:
+                print(f"[Open-Meteo] Exception for {city['name']}: {e}")
+                if attempt < max_retries:
+                    wait_time = base_delay * (2 ** attempt)
+                    print(f"[Open-Meteo] Retrying {city['name']} in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                print(f"[Open-Meteo] All attempts failed for {city['name']}")
                 return None
-                
-        except Exception as e:
-            print(f"Error fetching Open-Meteo data: {str(e)}")
-            return None
+        return None
     
     def _fetch_openweather_current(self, city):
         """
@@ -702,12 +722,10 @@ class WeatherService:
                     'source': 'OpenWeatherMap'
                 }
             else:
-                print(f"OpenWeatherMap API Error: {response.status_code} - {response.text}")
-                return None
+                raise Exception(f"OpenWeatherMap API Error: {response.status_code} - {response.text}")
                 
         except Exception as e:
-            print(f"Error fetching OpenWeatherMap data: {str(e)}")
-            return None
+            raise Exception(f"Error fetching OpenWeatherMap data: {str(e)}")
     
     def _fetch_openweather_forecast(self, city):
         """
@@ -740,63 +758,14 @@ class WeatherService:
             print(f"Error fetching forecast: {str(e)}")
             return None
     
-    def _fetch_openmeteo_current(self, city):
-        """
-        Fetch current weather from Open-Meteo API (FREE, NO API KEY!)
-        Unlimited calls, no registration required
-        """
-        try:
-            params = {
-                'latitude': city['lat'],
-                'longitude': city['lon'],
-                'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
-                'daily': 'temperature_2m_max,temperature_2m_min',
-                'timezone': 'Asia/Kolkata',
-                'forecast_days': 1
-            }
-            
-            response = requests.get(
-                f"{self.openmeteo_base_url}/forecast",
-                params=params,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                current = data['current']
-                daily = data['daily']
-                
-                current_temp = current['temperature_2m']
-                day_temp = daily['temperature_2m_max'][0]
-                night_temp = daily['temperature_2m_min'][0]
-                
-                return {
-                    'city_id': city['id'],
-                    'city_name': city['name'],
-                    'state': city['state'],
-                    'temperature': round(current_temp, 1),
-                    'day_temp': round(day_temp, 1),
-                    'night_temp': round(night_temp, 1),
-                    'humidity': round(current['relative_humidity_2m'], 1),
-                    'feels_like': round(current['apparent_temperature'], 1),
-                    'wind_speed': round(current['wind_speed_10m'], 1),
-                    'timestamp': datetime.now().isoformat(),
-                    'source': 'Open-Meteo'
-                }
-            else:
-                print(f"Open-Meteo API Error: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            print(f"Error fetching Open-Meteo data: {str(e)}")
-            return None
+    # NOTE: Duplicate _fetch_openmeteo_current removed — single implementation above (with retry session)
     
     def _fetch_imd_current(self, city):
         """
         Fetch weather from IMD API (if you have access)
         """
         if not self.imd_api_key:
-            return None
+            raise Exception("IMD API key not configured")
             
         try:
             headers = {'Authorization': f'Bearer {self.imd_api_key}'}
@@ -829,9 +798,7 @@ class WeatherService:
                     'source': 'IMD'
                 }
             else:
-                print(f"IMD API Error: {response.status_code}")
-                return None
+                raise Exception(f"IMD API Error: {response.status_code}")
                 
         except Exception as e:
-            print(f"Error calling IMD API: {str(e)}")
-            return None
+            raise Exception(f"Error calling IMD API: {str(e)}")

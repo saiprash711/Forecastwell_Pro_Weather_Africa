@@ -4,6 +4,14 @@ Handles threshold monitoring and demand acceleration/de-acceleration triggers
 Per ForecastWell Guide: Night temperature is MORE important than day temperature!
 Enhanced: DSB methodology, heat wave alerts, service demand predictions
 """
+import sys
+# Fix Windows console encoding for emoji
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 from datetime import datetime
 from config import Config
 
@@ -198,9 +206,15 @@ class AlertEngine:
         alerts = []
         
         for city_data in cities_weather_data:
+            # Skip cities with no temperature data (API unavailable)
+            temp = city_data.get('temperature')
+            day_temp = city_data.get('day_temp') or temp
+            night_temp = city_data.get('night_temp') or (temp - 5 if temp is not None else None)
+            if day_temp is None or night_temp is None:
+                continue
             alert = self.analyze_temperature(
-                city_data.get('day_temp', city_data['temperature']),
-                city_data.get('night_temp', city_data['temperature'] - 5),
+                day_temp,
+                night_temp,
                 city_data['city_name'],
                 city_data['city_id']
             )

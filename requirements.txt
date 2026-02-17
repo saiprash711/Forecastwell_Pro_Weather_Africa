@@ -11,3 +11,8 @@ gunicorn==21.2.0
 reportlab==4.0.7
 
 supabase>=2.28.0
+APScheduler==3.10.4
+
+# Asset minification for faster loading
+rjsmin>=1.2.0
+rcssmin>=1.1.0

@@ -5,13 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ForecastWell Pro - Premium Weather Intelligence Dashboard</title>
+    
+    <!-- DNS Prefetch for faster third-party resources -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://unpkg.com">
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 
-    <!-- Google Fonts -->
+    <!-- Google Fonts (preconnect for faster loading) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@500;700&display=swap"
         rel="stylesheet">
@@ -22,25 +31,25 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-    <script
+    <!-- Custom CSS (minified with cache busting) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.min.css') }}?v={{ cache_version }}">
+
+    <!-- Animate.css (non-critical — load async) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" media="print" onload="this.media='all'" />
+
+    <!-- Chart.js + Leaflet (needed before DOMContentLoaded, but defer parse) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script defer
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Animate.css -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
-
-    <!-- SheetJS for Excel -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-
-    <!-- jsPDF for PDF Export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- SheetJS + jsPDF (only needed for export — load async, non-blocking) -->
+    <script async src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Performance: Preload critical assets -->
+    <link rel="preload" href="{{ url_for('static', filename='css/style.min.css') }}?v={{ cache_version }}" as="style">
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js">
 </head>
 
 <body class="light-mode">
@@ -118,6 +127,11 @@
 
     <!-- Main Content -->
     <main class="main-content">
+        <!-- Stale Data Warning Banner (shown when live refresh is pending) -->
+        <div id="staleBanner" class="stale-banner" style="display:none;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span id="staleBannerText">Weather data is being refreshed...</span>
+        </div>
         <!-- Top Header Bar -->
         <header class="top-header">
             <div class="header-left">
@@ -232,16 +246,7 @@
                             </div>
                         </div>
 
-                        <div class="stat-card glass-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-calendar-alt"></i>
-                            </div>
-                            <div class="stat-content">
-                                <span class="stat-label">Days to Peak</span>
-                                <span class="stat-value stat-value-loading" id="daysToPeak">Loading...</span>
-                            </div>
-                            <div class="countdown-ring" id="countdownRing"></div>
-                        </div>
+
                     </section>
 
                     <!-- Wave Sequence Section -->
@@ -319,6 +324,29 @@
                                 <button class="view-btn" data-view="list"><i class="fas fa-list"></i></button>
                             </div>
                         </div>
+
+                        <!-- NEW: Filter Bar -->
+                        <div class="cities-filter-bar">
+                            <div class="cities-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="cityGridSearch" placeholder="Filter cities...">
+                            </div>
+                            <div class="cities-zone-filter">
+                                <select id="cityGridZoneFilter">
+                                    <option value="all">All Zones</option>
+                                    <option value="Coastal Humid Zone">Coastal Humid</option>
+                                    <option value="Extreme Heat Zone">Extreme Heat</option>
+                                    <option value="Moderate Plateau Zone">Moderate Plateau</option>
+                                    <option value="Dry Heat Zone">Dry Heat</option>
+                                    <option value="Humid Heat Zone">Humid Heat</option>
+                                    <option value="Indo-Gangetic Heat Zone">Indo-Gangetic</option>
+                                    <option value="North Plains Heat Zone">North Plains</option>
+                                    <option value="Manufacturing Hub">Manufacturing Hub</option>
+                                    <option value="Tropical Wet Zone">Tropical Wet</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div id="citiesGrid" class="cities-grid">
                             <div class="skeleton-cities-grid">
                                 <div class="skeleton-card"></div>
@@ -329,6 +357,13 @@
                                 <div class="skeleton-card"></div>
                             </div>
                         </div>
+
+                        <!-- NEW: Show More Button -->
+                        <div class="show-more-container">
+                            <button id="citiesShowMoreBtn" class="show-more-btn">
+                                Show More <i class="fas fa-chevron-down"></i>
+                            </button>
+                        </div>
                     </section>
 
                     <!-- Weekly Summary Section -->
@@ -336,6 +371,28 @@
                         <div class="section-header">
                             <h2><i class="fas fa-calendar-week"></i> 7-Day Outlook</h2>
                             <span class="section-subtitle">Weekly forecast summary by city</span>
+                        </div>
+
+                        <!-- 7-Day Outlook Filter Bar -->
+                        <div class="cities-filter-bar">
+                            <div class="cities-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="weeklySearch" placeholder="Filter cities...">
+                            </div>
+                            <div class="cities-zone-filter">
+                                <select id="weeklyZoneFilter">
+                                    <option value="all">All Zones</option>
+                                    <option value="Coastal Humid Zone">Coastal Humid</option>
+                                    <option value="Extreme Heat Zone">Extreme Heat</option>
+                                    <option value="Moderate Plateau Zone">Moderate Plateau</option>
+                                    <option value="Dry Heat Zone">Dry Heat</option>
+                                    <option value="Humid Heat Zone">Humid Heat</option>
+                                    <option value="Indo-Gangetic Heat Zone">Indo-Gangetic</option>
+                                    <option value="North Plains Heat Zone">North Plains</option>
+                                    <option value="Manufacturing Hub">Manufacturing Hub</option>
+                                    <option value="Tropical Wet Zone">Tropical Wet</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="weekly-grid" id="weeklyContainer">
                             <div class="loading-shimmer"></div>
@@ -351,8 +408,10 @@
                             <h2><i class="fas fa-chart-bar"></i> Demand Prediction by City</h2>
                             <span class="section-subtitle">Confidence-based demand forecasting</span>
                         </div>
-                        <div class="demand-prediction-grid" id="demandPredictionContainer">
-                            <div class="loading-shimmer"></div>
+                        <div class="scrollable-card-grid">
+                            <div class="demand-prediction-grid" id="demandPredictionContainer">
+                                <div class="loading-shimmer"></div>
+                            </div>
                         </div>
                     </section>
 
@@ -362,8 +421,10 @@
                             <h2><i class="fas fa-bolt"></i> Energy Consumption Estimates</h2>
                             <span class="section-subtitle">AC usage and electricity cost projections</span>
                         </div>
-                        <div class="energy-grid" id="energyContainer">
-                            <div class="loading-shimmer"></div>
+                        <div class="scrollable-card-grid">
+                            <div class="energy-grid" id="energyContainer">
+                                <div class="loading-shimmer"></div>
+                            </div>
                         </div>
                     </section>
 
@@ -998,16 +1059,6 @@
 
                 <!-- Key Business Metrics -->
                 <div class="insights-hero-cards">
-                    <div class="insight-hero-card glass-card gradient-red">
-                        <div class="hero-icon"><i class="fas fa-fire"></i></div>
-                        <div class="hero-content">
-                            <h3>Peak Season Alert</h3>
-                            <div class="hero-value" id="daysToPeakValue">--</div>
-                            <p>Days until peak demand</p>
-                        </div>
-                        <span class="trend-badge up" id="peakTrendBadge">Heating Fast</span>
-                    </div>
-
                     <div class="insight-hero-card glass-card gradient-blue">
                         <div class="hero-icon"><i class="fas fa-chart-line"></i></div>
                         <div class="hero-content">
@@ -1111,265 +1162,460 @@
             <div class="page" id="demand-intelPage">
                 <div class="page-loader" id="demandIntelLoader">
                     <div class="loader-spinner"></div>
-                    <div class="loader-text">Loading Demand Intelligence</div>
-                    <div class="loader-subtext">Fetching DSB zones, correlations & predictions...</div>
+                    <div class="loader-text">Loading Intelligence</div>
+                    <div class="loader-subtext">Synthesizing DSB zones, weather patterns & demand...</div>
                 </div>
-                <div class="page-header" style="display:none" id="demandIntelContent">
-                    <h1><i class="fas fa-bolt"></i> Demand Intelligence Hub</h1>
-                    <div style="display:flex; align-items:center; gap:12px">
-                        <p style="margin:0">DSB methodology, demand correlation, service predictions & refresh cadence
-                        </p>
-                        <button id="alertsButton" class="btn btn-sm"
-                            style="margin-left:12px; display:flex; align-items:center; gap:8px;">🔔 Alerts <span
-                                id="alertsCount" class="badge"
-                                style="background:#dc3545;color:#fff;border-radius:999px;padding:2px 8px;display:inline-block;">0</span></button>
+
+                <div class="page-header demand-intel-header" style="display:none" id="demandIntelContent">
+                    <div class="header-content">
+                        <h1><i class="fas fa-bolt"></i> Demand Intelligence Command Center</h1>
+                        <p>Real-time HVAC demand analytics powered by weather intelligence across all markets</p>
+                    </div>
+                    <div class="header-actions">
+                        <button id="alertsButton" class="btn-glass-alert">
+                            <i class="fas fa-bell"></i>
+                            <span class="btn-text">Alerts</span>
+                            <span id="alertsCount" class="badge-pill hidden">0</span>
+                        </button>
                     </div>
                 </div>
 
-                <!-- Refresh Cadence Bar -->
-                <div class="refresh-cadence-bar glass-card">
-                    <div class="cadence-item" id="cadenceWeather">
-                        <span class="cadence-icon">☁️</span>
-                        <span class="cadence-label">Weather</span>
-                        <span class="cadence-value">Daily</span>
-                    </div>
-                    <div class="cadence-divider"></div>
-                    <div class="cadence-item" id="cadenceDemand">
-                        <span class="cadence-icon">📊</span>
-                        <span class="cadence-label">Demand</span>
-                        <span class="cadence-value">Weekly</span>
-                    </div>
-                    <div class="cadence-divider"></div>
-                    <div class="cadence-item" id="cadenceAccuracy">
-                        <span class="cadence-icon">✅</span>
-                        <span class="cadence-label">Accuracy</span>
-                        <span class="cadence-value">Monthly (87%)</span>
-                    </div>
-                </div>
+                <!-- Executive Summary Banner -->
+                <section class="di-summary-banner animate__animated animate__fadeIn" id="demandIntelSummary">
+                    <div class="di-summary-icon"><i class="fas fa-satellite-dish"></i></div>
+                    <p class="intel-summary-text" id="intelSummaryText">Loading...</p>
+                    <div class="di-summary-timestamp" id="diSummaryTime"></div>
+                </section>
 
-                <!-- DSB Overview Section -->
-                <section class="dsb-overview glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-traffic-light"></i> DSB Alert Zones</h2>
-                        <span class="section-subtitle">Green → Amber → Red methodology</span>
-                    </div>
-                    <div class="dsb-summary" id="dsbSummary">
-                        <div class="dsb-zone-card green">
-                            <div class="dsb-icon">🟢</div>
-                            <div class="dsb-info">
-                                <h4>Green — Normal</h4>
-                                <span class="dsb-count" id="dsbGreenCount">0</span>
-                                <p>Normal stocking</p>
-                            </div>
+                <!-- Hero KPI Ring Cards -->
+                <section class="di-kpi-rings animate__animated animate__fadeIn" id="demandIntelKpis">
+                    <div class="di-kpi-ring-card di-kpi-critical">
+                        <div class="di-ring-wrap">
+                            <svg class="di-ring-svg" viewBox="0 0 120 120">
+                                <circle class="di-ring-bg" cx="60" cy="60" r="52" />
+                                <circle class="di-ring-progress di-ring-red" cx="60" cy="60" r="52" id="diRingRed" />
+                            </svg>
+                            <div class="di-ring-value" id="intelKpiRed">0</div>
                         </div>
-                        <div class="dsb-zone-card amber">
-                            <div class="dsb-icon">🟡</div>
-                            <div class="dsb-info">
-                                <h4>Amber — Pre-Position</h4>
-                                <span class="dsb-count" id="dsbAmberCount">0</span>
-                                <p>Additional inventory</p>
-                            </div>
-                        </div>
-                        <div class="dsb-zone-card red">
-                            <div class="dsb-icon">🔴</div>
-                            <div class="dsb-info">
-                                <h4>Red — Emergency</h4>
-                                <span class="dsb-count" id="dsbRedCount">0</span>
-                                <p>Emergency replenishment</p>
-                            </div>
+                        <div class="di-kpi-meta">
+                            <span class="di-kpi-title">Critical</span>
+                            <span class="di-kpi-sub">Push Now — 50-60%</span>
                         </div>
                     </div>
-                    <div class="dsb-city-list" id="dsbCityList">
-                        <!-- Generated dynamically -->
+                    <div class="di-kpi-ring-card di-kpi-accelerate">
+                        <div class="di-ring-wrap">
+                            <svg class="di-ring-svg" viewBox="0 0 120 120">
+                                <circle class="di-ring-bg" cx="60" cy="60" r="52" />
+                                <circle class="di-ring-progress di-ring-amber" cx="60" cy="60" r="52" id="diRingAmber" />
+                            </svg>
+                            <div class="di-ring-value" id="intelKpiAmber">0</div>
+                        </div>
+                        <div class="di-kpi-meta">
+                            <span class="di-kpi-title">Accelerate</span>
+                            <span class="di-kpi-sub">Pre-Position — 30-40%</span>
+                        </div>
+                    </div>
+                    <div class="di-kpi-ring-card di-kpi-monitor">
+                        <div class="di-ring-wrap">
+                            <svg class="di-ring-svg" viewBox="0 0 120 120">
+                                <circle class="di-ring-bg" cx="60" cy="60" r="52" />
+                                <circle class="di-ring-progress di-ring-green" cx="60" cy="60" r="52" id="diRingGreen" />
+                            </svg>
+                            <div class="di-ring-value" id="intelKpiGreen">0</div>
+                        </div>
+                        <div class="di-kpi-meta">
+                            <span class="di-kpi-title">Monitor</span>
+                            <span class="di-kpi-sub">Normal Stocking</span>
+                        </div>
+                    </div>
+                    <div class="di-kpi-ring-card di-kpi-total">
+                        <div class="di-ring-wrap">
+                            <svg class="di-ring-svg" viewBox="0 0 120 120">
+                                <circle class="di-ring-bg" cx="60" cy="60" r="52" />
+                                <circle class="di-ring-progress di-ring-purple" cx="60" cy="60" r="52" id="diRingTotal" />
+                            </svg>
+                            <div class="di-ring-value" id="intelKpiTotal">0</div>
+                        </div>
+                        <div class="di-kpi-meta">
+                            <span class="di-kpi-title">Total Markets</span>
+                            <span class="di-kpi-sub">All Cities Tracked</span>
+                        </div>
                     </div>
                 </section>
 
-                <!-- Advanced Weather & Monsoon Row -->
-                <div class="demand-intel-two-col">
-                    <!-- Advanced Weather Parameters -->
-                    <section class="glass-card animate__animated animate__fadeInUp">
+                <!-- Live Metrics Ticker -->
+                <section class="di-metrics-ticker animate__animated animate__fadeIn">
+                    <div class="di-ticker-item">
+                        <i class="fas fa-thermometer-full"></i>
+                        <span>Peak Day: <strong id="diTickerPeakDay">--</strong></span>
+                    </div>
+                    <div class="di-ticker-divider"></div>
+                    <div class="di-ticker-item">
+                        <i class="fas fa-moon"></i>
+                        <span>Peak Night: <strong id="diTickerPeakNight">--</strong></span>
+                    </div>
+                    <div class="di-ticker-divider"></div>
+                    <div class="di-ticker-item">
+                        <i class="fas fa-snowflake"></i>
+                        <span>Avg AC Hours: <strong id="diTickerAcHours">--</strong></span>
+                    </div>
+                    <div class="di-ticker-divider"></div>
+                    <div class="di-ticker-item">
+                        <i class="fas fa-tint"></i>
+                        <span>Wet Bulb: <strong id="diTickerWetBulb">--</strong></span>
+                    </div>
+                    <div class="di-ticker-divider"></div>
+                    <div class="di-ticker-item">
+                        <i class="fas fa-water"></i>
+                        <span>Avg Humidity: <strong id="diTickerHumidity">--</strong></span>
+                    </div>
+                    <div class="di-ticker-divider"></div>
+                    <div class="di-ticker-item">
+                        <i class="fas fa-bolt"></i>
+                        <span>Peak Demand: <strong id="diTickerPeakDemand">--</strong></span>
+                    </div>
+                </section>
+
+                <!-- Charts Row 1: Demand Ranking + Zone Distribution -->
+                <div class="di-charts-row animate__animated animate__fadeInUp">
+                    <section class="di-chart-card glass-card di-chart-wide">
                         <div class="section-header">
-                            <h2><i class="fas fa-temperature-high"></i> Advanced Weather</h2>
-                            <span class="section-subtitle">Wet bulb, heatwave, monsoon</span>
+                            <h2><i class="fas fa-ranking-star"></i> City Demand Ranking</h2>
+                            <span class="section-subtitle">All cities sorted by demand index</span>
                         </div>
-                        <div class="advanced-weather-grid" id="advancedWeatherGrid">
-                            <!-- Generated dynamically -->
+                        <div class="di-chart-container">
+                            <canvas id="diDemandRankingChart"></canvas>
                         </div>
                     </section>
-
-                    <!-- Monsoon Timeline -->
-                    <section class="glass-card animate__animated animate__fadeInUp">
+                    <section class="di-chart-card glass-card di-chart-narrow">
                         <div class="section-header">
-                            <h2><i class="fas fa-cloud-rain"></i> Monsoon Timeline</h2>
+                            <h2><i class="fas fa-chart-pie"></i> Zone Distribution</h2>
+                            <span class="section-subtitle">Market allocation breakdown</span>
                         </div>
-                        <div class="monsoon-status" id="monsoonStatus">
-                            <!-- Generated dynamically -->
+                        <div class="di-chart-container-sm">
+                            <canvas id="diZoneDonutChart"></canvas>
+                        </div>
+                        <div class="di-zone-legend" id="diZoneLegend"></div>
+                    </section>
+                </div>
+
+                <!-- Business Decision Cards -->
+                <section class="demand-intel-decisions animate__animated animate__fadeInUp">
+                    <h2 class="intel-section-title"><i class="fas fa-chess-king"></i> Business Decisions at a Glance</h2>
+                    <div class="decision-cards-grid">
+                        <div class="decision-card decision-push glass-card">
+                            <div class="decision-card-header">
+                                <i class="fas fa-box-open"></i>
+                                <h3>Where to Push Inventory</h3>
+                            </div>
+                            <p class="decision-desc">Markets with extreme heat or hot nights — maximize stock and service capacity.</p>
+                            <div class="decision-list" id="decisionPushList"><span class="muted">Loading...</span></div>
+                            <div class="decision-footer">
+                                <span class="allocation-badge">Recommended: 50–60% of regional allocation</span>
+                            </div>
+                        </div>
+                        <div class="decision-card decision-accelerate glass-card">
+                            <div class="decision-card-header">
+                                <i class="fas fa-shipping-fast"></i>
+                                <h3>Where to Accelerate</h3>
+                            </div>
+                            <p class="decision-desc">Pre-position inventory; demand likely to rise in 1–2 weeks.</p>
+                            <div class="decision-list" id="decisionAccelerateList"><span class="muted">Loading...</span></div>
+                            <div class="decision-footer">
+                                <span class="allocation-badge">Recommended: 30–40% of regional allocation</span>
+                            </div>
+                        </div>
+                        <div class="decision-card decision-metrics glass-card">
+                            <div class="decision-card-header">
+                                <i class="fas fa-tachometer-alt"></i>
+                                <h3>Key Metrics</h3>
+                            </div>
+                            <div class="decision-metrics-grid" id="decisionMetricsGrid">
+                                <div class="metric-item">
+                                    <span class="metric-label">Avg AC Hours</span>
+                                    <span class="metric-value" id="intelMetricAcHours">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Heat Stress (Wet Bulb)</span>
+                                    <span class="metric-value" id="intelMetricWetBulb">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Peak Demand Index</span>
+                                    <span class="metric-value" id="intelMetricPeakDemand">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Avg Humidity</span>
+                                    <span class="metric-value" id="intelMetricHumidity">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Charts Row 2: Temperature vs Demand Bubble + AC Hours Breakdown -->
+                <div class="di-charts-row animate__animated animate__fadeInUp">
+                    <section class="di-chart-card glass-card di-chart-half">
+                        <div class="section-header">
+                            <h2><i class="fas fa-braille"></i> Temperature vs Demand</h2>
+                            <span class="section-subtitle">Bubble size = AC hours, color = zone</span>
+                        </div>
+                        <div class="di-chart-container">
+                            <canvas id="diTempDemandBubbleChart"></canvas>
+                        </div>
+                    </section>
+                    <section class="di-chart-card glass-card di-chart-half">
+                        <div class="section-header">
+                            <h2><i class="fas fa-snowflake"></i> AC Hours: Day vs Night</h2>
+                            <span class="section-subtitle">Night AC drives HVAC demand</span>
+                        </div>
+                        <div class="di-chart-container">
+                            <canvas id="diAcHoursStackedChart"></canvas>
                         </div>
                     </section>
                 </div>
 
-                <!-- Demand Correlation Section -->
-                <section class="glass-card animate__animated animate__fadeInUp">
-                    <div class="section-header">
-                        <h2><i class="fas fa-project-diagram"></i> Demand Correlation Layer</h2>
-                        <span class="section-subtitle">Weather vs Sales — historical overlay</span>
-                        <div class="correlation-controls">
-                            <select id="correlationCitySelect">
-                                <!-- Populated dynamically -->
+                <!-- Service Predictions Section -->
+                <section class="di-service-section animate__animated animate__fadeInUp">
+                    <h2 class="intel-section-title"><i class="fas fa-tools"></i> HVAC Service Demand Predictions</h2>
+                    <div class="di-service-grid" id="diServiceGrid">
+                        <div class="loading-shimmer"></div>
+                    </div>
+                </section>
+
+                <!-- Charts Row 3: Energy Cost + Demand Factors -->
+                <div class="di-charts-row animate__animated animate__fadeInUp">
+                    <section class="di-chart-card glass-card di-chart-half">
+                        <div class="section-header">
+                            <h2><i class="fas fa-bolt"></i> Monthly Energy Cost Estimate</h2>
+                            <span class="section-subtitle">Projected electricity cost per city (Rs/month)</span>
+                        </div>
+                        <div class="di-chart-container">
+                            <canvas id="diEnergyCostChart"></canvas>
+                        </div>
+                    </section>
+                    <section class="di-chart-card glass-card di-chart-half">
+                        <div class="section-header">
+                            <h2><i class="fas fa-layer-group"></i> Demand Factor Breakdown</h2>
+                            <span class="section-subtitle">Night temp (60%) + Day temp (25%) + Humidity (15%)</span>
+                        </div>
+                        <div class="di-chart-container">
+                            <canvas id="diDemandFactorsChart"></canvas>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Key Takeaways -->
+                <section class="di-takeaways glass-card animate__animated animate__fadeInUp">
+                    <div class="di-takeaways-header">
+                        <h2 class="intel-section-title"><i class="fas fa-bullseye"></i> Key Takeaways for Leadership</h2>
+                    </div>
+                    <div class="di-takeaways-grid" id="intelTakeawaysList">
+                        <div class="loading-shimmer"></div>
+                    </div>
+                </section>
+
+                <!-- City Intelligence Table -->
+                <div class="glass-card demand-intel-table-card animate__animated animate__fadeInUp">
+                    <div class="card-header">
+                        <h2><i class="fas fa-table"></i> City-Level Intelligence</h2>
+                        <div class="card-controls">
+                            <div class="search-glass">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="intelSearch" placeholder="Search cities...">
+                            </div>
+                            <select id="intelZoneFilter" class="select-glass">
+                                <option value="all">All Zones</option>
+                                <option value="red">Critical (Red)</option>
+                                <option value="amber">Accelerate (Amber)</option>
+                                <option value="green">Monitor (Green)</option>
+                            </select>
+                            <select id="intelSortBy" class="select-glass">
+                                <option value="demand">Sort by Demand</option>
+                                <option value="city">Sort by City</option>
+                                <option value="temp">Sort by Temperature</option>
+                                <option value="ac">Sort by AC Hours</option>
                             </select>
                         </div>
                     </div>
-                    <div class="correlation-metrics" id="correlationMetrics">
-                        <div class="corr-metric">
-                            <span class="corr-label">Correlation</span>
-                            <span class="corr-value" id="corrScore">--</span>
-                        </div>
-                        <div class="corr-metric">
-                            <span class="corr-label">Insight</span>
-                            <span class="corr-value small" id="corrInsight">--</span>
-                        </div>
+                    <div class="table-container-modern">
+                        <table class="modern-table modern-table-intel" id="cityIntelTable">
+                            <thead>
+                                <tr>
+                                    <th>City</th>
+                                    <th>Zone</th>
+                                    <th>Demand</th>
+                                    <th>Allocation %</th>
+                                    <th>Day / Night °C</th>
+                                    <th>Humidity</th>
+                                    <th>AC Hrs</th>
+                                    <th>Risk</th>
+                                    <th>Driver</th>
+                                    <th>Business Action</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="cityIntelBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="correlation-chart-wrapper">
-                        <canvas id="correlationChart"></canvas>
-                    </div>
+                </div>
+
+                <!-- Quick Actions Footer -->
+                <section class="di-quick-actions animate__animated animate__fadeInUp">
+                    <button type="button" class="di-action-btn di-action-pdf" id="intelExportReport">
+                        <i class="fas fa-file-pdf"></i>
+                        <div>
+                            <span>Export PDF</span>
+                            <small>Leadership summary</small>
+                        </div>
+                    </button>
+                    <button type="button" class="di-action-btn di-action-excel" id="intelExportExcel">
+                        <i class="fas fa-file-excel"></i>
+                        <div>
+                            <span>Export Excel</span>
+                            <small>Full city data</small>
+                        </div>
+                    </button>
+                    <a href="#" class="di-action-btn di-action-alerts nav-item" data-page="alerts">
+                        <i class="fas fa-bell"></i>
+                        <div>
+                            <span>View Alerts</span>
+                            <small>Active notifications</small>
+                        </div>
+                    </a>
+                    <a href="#" class="di-action-btn di-action-insights nav-item" data-page="insights">
+                        <i class="fas fa-lightbulb"></i>
+                        <div>
+                            <span>Strategic Insights</span>
+                            <small>4-month forecast</small>
+                        </div>
+                    </a>
+                    <a href="#" class="di-action-btn di-action-forecast nav-item" data-page="forecast">
+                        <i class="fas fa-cloud-sun"></i>
+                        <span>Forecast</span>
+                    </a>
                 </section>
 
-                <!-- Service Demand Predictions -->
-                <section class="glass-card animate__animated animate__fadeInUp">
+                <!-- Active Alerts -->
+                <div class="glass-card full-width animate__animated animate__fadeInUp demand-intel-alerts-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-bell"></i> Active Alerts</h2>
+                    </div>
+                    <div id="alertsListReverted"></div>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- Checklist Modal -->
+        <div id="checklistModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Actionable Checklist</h3>
+                    <button class="modal-close" data-modal="checklistModal">✖</button>
+                </div>
+                <div class="modal-body" id="checklistBody">
+                    <!-- checklist content -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn" data-modal="checklistModal">Close</button>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- ========== REPORTS PAGE ========== -->
+        <div class="page" id="reportsPage">
+            <div class="page-header">
+                <h1><i class="fas fa-file-alt"></i> Reports & Export</h1>
+                <p>Generate comprehensive reports and export data</p>
+            </div>
+
+            <div class="reports-grid">
+                <!-- Report Types -->
+                <section class="glass-card">
                     <div class="section-header">
-                        <h2><i class="fas fa-tools"></i> Service Demand Predictions</h2>
-                        <span class="section-subtitle">Compressor failures, gas refills, warranty claims,
-                            installations</span>
+                        <h2><i class="fas fa-download"></i> Quick Export</h2>
                     </div>
-                    <div class="service-predictions-grid" id="servicePredictionsGrid">
-                        <!-- Generated dynamically -->
+                    <div class="export-options">
+                        <button class="export-btn" id="exportDashboardPDF">
+                            <i class="fas fa-file-pdf"></i>
+                            <span>Dashboard PDF</span>
+                        </button>
+                        <button class="export-btn" id="exportDataExcel">
+                            <i class="fas fa-file-excel"></i>
+                            <span>Data Excel</span>
+                        </button>
+                        <button class="export-btn" id="exportAlertReport">
+                            <i class="fas fa-bell"></i>
+                            <span>Alert Report</span>
+                        </button>
+                        <button class="export-btn" id="exportForecastReport">
+                            <i class="fas fa-cloud-sun"></i>
+                            <span>Forecast Report</span>
+                        </button>
                     </div>
                 </section>
 
-                <!-- Alerts Modal -->
-                <div id="alertsModal" class="modal hidden">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h3>Active Alerts</h3>
-                            <button class="modal-close" data-modal="alertsModal">✖</button>
+                <!-- Color Legend -->
+                <section class="glass-card full-width">
+                    <div class="section-header">
+                        <h2><i class="fas fa-palette"></i> Color Coding Reference</h2>
+                    </div>
+                    <div class="color-legend">
+                        <div class="legend-item">
+                            <div class="legend-color red"></div>
+                            <div class="legend-info">
+                                <strong>RED - EXTREME</strong>
+                                <p>Day ≥38°C or Night ≥24°C</p>
+                                <span class="legend-action">Full Push (50-60% allocation)</span>
+                            </div>
                         </div>
-                        <div class="modal-body" id="alertsList">
-                            <!-- Alerts inserted dynamically -->
+                        <div class="legend-item">
+                            <div class="legend-color orange"></div>
+                            <div class="legend-info">
+                                <strong>ORANGE - STRONG</strong>
+                                <p>Day 36-37°C or Night 22-23°C</p>
+                                <span class="legend-action">Accelerate (30-40% allocation)</span>
+                            </div>
                         </div>
-                        <div class="modal-footer">
-                            <button id="ackAlertsBtn" class="btn btn-primary">Acknowledge Selected</button>
+                        <div class="legend-item">
+                            <div class="legend-color yellow"></div>
+                            <div class="legend-info">
+                                <strong>YELLOW - WARM</strong>
+                                <p>Day 34-35°C or Night 20-21°C</p>
+                                <span class="legend-action">Position Stock</span>
+                            </div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color green"></div>
+                            <div class="legend-info">
+                                <strong>GREEN - NORMAL</strong>
+                                <p>Day 32-33°C or Night 18-19°C</p>
+                                <span class="legend-action">Monitor</span>
+                            </div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color blue"></div>
+                            <div class="legend-info">
+                                <strong>BLUE - COOL</strong>
+                                <p>Day &lt;32°C or Night &lt;18°C</p>
+                                <span class="legend-action">Off Season</span>
+                            </div>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color purple"></div>
+                            <div class="legend-info">
+                                <strong>PURPLE - KERALA SPECIAL</strong>
+                                <p>Kerala Night ≥24°C</p>
+                                <span class="legend-action">Hot Coastal Nights</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Checklist Modal -->
-                <div id="checklistModal" class="modal hidden">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h3>Actionable Checklist</h3>
-                            <button class="modal-close" data-modal="checklistModal">✖</button>
-                        </div>
-                        <div class="modal-body" id="checklistBody">
-                            <!-- checklist content -->
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn" data-modal="checklistModal">Close</button>
-                        </div>
-                    </div>
-                </div>
+                </section>
             </div>
-
-            <!-- ========== REPORTS PAGE ========== -->
-            <div class="page" id="reportsPage">
-                <div class="page-header">
-                    <h1><i class="fas fa-file-alt"></i> Reports & Export</h1>
-                    <p>Generate comprehensive reports and export data</p>
-                </div>
-
-                <div class="reports-grid">
-                    <!-- Report Types -->
-                    <section class="glass-card">
-                        <div class="section-header">
-                            <h2><i class="fas fa-download"></i> Quick Export</h2>
-                        </div>
-                        <div class="export-options">
-                            <button class="export-btn" id="exportDashboardPDF">
-                                <i class="fas fa-file-pdf"></i>
-                                <span>Dashboard PDF</span>
-                            </button>
-                            <button class="export-btn" id="exportDataExcel">
-                                <i class="fas fa-file-excel"></i>
-                                <span>Data Excel</span>
-                            </button>
-                            <button class="export-btn" id="exportAlertReport">
-                                <i class="fas fa-bell"></i>
-                                <span>Alert Report</span>
-                            </button>
-                            <button class="export-btn" id="exportForecastReport">
-                                <i class="fas fa-cloud-sun"></i>
-                                <span>Forecast Report</span>
-                            </button>
-                        </div>
-                    </section>
-
-                    <!-- Color Legend -->
-                    <section class="glass-card full-width">
-                        <div class="section-header">
-                            <h2><i class="fas fa-palette"></i> Color Coding Reference</h2>
-                        </div>
-                        <div class="color-legend">
-                            <div class="legend-item">
-                                <div class="legend-color red"></div>
-                                <div class="legend-info">
-                                    <strong>RED - EXTREME</strong>
-                                    <p>Day ≥38°C or Night ≥24°C</p>
-                                    <span class="legend-action">Full Push (50-60% allocation)</span>
-                                </div>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color orange"></div>
-                                <div class="legend-info">
-                                    <strong>ORANGE - STRONG</strong>
-                                    <p>Day 36-37°C or Night 22-23°C</p>
-                                    <span class="legend-action">Accelerate (30-40% allocation)</span>
-                                </div>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color yellow"></div>
-                                <div class="legend-info">
-                                    <strong>YELLOW - WARM</strong>
-                                    <p>Day 34-35°C or Night 20-21°C</p>
-                                    <span class="legend-action">Position Stock</span>
-                                </div>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color green"></div>
-                                <div class="legend-info">
-                                    <strong>GREEN - NORMAL</strong>
-                                    <p>Day 32-33°C or Night 18-19°C</p>
-                                    <span class="legend-action">Monitor</span>
-                                </div>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color blue"></div>
-                                <div class="legend-info">
-                                    <strong>BLUE - COOL</strong>
-                                    <p>Day &lt;32°C or Night &lt;18°C</p>
-                                    <span class="legend-action">Off Season</span>
-                                </div>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color purple"></div>
-                                <div class="legend-info">
-                                    <strong>PURPLE - KERALA SPECIAL</strong>
-                                    <p>Kerala Night ≥24°C</p>
-                                    <span class="legend-action">Hot Coastal Nights</span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-            </div>
+        </div>
         </div>
 
         <!-- Footer -->
@@ -1416,8 +1662,8 @@
             <p style="margin: 0; opacity: 0.8;">Fetching live weather intelligence...</p>
             <div
                 style="margin-top: 1rem; width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden;">
-                <div
-                    style="height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent-primary), #a855f7); border-radius: 2px; animation: loadProgress 2s ease-in-out infinite;">
+                <div id="progressBar"
+                    style="height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent-primary), #a855f7); border-radius: 2px; transition: width 0.3s ease;">
                 </div>
             </div>
         </div>
@@ -1426,8 +1672,8 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Custom JavaScript -->
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <!-- Custom JavaScript (minified with cache busting) -->
+    <script defer src="{{ url_for('static', filename='js/dashboard.min.js') }}?v={{ cache_version }}"></script>
 </body>
 
 </html>

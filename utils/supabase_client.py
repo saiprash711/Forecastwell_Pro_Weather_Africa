@@ -20,12 +20,12 @@ class SupabaseHandler:
             try:
                 self.client = create_client(self.url, self.key)
                 self.enabled = True
-                print("✅ Supabase client initialized successfully")
+                print("[SUCCESS] Supabase client initialized successfully")
             except Exception as e:
-                print(f"❌ Failed to initialize Supabase client: {e}")
+                print(f"[ERROR] Failed to initialize Supabase client: {e}")
                 self.enabled = False
         else:
-            print("⚠️ Supabase credentials not found. Database features disabled.")
+            print("[WARNING] Supabase credentials not found. Database features disabled.")
 
     def save_weather_log(self, weather_data):
         """
@@ -43,7 +43,7 @@ class SupabaseHandler:
             data, count = self.client.table("weather_logs").insert(record).execute()
             return data
         except Exception as e:
-            print(f"❌ Error saving weather log to Supabase: {e}")
+            print(f"[ERROR] Error saving weather log to Supabase: {e}")
             return None
 
     def save_weather_logs_batch(self, weather_data_list):
@@ -64,10 +64,10 @@ class SupabaseHandler:
                 return None
                 
             data, count = self.client.table("weather_logs").insert(records).execute()
-            print(f"✅ Batch saved {len(records)} weather logs to Supabase")
+            print(f"[SUCCESS] Batch saved {len(records)} weather logs to Supabase")
             return data
         except Exception as e:
-            print(f"❌ Error batch saving weather logs to Supabase: {e}")
+            print(f"[ERROR] Error batch saving weather logs to Supabase: {e}")
             return None
 
     def _prepare_weather_record(self, weather_data):
@@ -113,7 +113,7 @@ class SupabaseHandler:
             data, count = self.client.table("alerts").insert(record).execute()
             return data
         except Exception as e:
-            print(f"❌ Error saving alert to Supabase: {e}")
+            print(f"[ERROR] Error saving alert to Supabase: {e}")
             return None
 
     def get_recent_logs(self, city_id, limit=24):
@@ -130,7 +130,7 @@ class SupabaseHandler:
                 .execute()
             return response.data
         except Exception as e:
-            print(f"❌ Error fetching logs from Supabase: {e}")
+            print(f"[ERROR] Error fetching logs from Supabase: {e}")
             return []
 
     def get_active_alerts(self):
@@ -146,7 +146,7 @@ class SupabaseHandler:
                 .execute()
             return response.data
         except Exception as e:
-            print(f"❌ Error fetching alerts from Supabase: {e}")
+            print(f"[ERROR] Error fetching alerts from Supabase: {e}")
             return []
 
     def acknowledge_alert(self, alert_id):
@@ -164,7 +164,7 @@ class SupabaseHandler:
                 .execute()
             return data
         except Exception as e:
-            print(f"❌ Error acknowledging alert in Supabase: {e}")
+            print(f"[ERROR] Error acknowledging alert in Supabase: {e}")
             return None
 
     def get_connection_status(self):

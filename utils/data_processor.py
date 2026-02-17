@@ -5,7 +5,17 @@ Enhanced for ForecastWell Dashboard per guide specifications
 Includes: Wet bulb temp, consecutive hot days, demand correlation, service demand prediction
 """
 import math
-import pandas as pd
+try:
+    import pandas as pd
+except Exception:
+    pd = None
+
+# Safe is-na helper (falls back to None-check when pandas is absent)
+def _isna(val):
+    if pd is not None:
+        return pd.isna(val)
+    return val is None
+
 from datetime import datetime
 from config import Config
 
@@ -378,8 +388,11 @@ class DataProcessor:
             filepath: Path to Excel file
             
         Returns:
-            pandas.DataFrame: Loaded data
+            pandas.DataFrame or None: Loaded data (None on error or if pandas missing)
         """
+        if pd is None:
+            print("pandas not installed — Excel import unavailable")
+            return None
         try:
             df = pd.read_excel(filepath)
             # Expected columns: City, Date, Day_Temp, Night_Temp, Humidity, etc.
@@ -427,6 +440,9 @@ class DataProcessor:
         Returns:
             bool: Success status
         """
+        if pd is None:
+            print("pandas not installed — Excel export unavailable")
+            return False
         try:
             if isinstance(data, list):
                 df = pd.DataFrame(data)
@@ -673,6 +689,8 @@ class DataProcessor:
         Returns:
             tuple: (bool, str) - Success status and message
         """
+        if pd is None:
+            return False, "pandas not installed — cannot process Excel files"
         try:
             # Load the Excel file generic read
             df = pd.read_excel(filepath)
@@ -762,6 +780,8 @@ class DataProcessor:
 
     def _process_matrix_format_excel(self, filepath, header_row):
         """Process the 'Matrix' styled Excel (City columns)"""
+        if pd is None:
+            return False, "pandas not installed — cannot process Matrix Excel files"
         try:
             df = pd.read_excel(filepath, header=header_row)
             
@@ -789,7 +809,7 @@ class DataProcessor:
             # Iterate through rows
             for _, row in df.iterrows():
                 date_val = row.get('DATE')
-                if pd.isna(date_val): continue
+                if _isna(date_val): continue
                 
                 # Parse date
                 date_str = str(date_val)
@@ -877,7 +897,7 @@ class DataProcessor:
                 night_temp = row['Night_Temp']
                 # Humidity optional
                 humidity = row.get('Humidity')
-                if pd.isna(humidity): humidity = 50 # default
+                if _isna(humidity): humidity = 50 # default
 
                 # Find the city in config to get its ID
                 city_id = self._get_city_id_from_name(city_name)
@@ -886,7 +906,7 @@ class DataProcessor:
                     continue
 
                 # Validate numeric data
-                if pd.isna(day_temp) or pd.isna(night_temp):
+                if _isna(day_temp) or _isna(night_temp):
                     continue
 
                 # Convert date if it's a pandas timestamp

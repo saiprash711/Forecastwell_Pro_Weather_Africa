@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,34 +8,52 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         /* ===== RESET & BASE ===== */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        :root {
-            --bg-primary: #0a0e1a;
-            --bg-secondary: #101627;
-            --glass-bg: rgba(16, 22, 39, 0.55);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --accent-1: #6366f1;
-            --accent-2: #8b5cf6;
-            --accent-3: #06b6d4;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --input-bg: rgba(15, 23, 42, 0.6);
-            --input-border: rgba(99, 102, 241, 0.25);
-            --input-focus: rgba(99, 102, 241, 0.6);
-            --error-color: #f43f5e;
-            --success-color: #10b981;
-            --glow-1: rgba(99, 102, 241, 0.35);
-            --glow-2: rgba(139, 92, 246, 0.3);
-            --glow-3: rgba(6, 182, 212, 0.3);
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
-        html, body {
+        :root {
+            /* clear sky login theme */
+            --bg-primary: #f0f9ff;
+            /* sky 50 */
+            --bg-secondary: #e0f2fe;
+            /* sky 100 */
+            --glass-bg: rgba(255, 255, 255, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.6);
+            --accent-1: #0ea5e9;
+            /* sky 500 */
+            --accent-2: #3b82f6;
+            /* blue 500 */
+            --accent-3: #f59e0b;
+            /* amber 500 (sun) */
+            --text-primary: #0c4a6e;
+            /* sky 900 */
+            --text-secondary: #334155;
+            /* slate 700 */
+            --text-muted: #64748b;
+            /* slate 500 */
+            --input-bg: rgba(255, 255, 255, 0.8);
+            --input-border: rgba(186, 230, 253, 0.6);
+            --input-focus: rgba(14, 165, 233, 0.4);
+            --error-color: #ef4444;
+            --success-color: #10b981;
+            --glow-1: rgba(14, 165, 233, 0.25);
+            --glow-2: rgba(59, 130, 246, 0.2);
+            --glow-3: rgba(245, 158, 11, 0.25);
+        }
+
+        html,
+        body {
             height: 100%;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
@@ -52,53 +71,81 @@
             z-index: 1;
         }
 
-        /* Gradient mesh background */
+        /* Gradient mesh background - Sky Theme */
         .bg-mesh {
             position: fixed;
             inset: 0;
             background:
-                radial-gradient(ellipse 80% 60% at 20% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 80% at 80% 20%, rgba(139, 92, 246, 0.12) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 50% at 50% 50%, rgba(6, 182, 212, 0.08) 0%, transparent 70%),
-                linear-gradient(160deg, #0a0e1a 0%, #101627 50%, #0f172a 100%);
+                radial-gradient(ellipse 80% 60% at 20% 80%, rgba(224, 242, 254, 0.8) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 80% at 80% 20%, rgba(186, 230, 253, 0.6) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 50% at 50% 50%, rgba(254, 243, 199, 0.4) 0%, transparent 70%),
+                linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 100%);
             z-index: 0;
         }
 
-        /* Floating orbs */
+        /* Floating orbs - Sun and Clouds */
         .orb {
             position: fixed;
             border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.5;
+            filter: blur(60px);
+            opacity: 0.6;
             animation: orbFloat 20s ease-in-out infinite;
             z-index: 0;
         }
+
         .orb-1 {
-            width: 400px; height: 400px;
-            background: radial-gradient(circle, var(--glow-1), transparent 70%);
-            top: -10%; left: -5%;
-            animation-duration: 22s;
-        }
-        .orb-2 {
-            width: 350px; height: 350px;
-            background: radial-gradient(circle, var(--glow-2), transparent 70%);
-            bottom: -10%; right: -5%;
-            animation-duration: 18s;
-            animation-delay: -7s;
-        }
-        .orb-3 {
-            width: 250px; height: 250px;
-            background: radial-gradient(circle, var(--glow-3), transparent 70%);
-            top: 40%; right: 20%;
+            /* The Sun */
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--accent-3), transparent 70%);
+            top: -100px;
+            right: -100px;
+            opacity: 0.4;
             animation-duration: 25s;
-            animation-delay: -12s;
+        }
+
+        .orb-2 {
+            /* Cloud 1 */
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, #ffffff, transparent 70%);
+            bottom: -150px;
+            left: -100px;
+            opacity: 0.5;
+            animation-duration: 30s;
+            animation-delay: -5s;
+        }
+
+        .orb-3 {
+            /* Cloud 2 */
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, #e0f2fe, transparent 70%);
+            top: 40%;
+            left: 20%;
+            opacity: 0.4;
+            animation-duration: 35s;
+            animation-delay: -15s;
         }
 
         @keyframes orbFloat {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(40px, -30px) scale(1.05); }
-            50% { transform: translate(-20px, 20px) scale(0.95); }
-            75% { transform: translate(30px, 40px) scale(1.02); }
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            25% {
+                transform: translate(40px, -30px) scale(1.05);
+            }
+
+            50% {
+                transform: translate(-20px, 20px) scale(0.95);
+            }
+
+            75% {
+                transform: translate(30px, 40px) scale(1.02);
+            }
         }
 
         /* Rain particles */
@@ -109,6 +156,7 @@
             z-index: 0;
             pointer-events: none;
         }
+
         .raindrop {
             position: absolute;
             width: 1px;
@@ -116,11 +164,25 @@
             animation: rainFall linear infinite;
             opacity: 0;
         }
+
         @keyframes rainFall {
-            0% { transform: translateY(-100vh); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 0.6; }
-            100% { transform: translateY(100vh); opacity: 0; }
+            0% {
+                transform: translateY(-100vh);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 0.6;
+            }
+
+            100% {
+                transform: translateY(100vh);
+                opacity: 0;
+            }
         }
 
         /* Floating weather icons */
@@ -131,6 +193,7 @@
             pointer-events: none;
             overflow: hidden;
         }
+
         .float-icon {
             position: absolute;
             font-size: 1.5rem;
@@ -138,10 +201,21 @@
             animation: iconDrift 30s ease-in-out infinite;
             color: var(--accent-1);
         }
+
         @keyframes iconDrift {
-            0%, 100% { transform: translate(0, 0) rotate(0deg); }
-            33% { transform: translate(60px, -40px) rotate(120deg); }
-            66% { transform: translate(-40px, 30px) rotate(240deg); }
+
+            0%,
+            100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            33% {
+                transform: translate(60px, -40px) rotate(120deg);
+            }
+
+            66% {
+                transform: translate(-40px, 30px) rotate(240deg);
+            }
         }
 
         /* ===== LOGIN CARD ===== */
@@ -151,28 +225,30 @@
             width: 100%;
             max-width: 420px;
             padding: 48px 40px 40px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.8);
             border-radius: 24px;
-            backdrop-filter: blur(40px) saturate(1.4);
-            -webkit-backdrop-filter: blur(40px) saturate(1.4);
+            backdrop-filter: blur(25px) saturate(1.2);
+            -webkit-backdrop-filter: blur(25px) saturate(1.2);
             box-shadow:
-                0 0 0 1px rgba(255,255,255,0.04),
-                0 25px 50px -12px rgba(0,0,0,0.5),
-                0 0 80px -20px var(--glow-1);
+                0 20px 40px -10px rgba(14, 165, 233, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.5);
             animation: cardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
             transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
         }
+
         .login-card.success-exit {
             transform: scale(0.9) translateY(-30px);
             opacity: 0;
         }
+
         @keyframes cardEntrance {
             from {
                 opacity: 0;
                 transform: translateY(40px) scale(0.95);
                 filter: blur(10px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0) scale(1);
@@ -187,13 +263,11 @@
             inset: -1px;
             border-radius: 25px;
             padding: 1px;
-            background: linear-gradient(
-                135deg,
-                rgba(99, 102, 241, 0.3),
-                transparent 40%,
-                transparent 60%,
-                rgba(6, 182, 212, 0.2)
-            );
+            background: linear-gradient(135deg,
+                    rgba(99, 102, 241, 0.3),
+                    transparent 40%,
+                    transparent 60%,
+                    rgba(6, 182, 212, 0.2));
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor;
@@ -201,9 +275,17 @@
             animation: borderGlow 6s ease-in-out infinite;
             pointer-events: none;
         }
+
         @keyframes borderGlow {
-            0%, 100% { opacity: 0.5; }
-            50% { opacity: 1; }
+
+            0%,
+            100% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
         }
 
         /* ===== BRANDING ===== */
@@ -212,10 +294,19 @@
             margin-bottom: 36px;
             animation: brandFadeIn 0.8s 0.3s both;
         }
+
         @keyframes brandFadeIn {
-            from { opacity: 0; transform: translateY(15px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
+
         .brand-icon {
             position: relative;
             display: inline-flex;
@@ -228,36 +319,49 @@
             margin-bottom: 20px;
             font-size: 2rem;
             color: white;
-            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.35);
+            box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.4);
             animation: iconPulse 3s ease-in-out infinite;
         }
+
         @keyframes iconPulse {
-            0%, 100% { box-shadow: 0 8px 32px rgba(99, 102, 241, 0.35); }
-            50% { box-shadow: 0 8px 48px rgba(99, 102, 241, 0.55), 0 0 0 8px rgba(99, 102, 241, 0.08); }
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.4);
+            }
+
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 15px 35px -5px rgba(14, 165, 233, 0.5);
+            }
         }
+
         .brand-icon::after {
             content: '';
             position: absolute;
             inset: 0;
             border-radius: 20px;
-            background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.15));
+            background: linear-gradient(135deg, transparent 40%, rgba(255, 255, 255, 0.4));
             pointer-events: none;
         }
+
         .brand-name {
             font-family: 'Orbitron', monospace;
             font-weight: 700;
             font-size: 1.5rem;
-            background: linear-gradient(135deg, var(--text-primary), var(--accent-3));
+            background: linear-gradient(135deg, var(--text-primary), var(--accent-2));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: 1px;
         }
+
         .brand-tagline {
-            font-size: 0.82rem;
-            color: var(--text-muted);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
             margin-top: 6px;
-            font-weight: 400;
+            font-weight: 500;
             letter-spacing: 0.5px;
         }
 
@@ -265,15 +369,24 @@
         .login-form {
             animation: formFadeIn 0.8s 0.5s both;
         }
+
         @keyframes formFadeIn {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .input-group {
             position: relative;
             margin-bottom: 22px;
         }
+
         .input-group i.field-icon {
             position: absolute;
             left: 16px;
@@ -285,6 +398,7 @@
             z-index: 2;
             pointer-events: none;
         }
+
         .input-group input {
             width: 100%;
             padding: 15px 16px 15px 46px;
@@ -297,19 +411,23 @@
             outline: none;
             transition: all 0.3s ease;
         }
+
         .input-group input::placeholder {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 400;
         }
+
         .input-group input:focus {
-            border-color: var(--input-focus);
-            background: rgba(15, 23, 42, 0.8);
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), 0 0 20px rgba(99, 102, 241, 0.1);
+            border-color: var(--accent-1);
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
         }
-        .input-group input:focus + i.field-icon,
-        .input-group input:focus ~ i.field-icon {
+
+        .input-group input:focus+i.field-icon,
+        .input-group input:focus~i.field-icon {
             color: var(--accent-1);
         }
+
         /* Hack: icon is before input in DOM, use has() */
         .input-group:has(input:focus) i.field-icon {
             color: var(--accent-1);
@@ -329,7 +447,10 @@
             transition: color 0.3s;
             padding: 4px;
         }
-        .password-toggle:hover { color: var(--accent-1); }
+
+        .password-toggle:hover {
+            color: var(--accent-1);
+        }
 
         /* ===== SUBMIT BUTTON ===== */
         .login-btn {
@@ -348,22 +469,39 @@
             overflow: hidden;
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.2);
         }
+
         .login-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3);
         }
+
         .login-btn:active {
             transform: translateY(0) scale(0.98);
         }
-        .login-btn .btn-text { position: relative; z-index: 1; }
+
+        .login-btn .btn-text {
+            position: relative;
+            z-index: 1;
+        }
+
         .login-btn .btn-loader {
             display: none;
             position: relative;
             z-index: 1;
         }
-        .login-btn.loading .btn-text { display: none; }
-        .login-btn.loading .btn-loader { display: inline-flex; align-items: center; gap: 8px; }
+
+        .login-btn.loading .btn-text {
+            display: none;
+        }
+
+        .login-btn.loading .btn-loader {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .login-btn.loading {
             pointer-events: none;
             opacity: 0.85;
@@ -377,23 +515,36 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
             animation: btnShimmer 3s ease-in-out infinite;
         }
+
         @keyframes btnShimmer {
-            0% { left: -100%; }
-            50%, 100% { left: 100%; }
+            0% {
+                left: -100%;
+            }
+
+            50%,
+            100% {
+                left: 100%;
+            }
         }
 
         /* Spinner */
         .spinner {
-            width: 18px; height: 18px;
-            border: 2px solid rgba(255,255,255,0.3);
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
             border-top-color: white;
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* ===== ERROR MESSAGE ===== */
         .error-msg {
@@ -402,28 +553,53 @@
             gap: 8px;
             padding: 12px 16px;
             margin-bottom: 20px;
-            background: rgba(244, 63, 94, 0.1);
-            border: 1px solid rgba(244, 63, 94, 0.25);
+            background: #fef2f2;
+            border: 1px solid #fecaca;
             border-radius: 12px;
             color: var(--error-color);
             font-size: 0.85rem;
             font-weight: 500;
             animation: errorSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .error-msg.visible { display: flex; }
+
+        .error-msg.visible {
+            display: flex;
+        }
+
         @keyframes errorSlideIn {
-            from { opacity: 0; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* Shake animation */
         .shake {
             animation: shakeCard 0.5s ease-in-out;
         }
+
         @keyframes shakeCard {
-            0%, 100% { transform: translateX(0); }
-            10%, 50%, 90% { transform: translateX(-6px); }
-            30%, 70% { transform: translateX(6px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            50%,
+            90% {
+                transform: translateX(-6px);
+            }
+
+            30%,
+            70% {
+                transform: translateX(6px);
+            }
         }
 
         /* ===== FOOTER ===== */
@@ -431,19 +607,21 @@
             text-align: center;
             margin-top: 28px;
             padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.06);
+            border-top: 1px solid rgba(148, 163, 184, 0.1);
             animation: formFadeIn 0.8s 0.7s both;
         }
+
         .login-footer p {
             color: var(--text-muted);
             font-size: 0.78rem;
             line-height: 1.6;
         }
+
         .login-footer .version-badge {
             display: inline-block;
             padding: 3px 10px;
-            background: rgba(99, 102, 241, 0.1);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
             border-radius: 20px;
             font-size: 0.7rem;
             color: var(--accent-1);
@@ -459,8 +637,16 @@
                 padding: 36px 28px 32px;
                 border-radius: 20px;
             }
-            .brand-icon { width: 60px; height: 60px; font-size: 1.6rem; }
-            .brand-name { font-size: 1.3rem; }
+
+            .brand-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 1.6rem;
+            }
+
+            .brand-name {
+                font-size: 1.3rem;
+            }
         }
 
         /* ===== SUCCESS OVERLAY ===== */
@@ -474,24 +660,42 @@
             background: rgba(10, 14, 26, 0.9);
             backdrop-filter: blur(20px);
         }
+
         .success-overlay.active {
             display: flex;
             animation: overlayIn 0.4s ease;
         }
+
         @keyframes overlayIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
         }
+
         .success-content {
             text-align: center;
             animation: successBounce 0.6s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
+
         @keyframes successBounce {
-            from { opacity: 0; transform: scale(0.8) translateY(20px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
         }
+
         .success-check {
-            width: 80px; height: 80px;
+            width: 80px;
+            height: 80px;
             border-radius: 50%;
             background: linear-gradient(135deg, var(--success-color), #059669);
             display: inline-flex;
@@ -502,11 +706,13 @@
             margin-bottom: 20px;
             box-shadow: 0 0 40px rgba(16, 185, 129, 0.4);
         }
+
         .success-text {
             font-size: 1.3rem;
             font-weight: 600;
             color: var(--text-primary);
         }
+
         .success-sub {
             font-size: 0.85rem;
             color: var(--text-secondary);
@@ -514,6 +720,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Background layers -->
     <div class="bg-mesh"></div>
@@ -549,12 +756,14 @@
             <form class="login-form" id="loginForm" method="POST" action="/login">
                 <div class="input-group">
                     <i class="fas fa-user field-icon"></i>
-                    <input type="text" name="username" id="username" placeholder="Username" autocomplete="username" required autofocus>
+                    <input type="text" name="username" id="username" placeholder="Username" autocomplete="username"
+                        required autofocus>
                 </div>
 
                 <div class="input-group">
                     <i class="fas fa-lock field-icon"></i>
-                    <input type="password" name="password" id="password" placeholder="Password" autocomplete="current-password" required>
+                    <input type="password" name="password" id="password" placeholder="Password"
+                        autocomplete="current-password" required>
                     <button type="button" class="password-toggle" id="passwordToggle" tabindex="-1">
                         <i class="fas fa-eye"></i>
                     </button>
@@ -585,19 +794,7 @@
 
     <script>
         // ===== Generate rain particles =====
-        (function createRain() {
-            const container = document.getElementById('rainContainer');
-            const count = 60;
-            for (let i = 0; i < count; i++) {
-                const drop = document.createElement('div');
-                drop.className = 'raindrop';
-                drop.style.left = Math.random() * 100 + '%';
-                drop.style.height = (Math.random() * 60 + 30) + 'px';
-                drop.style.animationDuration = (Math.random() * 2 + 2) + 's';
-                drop.style.animationDelay = (Math.random() * 4) + 's';
-                container.appendChild(drop);
-            }
-        })();
+        // Rain removed for clear sky theme
 
         // ===== Generate floating weather icons =====
         (function createFloatingIcons() {
@@ -617,7 +814,7 @@
         })();
 
         // ===== Password toggle =====
-        document.getElementById('passwordToggle').addEventListener('click', function() {
+        document.getElementById('passwordToggle').addEventListener('click', function () {
             const pw = document.getElementById('password');
             const icon = this.querySelector('i');
             if (pw.type === 'password') {
@@ -630,7 +827,7 @@
         });
 
         // ===== Form submission =====
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
             e.preventDefault();
             const btn = document.getElementById('loginBtn');
             const card = document.getElementById('loginCard');
@@ -680,7 +877,7 @@
 
         // ===== Show server-side error if present =====
         {% if error %}
-        (function() {
+        (function () {
             const errorMsg = document.getElementById('errorMsg');
             const errorText = document.getElementById('errorText');
             errorText.textContent = '{{ error }}';
@@ -689,4 +886,5 @@
         {% endif %}
     </script>
 </body>
+
 </html>
