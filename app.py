@@ -712,6 +712,17 @@ def logout():
     return redirect('/login')
 
 
+@app.route('/debug/config')
+def debug_config():
+    """Temporary: check if env vars are loaded (remove after confirming)"""
+    return jsonify({
+        'supabase_url_set': bool(app.config.get('SUPABASE_URL')),
+        'supabase_key_set': bool(app.config.get('SUPABASE_KEY')),
+        'secret_key_set': bool(app.config.get('SECRET_KEY')),
+        'supabase_handler_enabled': supabase_handler.enabled,
+        'flask_env': app.config.get('FLASK_ENV')
+    })
+
 @app.route('/')
 @login_required
 def index():
