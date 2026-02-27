@@ -914,11 +914,11 @@
                 <div class="page-loader" id="forecastLoader">
                     <div class="loader-spinner"></div>
                     <div class="loader-text">Loading Forecast</div>
-                    <div class="loader-subtext">Preparing 7-day predictions...</div>
+                    <div class="loader-subtext" id="forecastLoaderSubtext">Preparing forecast data...</div>
                 </div>
                 <div class="page-header" style="display:none" id="forecastContent">
                     <h1><i class="fas fa-cloud-sun"></i> Weather Forecasting</h1>
-                    <p>7-Day forecast with demand predictions</p>
+                    <p id="forecastHeaderSubtitle">7-Day forecast with demand predictions</p>
                 </div>
 
                 <!-- City Selector -->
@@ -933,10 +933,29 @@
                         <button class="range-btn active" data-days="7">7 Days</button>
                         <button class="range-btn" data-days="14">14 Days</button>
                         <button class="range-btn" data-days="30">30 Days</button>
+                        <button class="range-btn range-btn-4m" data-days="120">4 Months</button>
                     </div>
                 </div>
 
-                <!-- Forecast Cards -->
+                <!-- Year-over-Year Comparison -->
+                <section class="glass-card" id="yearCompareSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar-check"></i> Year-over-Year Comparison</h2>
+                        <span class="section-subtitle">Compare a date's temperature for the selected city vs last year &amp; 2 years ago</span>
+                    </div>
+                    <div class="year-compare-controls">
+                        <label for="yearCompareDate">Select Date:</label>
+                        <input type="date" id="yearCompareDate" />
+                        <button id="yearCompareBtn" class="range-btn active">
+                            <i class="fas fa-search"></i> Compare
+                        </button>
+                    </div>
+                    <div id="yearCompareResults">
+                        <p class="year-compare-placeholder">Select a date above to see how temperatures compare across years for all cities.</p>
+                    </div>
+                </section>
+
+                <!-- Forecast Cards (daily view for ≤30 days, monthly summary for 4 months) -->
                 <div class="forecast-carousel" id="forecastCarousel">
                     <div class="skeleton-cities-grid">
                         <div class="skeleton-card" style="height: 220px"></div>
@@ -945,6 +964,17 @@
                         <div class="skeleton-card" style="height: 220px"></div>
                     </div>
                 </div>
+
+                <!-- 4-Month Monthly Breakdown (hidden by default, shown in 4M view) -->
+                <section class="glass-card" id="fourMonthBreakdown" style="display:none">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar-alt"></i> Monthly Forecast Breakdown</h2>
+                        <span class="section-subtitle">Temperature & demand outlook for the next 4 months</span>
+                    </div>
+                    <div class="four-month-grid" id="fourMonthGrid">
+                        <!-- Generated dynamically -->
+                    </div>
+                </section>
 
                 <!-- Detailed Forecast Chart -->
                 <section class="glass-card">
@@ -1667,13 +1697,22 @@
                 <i class="fas fa-cloud-sun"></i>
             </div>
             <h3 style="margin: 0 0 0.5rem 0; font-weight: 600;">ForecastWell Pro</h3>
-            <p style="margin: 0; opacity: 0.8;">Fetching live weather intelligence...</p>
+            <p id="loadingMessage" style="margin: 0; opacity: 0.8;">Fetching live weather intelligence...</p>
             <div
                 style="margin-top: 1rem; width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden;">
                 <div id="progressBar"
                     style="height: 100%; width: 30%; background: linear-gradient(90deg, var(--accent-primary), #a855f7); border-radius: 2px; transition: width 0.3s ease;">
                 </div>
             </div>
+            <p id="loadingSlowMsg" style="margin: 0.75rem 0 0 0; font-size: 0.78rem; opacity: 0.55; display:none;">
+                First load may take a moment while the server warms up...
+            </p>
+            <button id="loadingRetryBtn" onclick="retryDashboardLoad()"
+                style="display:none; margin-top:1rem; padding:0.5rem 1.25rem; background:rgba(255,255,255,0.15);
+                       border:1px solid rgba(255,255,255,0.3); border-radius:6px; color:white; cursor:pointer;
+                       font-size:0.85rem; transition:background 0.2s;">
+                <i class="fas fa-redo" style="margin-right:0.4rem;"></i> Retry
+            </button>
         </div>
     </div>
 

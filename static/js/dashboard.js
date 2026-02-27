@@ -169,9 +169,89 @@ document.addEventListener('DOMContentLoaded', function () {
     // SSE real-time updates (primary), polling as fallback
     connectSSE();
     setInterval(refreshData, REFRESH_INTERVAL);
+
+    // When user returns to a tab that's been idle, force a silent refresh
+    // and unstick any loading overlay that may have been left visible
+    let _lastHiddenAt = 0;
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+            _lastHiddenAt = Date.now();
+        } else if (document.visibilityState === 'visible') {
+            const idleMs = Date.now() - _lastHiddenAt;
+            // Force-hide overlay if it is somehow still showing
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay && overlay.classList.contains('active')) {
+                _clearLoadingFeedbackTimers();
+                hideLoading();
+            }
+            // If tab was hidden for more than 2 minutes, do a silent refresh
+            if (idleMs > 2 * 60 * 1000) {
+                console.log(`[Visibility] Tab was hidden for ${Math.round(idleMs/1000)}s — refreshing data`);
+                refreshData();
+            }
+        }
+    });
 });
 
+// Timers for slow-load UI feedback
+let _slowLoadTimer = null;
+let _retryBtnTimer = null;
+
+function _startLoadingFeedbackTimers() {
+    // After 8s: show "first load may take a moment" hint
+    _slowLoadTimer = setTimeout(() => {
+        const msg = document.getElementById('loadingSlowMsg');
+        if (msg) msg.style.display = '';
+    }, 8000);
+
+    // After 18s: show Retry button
+    _retryBtnTimer = setTimeout(() => {
+        const btn = document.getElementById('loadingRetryBtn');
+        if (btn) btn.style.display = '';
+    }, 18000);
+}
+
+function _clearLoadingFeedbackTimers() {
+    clearTimeout(_slowLoadTimer);
+    clearTimeout(_retryBtnTimer);
+    const msg = document.getElementById('loadingSlowMsg');
+    if (msg) msg.style.display = 'none';
+    const btn = document.getElementById('loadingRetryBtn');
+    if (btn) btn.style.display = 'none';
+}
+
+function retryDashboardLoad() {
+    _clearLoadingFeedbackTimers();
+    hideLoading();
+    // Short delay then reinitialize
+    setTimeout(() => {
+        showLoadingWithProgress(1, 7);
+        _startLoadingFeedbackTimers();
+        loadDashboardData().then(() => {
+            _clearLoadingFeedbackTimers();
+            hideLoading();
+            showToast('Dashboard loaded!', 'success');
+        }).catch(() => {
+            _clearLoadingFeedbackTimers();
+            hideLoading();
+            showToast('Could not load data. Please check your connection.', 'error');
+        });
+    }, 300);
+}
+
 async function initializeDashboard() {
+    _startLoadingFeedbackTimers();
+
+    // Absolute safety net: force-hide the overlay after 25s no matter what
+    const _safetyTimer = setTimeout(() => {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay && overlay.classList.contains('active')) {
+            console.warn('[Safety] Force-hiding stuck loading overlay after 25s');
+            _clearLoadingFeedbackTimers();
+            hideLoading();
+        }
+    }, 25000);
+
     try {
         // Step 1: Initialize dashboard
         showLoadingWithProgress(1, 7);
@@ -204,20 +284,22 @@ async function initializeDashboard() {
         showLoadingWithProgress(7, 7);
         // Final step completed
 
+        clearTimeout(_safetyTimer);
+        _clearLoadingFeedbackTimers();
         hideLoading();
         showToast('Dashboard loaded successfully!', 'success');
 
         console.log('✅ Dashboard initialized successfully');
     } catch (error) {
+        clearTimeout(_safetyTimer);
         console.error('❌ Error initializing dashboard:', error);
+        _clearLoadingFeedbackTimers();
         hideLoading();
         const errorMsg = error.message || 'Failed to load data. Please refresh the page.';
         showToast(errorMsg, 'error');
         // Ensure loading overlay is hidden even if something goes wrong
-        setTimeout(() => {
-            const overlay = document.getElementById('loadingOverlay');
-            if (overlay) overlay.classList.remove('active');
-        }, 100);
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.classList.remove('active');
     }
 }
 
@@ -596,19 +678,19 @@ function hidePageLoader(pageId, loaderId) {
 }
 
 // ========== Data Loading ==========
-async function loadDashboardData() {
+async function loadDashboardData(showProgress = true) {
     try {
         console.log('📊 Loading dashboard data...');
 
         // Single combined API call: weather + alerts + KPIs
         console.log('→ Fetching dashboard-init (combined endpoint)...');
 
-        // Add timeout to prevent hanging (60 seconds max — batch API is fast)
+        // Add timeout to prevent hanging (20 seconds max — fail fast, let user retry)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
             controller.abort();
-            showLoadingWithProgress(2.5, 7);
-        }, 60000);
+            if (showProgress) showLoadingWithProgress(2.5, 7);
+        }, 20000);
 
         let initRes, initData;
         try {
@@ -624,7 +706,7 @@ async function loadDashboardData() {
             clearTimeout(timeoutId);
             if (fetchError.name === 'AbortError') {
                 console.error('⏱️ Request timeout after 60 seconds');
-                throw new Error('Request timed out. The server may still be loading weather data. Please refresh in a few seconds.');
+                throw new Error('Server is warming up. Click Retry or wait a moment.');
             }
             throw fetchError;
         }
@@ -642,13 +724,13 @@ async function loadDashboardData() {
                 currentCityData = weather;
                 console.log('✓ Found', currentCityData.length, 'cities');
 
-                showLoadingWithProgress(3, 7); // Update progress after getting data
+                if (showProgress) showLoadingWithProgress(3, 7); // Update progress after getting data
                 try { updateHeaderStats(weather); } catch (e) { console.error('Header stats error:', e); }
 
-                showLoadingWithProgress(4, 7); // Update progress after header stats
+                if (showProgress) showLoadingWithProgress(4, 7); // Update progress after header stats
                 try { updateMapMarkers(weather); } catch (e) { console.error('Map markers error:', e); }
 
-                showLoadingWithProgress(5, 7); // Update progress after map markers
+                if (showProgress) showLoadingWithProgress(5, 7); // Update progress after map markers
                 try { updateCitiesGrid(weather); } catch (e) { console.error('Cities grid error:', e); }
 
                 try { updateFallbackBanner(weather); } catch (e) { console.error('Fallback banner error:', e); }
@@ -660,7 +742,7 @@ async function loadDashboardData() {
                 // Initialize charts asynchronously (non-blocking, after critical UI is ready)
                 // Use requestIdleCallback for better perceived performance
                 const initCharts = () => {
-                    showLoadingWithProgress(6, 7);
+                    if (showProgress) showLoadingWithProgress(6, 7);
                     initializeDashboardCharts(weather);
                     updateWaveSequence(weather);
                 };
@@ -702,8 +784,12 @@ async function loadDashboardData() {
 
         updateLastUpdate();
 
-        // Show/hide stale data banner
-        if (initData.data.stale) {
+        // Show/hide stale data banner + auto-retry when server is warming up
+        if (initData.data.warming_up) {
+            showStaleBanner('Server is warming up — weather data will load automatically in a few seconds...');
+            // Auto-retry silently in 6 seconds without showing the overlay
+            setTimeout(() => refreshData(), 6000);
+        } else if (initData.data.stale) {
             const ageMin = Math.round((initData.data.data_age_seconds || 0) / 60);
             showStaleBanner(`Weather data is ${ageMin} min old. Live refresh in progress...`);
         } else {
@@ -711,7 +797,7 @@ async function loadDashboardData() {
         }
 
         // Defer background sections until main dashboard is fully painted
-        showLoadingWithProgress(6.5, 7);
+        if (showProgress) showLoadingWithProgress(6.5, 7);
         requestIdleCallback(() => {
             loadNewSections().catch(err => console.warn('Background sections error:', err));
         }, { timeout: 3000 });
@@ -725,7 +811,13 @@ async function loadDashboardData() {
     }
 }
 
+let _isRefreshing = false;
+
 async function refreshData() {
+    // Guard against concurrent refreshes (SSE + setInterval can both fire)
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.querySelector('i').classList.add('fa-spin');
@@ -735,11 +827,13 @@ async function refreshData() {
     Object.keys(pageLoadedCache).forEach(k => delete pageLoadedCache[k]);
 
     try {
-        await loadDashboardData();
+        // Pass showProgress=false so background refreshes never touch the loading overlay
+        await loadDashboardData(false);
         showToast('Data refreshed successfully!', 'success');
     } catch (error) {
         showToast('Failed to refresh data', 'error');
     } finally {
+        _isRefreshing = false;
         if (refreshBtn) {
             refreshBtn.querySelector('i').classList.remove('fa-spin');
         }
@@ -1965,12 +2059,28 @@ let selectedForecastDays = 7;
 
 
 /*
+ * Update forecast page subtitle based on selected days
+ */
+function updateForecastSubtitle(days) {
+    const subtitle = document.getElementById('forecastHeaderSubtitle');
+    const loaderSubtext = document.getElementById('forecastLoaderSubtext');
+    if (days === 120) {
+        if (subtitle) subtitle.textContent = '4-Month forecast with monthly demand outlook (ECMWF SEAS5)';
+        if (loaderSubtext) loaderSubtext.textContent = 'Loading 4-month seasonal forecast...';
+    } else {
+        if (subtitle) subtitle.textContent = `${days}-Day forecast with demand predictions`;
+        if (loaderSubtext) loaderSubtext.textContent = `Preparing ${days}-day predictions...`;
+    }
+}
+
+/*
  * Load Forecast Page
  */
 async function loadForecastPage() {
     console.log('Loading forecast page...');
     populateForecastCitySelect();
     setupForecastEventListeners();
+    updateForecastSubtitle(selectedForecastDays);
 
     // Fetch real forecast data
     const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
@@ -1981,6 +2091,7 @@ async function loadForecastPage() {
         if (result.status === 'success' && result.data) {
             generateForecastCards(result.data);
             initializeForecastChart(result.data);
+            if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
         } else {
             console.error('Failed to load forecast', result);
         }
@@ -1989,6 +2100,126 @@ async function loadForecastPage() {
     }
 
     generatePredictions();
+    setupYearCompare();
+}
+
+// ========== Year-over-Year Comparison ==========
+
+function setupYearCompare() {
+    const dateInput = document.getElementById('yearCompareDate');
+    const compareBtn = document.getElementById('yearCompareBtn');
+    if (!dateInput || !compareBtn) return;
+
+    // Default to today
+    dateInput.value = new Date().toISOString().split('T')[0];
+
+    const trigger = () => {
+        const city = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : null);
+        if (dateInput.value && city) loadYearComparison(city, dateInput.value);
+    };
+
+    compareBtn.addEventListener('click', trigger);
+    dateInput.addEventListener('change', trigger);
+
+    // Auto-load for today
+    trigger();
+}
+
+async function loadYearComparison(cityId, date) {
+    const resultsDiv = document.getElementById('yearCompareResults');
+    if (!resultsDiv) return;
+
+    resultsDiv.innerHTML = `<div class="year-compare-loading">
+        <div class="loader-spinner" style="width:24px;height:24px;border-width:3px;"></div>
+        <span>Fetching historical data...</span>
+    </div>`;
+
+    try {
+        const response = await fetch(`/api/forecast/year-compare?city=${cityId}&date=${date}`);
+        const result = await response.json();
+        if (result.status === 'success') {
+            renderYearComparison(result);
+        } else {
+            resultsDiv.innerHTML = `<p class="year-compare-placeholder">Could not load data: ${result.message || 'unknown error'}</p>`;
+        }
+    } catch (e) {
+        console.error('Year comparison error:', e);
+        resultsDiv.innerHTML = `<p class="year-compare-placeholder">Network error — please try again.</p>`;
+    }
+}
+
+function renderYearComparison(data) {
+    const resultsDiv = document.getElementById('yearCompareResults');
+    if (!resultsDiv) return;
+
+    const { date, last_year_date, two_years_ago_date, city } = data;
+
+    const fmtDate = d => {
+        const [y, m, day] = d.split('-');
+        return `${day}/${m}/${y}`;
+    };
+    const fmtT = t => (t != null ? `${t}°C` : '—');
+    const diffStr = (curr, hist) => {
+        if (!curr || !hist || curr.avg_temp == null || hist.avg_temp == null) return '';
+        const d = (curr.avg_temp - hist.avg_temp).toFixed(1);
+        const sign = d > 0 ? '+' : '';
+        return `<span class="yc-diff">(${sign}${d}°C)</span>`;
+    };
+
+    const badge = (comp) => {
+        if (comp === 'warmer') return '<span class="yc-badge warmer">🔥 Warmer</span>';
+        if (comp === 'cooler') return '<span class="yc-badge cooler">❄️ Cooler</span>';
+        if (comp === 'similar') return '<span class="yc-badge similar">≈ Similar</span>';
+        if (comp === 'unavailable') return '<span class="yc-badge unknown">No data</span>';
+        return '<span class="yc-badge unknown">—</span>';
+    };
+
+    const curr = city.current;
+    const ly = city.last_year;
+    const tya = city.two_years_ago;
+
+    const currYear = date.split('-')[0];
+    const lyYear = last_year_date.split('-')[0];
+    const tyaYear = two_years_ago_date.split('-')[0];
+
+    const currBlock = curr
+        ? `<div class="yc-temp-val">${fmtT(curr.day_temp)} / ${fmtT(curr.night_temp)}</div>
+           <div class="yc-temp-avg">avg ${fmtT(curr.avg_temp)}</div>`
+        : '<span class="yc-na">No data available</span>';
+
+    const lyBlock = ly && ly.avg_temp != null
+        ? `<div class="yc-temp-val">${fmtT(ly.day_temp)} / ${fmtT(ly.night_temp)}</div>
+           <div class="yc-temp-avg">avg ${fmtT(ly.avg_temp)} ${diffStr(curr, ly)}</div>
+           ${badge(ly.comparison)}`
+        : badge(ly ? ly.comparison : 'unavailable');
+
+    const tyaBlock = tya && tya.avg_temp != null
+        ? `<div class="yc-temp-val">${fmtT(tya.day_temp)} / ${fmtT(tya.night_temp)}</div>
+           <div class="yc-temp-avg">avg ${fmtT(tya.avg_temp)} ${diffStr(curr, tya)}</div>
+           ${badge(tya.comparison)}`
+        : badge(tya ? tya.comparison : 'unavailable');
+
+    resultsDiv.innerHTML = `
+    <div class="year-compare-date-header">
+        <strong>${city.city_name}</strong> &mdash;
+        ${fmtDate(date)} compared with ${fmtDate(last_year_date)} and ${fmtDate(two_years_ago_date)}
+    </div>
+    <div class="yc-cards-row">
+        <div class="yc-year-card yc-card-current">
+            <div class="yc-year-label">${currYear} <small>(${fmtDate(date)})</small></div>
+            ${currBlock}
+        </div>
+        <div class="yc-arrow">→</div>
+        <div class="yc-year-card yc-card-ly">
+            <div class="yc-year-label">${lyYear} <small>(${fmtDate(last_year_date)})</small></div>
+            ${lyBlock}
+        </div>
+        <div class="yc-arrow">→</div>
+        <div class="yc-year-card yc-card-tya">
+            <div class="yc-year-label">${tyaYear} <small>(${fmtDate(two_years_ago_date)})</small></div>
+            ${tyaBlock}
+        </div>
+    </div>`;
 }
 
 function setupForecastEventListeners() {
@@ -2005,11 +2236,15 @@ function setupForecastEventListeners() {
                 if (result.status === 'success' && result.data) {
                     generateForecastCards(result.data);
                     initializeForecastChart(result.data);
+                    if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
                 }
             } catch (e) {
                 console.error(e);
             }
             generatePredictions();
+            // Refresh year comparison for new city
+            const dateInput = document.getElementById('yearCompareDate');
+            if (dateInput && dateInput.value) loadYearComparison(selectedForecastCity, dateInput.value);
         });
     }
 
@@ -2023,6 +2258,11 @@ function setupForecastEventListeners() {
 
             // Update selected days and refresh
             selectedForecastDays = parseInt(this.dataset.days);
+            updateForecastSubtitle(selectedForecastDays);
+
+            // Toggle 4-month breakdown section visibility
+            const breakdownSection = document.getElementById('fourMonthBreakdown');
+            if (breakdownSection) breakdownSection.style.display = selectedForecastDays === 120 ? '' : 'none';
 
             // Fetch and update
             const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
@@ -2032,6 +2272,7 @@ function setupForecastEventListeners() {
                     if (result.status === 'success') {
                         generateForecastCards(result.data);
                         initializeForecastChart(result.data);
+                        if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
                     }
                 });
         });
@@ -2064,8 +2305,14 @@ function generateForecastCards(forecastData) {
     const container = document.getElementById('forecastCarousel');
     if (!container || !forecastData) return;
 
-    // Use fetched data (max 7 visible)
-    const cardsToShow = Math.min(forecastData.length, 7);
+    // 4-month view: show monthly summary cards instead of daily cards
+    if (selectedForecastDays === 120) {
+        generateMonthlyForecastCards(forecastData, container);
+        return;
+    }
+
+    // Use fetched data (max 7 visible for short-term)
+    const cardsToShow = Math.min(forecastData.length, selectedForecastDays <= 14 ? 7 : 14);
 
     let html = '';
     for (let i = 0; i < cardsToShow; i++) {
@@ -2108,6 +2355,137 @@ function generateForecastCards(forecastData) {
     container.innerHTML = html;
 }
 
+/*
+ * Aggregate daily forecast into monthly buckets for 4-month view
+ */
+function aggregateForecastByMonth(forecastData) {
+    const monthMap = {};
+    forecastData.forEach(day => {
+        const d = new Date(day.date);
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        if (!monthMap[key]) {
+            monthMap[key] = {
+                year: d.getFullYear(),
+                month: d.getMonth(),
+                monthName: d.toLocaleString('default', { month: 'long' }),
+                shortMonth: d.toLocaleString('default', { month: 'short' }),
+                dayTemps: [],
+                nightTemps: [],
+                humidity: [],
+                windSpeeds: []
+            };
+        }
+        if (day.day_temp != null) monthMap[key].dayTemps.push(day.day_temp);
+        if (day.night_temp != null) monthMap[key].nightTemps.push(day.night_temp);
+        if (day.humidity != null) monthMap[key].humidity.push(day.humidity);
+        if (day.wind_speed != null) monthMap[key].windSpeeds.push(day.wind_speed);
+    });
+    return Object.values(monthMap).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+}
+
+/*
+ * Show 4 monthly summary cards in the carousel area
+ */
+function generateMonthlyForecastCards(forecastData, container) {
+    const months = aggregateForecastByMonth(forecastData).slice(0, 4);
+    const monthIcons = ['🌤️', '☀️', '🔥', '🌤️', '⛅', '🌧️', '🌧️', '🌧️', '🌦️', '🌤️', '⛅', '🌥️'];
+
+    let html = '<div class="forecast-monthly-cards">';
+    months.forEach((m, idx) => {
+        const avgDay = m.dayTemps.length ? Math.round(m.dayTemps.reduce((a, b) => a + b, 0) / m.dayTemps.length) : '--';
+        const avgNight = m.nightTemps.length ? Math.round(m.nightTemps.reduce((a, b) => a + b, 0) / m.nightTemps.length) : '--';
+        const avgHumidity = m.humidity.length ? Math.round(m.humidity.reduce((a, b) => a + b, 0) / m.humidity.length) : '--';
+        const demandIdx = typeof avgDay === 'number' ? Math.min(100, Math.max(0, Math.round((avgDay - 20) * 2.5))) : '--';
+        const icon = monthIcons[m.month] || '🌤️';
+        const demandColor = typeof demandIdx === 'number' ? (demandIdx >= 70 ? '#ef4444' : demandIdx >= 50 ? '#f97316' : demandIdx >= 30 ? '#eab308' : '#22c55e') : '#94a3b8';
+        const demandLabel = typeof demandIdx === 'number' ? (demandIdx >= 70 ? 'Very High' : demandIdx >= 50 ? 'High' : demandIdx >= 30 ? 'Moderate' : 'Low') : 'N/A';
+
+        html += `
+        <div class="forecast-card forecast-month-card glass-card" data-month="${idx}">
+            <div class="forecast-day" style="font-size:1rem;font-weight:700;">${m.monthName}</div>
+            <div class="forecast-date" style="opacity:0.6;">${m.year}</div>
+            <div class="forecast-icon" style="font-size:2.2rem;margin:0.5rem 0;">${icon}</div>
+            <div class="forecast-temps">
+                <span class="forecast-temp-high">${avgDay}°</span>
+                <span class="forecast-temp-low">${avgNight}°</span>
+            </div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">Humidity: ${avgHumidity}%</div>
+            <div class="forecast-demand" style="font-size:0.78rem;margin-top:0.5rem;font-weight:600;color:${demandColor};">
+                Demand: ${demandLabel} (${demandIdx}%)
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+/*
+ * Generate detailed 4-month breakdown section
+ */
+function generateFourMonthBreakdown(forecastData) {
+    const section = document.getElementById('fourMonthBreakdown');
+    const grid = document.getElementById('fourMonthGrid');
+    if (!section || !grid) return;
+
+    section.style.display = '';
+    const months = aggregateForecastByMonth(forecastData).slice(0, 4);
+    const monthColors = ['#3b82f6', '#f97316', '#ef4444', '#8b5cf6'];
+
+    let html = '';
+    months.forEach((m, idx) => {
+        const avgDay = m.dayTemps.length ? (m.dayTemps.reduce((a, b) => a + b, 0) / m.dayTemps.length).toFixed(1) : 'N/A';
+        const maxDay = m.dayTemps.length ? Math.max(...m.dayTemps).toFixed(1) : 'N/A';
+        const minNight = m.nightTemps.length ? Math.min(...m.nightTemps).toFixed(1) : 'N/A';
+        const avgNight = m.nightTemps.length ? (m.nightTemps.reduce((a, b) => a + b, 0) / m.nightTemps.length).toFixed(1) : 'N/A';
+        const avgHumidity = m.humidity.length ? Math.round(m.humidity.reduce((a, b) => a + b, 0) / m.humidity.length) : 'N/A';
+        const avgWind = m.windSpeeds.length ? (m.windSpeeds.reduce((a, b) => a + b, 0) / m.windSpeeds.length).toFixed(1) : 'N/A';
+        const demandIdx = typeof parseFloat(avgDay) === 'number' && !isNaN(parseFloat(avgDay)) ? Math.min(100, Math.max(0, Math.round((parseFloat(avgDay) - 20) * 2.5))) : 0;
+        const demandColor = demandIdx >= 70 ? '#ef4444' : demandIdx >= 50 ? '#f97316' : demandIdx >= 30 ? '#eab308' : '#22c55e';
+        const demandLabel = demandIdx >= 70 ? 'Very High Demand' : demandIdx >= 50 ? 'High Demand' : demandIdx >= 30 ? 'Moderate Demand' : 'Low Demand';
+        const color = monthColors[idx % monthColors.length];
+
+        html += `
+        <div class="four-month-card glass-card" style="border-top: 3px solid ${color};">
+            <div class="four-month-card-header">
+                <span class="four-month-name" style="color:${color};">${m.monthName} ${m.year}</span>
+                <span class="four-month-demand-badge" style="background:${demandColor}20;color:${demandColor};border:1px solid ${demandColor}40;">${demandLabel}</span>
+            </div>
+            <div class="four-month-stats">
+                <div class="four-month-stat">
+                    <div class="stat-value">${avgDay}°C</div>
+                    <div class="stat-label">Avg Day</div>
+                </div>
+                <div class="four-month-stat">
+                    <div class="stat-value">${maxDay}°C</div>
+                    <div class="stat-label">Peak Day</div>
+                </div>
+                <div class="four-month-stat">
+                    <div class="stat-value">${avgNight}°C</div>
+                    <div class="stat-label">Avg Night</div>
+                </div>
+                <div class="four-month-stat">
+                    <div class="stat-value">${minNight}°C</div>
+                    <div class="stat-label">Min Night</div>
+                </div>
+                <div class="four-month-stat">
+                    <div class="stat-value">${avgHumidity}%</div>
+                    <div class="stat-label">Humidity</div>
+                </div>
+                <div class="four-month-stat">
+                    <div class="stat-value">${avgWind} km/h</div>
+                    <div class="stat-label">Wind</div>
+                </div>
+            </div>
+            <div class="four-month-demand-bar">
+                <div class="demand-bar-fill" style="width:${demandIdx}%;background:${demandColor};"></div>
+                <span class="demand-bar-label">${demandIdx}% Demand Index</span>
+            </div>
+        </div>`;
+    });
+
+    grid.innerHTML = html;
+}
+
 function initializeForecastChart(forecastData) {
     const canvas = document.getElementById('forecastChart');
     if (!canvas || !forecastData) return;
@@ -2119,15 +2497,53 @@ function initializeForecastChart(forecastData) {
     const dayData = [];
     const nightData = [];
     const demandData = [];
+    const is4Month = selectedForecastDays === 120;
 
-    // Process forecast data
-    forecastData.forEach(day => {
-        const d = new Date(day.date);
-        headers.push(`${d.getDate()}/${d.getMonth() + 1}`);
-        dayData.push(day.day_temp);
-        nightData.push(day.night_temp);
-        demandData.push(Math.round((day.day_temp - 20) * 2.5));
-    });
+    if (is4Month) {
+        // Aggregate by week for cleaner 4-month chart
+        const weeks = [];
+        let weekBuf = { dayTemps: [], nightTemps: [], label: '' };
+        let weekNum = 0;
+        forecastData.forEach((day, i) => {
+            const d = new Date(day.date);
+            if (i % 7 === 0) {
+                if (weekNum > 0 && weekBuf.dayTemps.length) {
+                    weeks.push({ ...weekBuf });
+                }
+                weekBuf = {
+                    dayTemps: [],
+                    nightTemps: [],
+                    label: `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`
+                };
+                weekNum++;
+            }
+            if (day.day_temp != null) weekBuf.dayTemps.push(day.day_temp);
+            if (day.night_temp != null) weekBuf.nightTemps.push(day.night_temp);
+        });
+        if (weekBuf.dayTemps.length) weeks.push(weekBuf);
+
+        weeks.forEach(w => {
+            headers.push(w.label);
+            const avgDay = w.dayTemps.reduce((a, b) => a + b, 0) / w.dayTemps.length;
+            const avgNight = w.nightTemps.reduce((a, b) => a + b, 0) / w.nightTemps.length;
+            dayData.push(parseFloat(avgDay.toFixed(1)));
+            nightData.push(parseFloat(avgNight.toFixed(1)));
+            demandData.push(Math.min(100, Math.max(0, Math.round((avgDay - 20) * 2.5))));
+        });
+    } else {
+        // Daily data for short-term forecasts
+        forecastData.forEach(day => {
+            const d = new Date(day.date);
+            headers.push(`${d.getDate()}/${d.getMonth() + 1}`);
+            dayData.push(day.day_temp);
+            nightData.push(day.night_temp);
+            demandData.push(Math.min(100, Math.max(0, Math.round((day.day_temp - 20) * 2.5))));
+        });
+    }
+
+    const titleText = is4Month
+        ? (cityData ? `4-Month Forecast (Weekly Avg) — ${cityData.city_name}` : '4-Month Forecast (Weekly Averages)')
+        : (cityData ? `${selectedForecastDays}-Day Forecast for ${cityData.city_name}` : `${selectedForecastDays}-Day Average Forecast`);
 
     charts.forecast = new Chart(canvas, {
         type: 'line',
@@ -2141,6 +2557,7 @@ function initializeForecastChart(forecastData) {
                     backgroundColor: 'rgba(249, 115, 22, 0.1)',
                     tension: 0.4,
                     fill: true,
+                    pointRadius: is4Month ? 4 : 3,
                     yAxisID: 'y'
                 },
                 {
@@ -2150,6 +2567,7 @@ function initializeForecastChart(forecastData) {
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     tension: 0.4,
                     fill: true,
+                    pointRadius: is4Month ? 4 : 3,
                     yAxisID: 'y'
                 },
                 {
@@ -2160,6 +2578,7 @@ function initializeForecastChart(forecastData) {
                     tension: 0.4,
                     fill: false,
                     borderDash: [5, 5],
+                    pointRadius: is4Month ? 4 : 3,
                     yAxisID: 'y1'
                 }
             ]
@@ -2175,10 +2594,21 @@ function initializeForecastChart(forecastData) {
                 legend: { position: 'top' },
                 title: {
                     display: true,
-                    text: cityData ? `${selectedForecastDays}-Day Forecast for ${cityData.city_name}` : `${selectedForecastDays}-Day Average Forecast`
+                    text: titleText
+                },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => is4Month ? `Week of ${items[0].label}` : items[0].label
+                    }
                 }
             },
             scales: {
+                x: {
+                    ticks: {
+                        maxRotation: is4Month ? 45 : 0,
+                        font: { size: is4Month ? 11 : 12 }
+                    }
+                },
                 y: {
                     type: 'linear',
                     display: true,
@@ -2973,23 +3403,7 @@ function showMetricComparison(metricLabel) {
 }
 
 // ========== Loading & Toast ==========
-function showLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.add('active');
-}
-
-function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.style.transition = 'opacity 0.4s ease';
-        overlay.style.opacity = '0';
-        setTimeout(() => {
-            overlay.classList.remove('active');
-            overlay.style.opacity = '';
-            overlay.style.transition = '';
-        }, 400);
-    }
-}
+// NOTE: showLoading() and hideLoading() are defined earlier in this file — do not redefine them here.
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
@@ -3050,7 +3464,7 @@ async function uploadExcelFile(file) {
 
         if (result.status === 'success') {
             showToast('Excel file uploaded successfully!', 'success');
-            await loadDashboardData();
+            await loadDashboardData(false); // false = don't re-show the overlay
         } else {
             showToast(result.message || 'Upload failed', 'error');
         }

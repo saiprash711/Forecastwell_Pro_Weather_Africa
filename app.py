@@ -7,6 +7,7 @@ from flask import Flask, render_template, jsonify, request, send_file, session, 
 from functools import wraps
 from flask_cors import CORS
 from datetime import datetime, timedelta
+import os
 import random
 import math
 import time
@@ -151,17 +152,31 @@ def add_cache_headers(response):
     return response
 
 
-# ---- Dummy credentials for login ----
-DUMMY_USERNAME = 'admin'
-DUMMY_PASSWORD = 'forecast2026'
-
-
 def login_required(f):
-    """Decorator to require login for a route"""
+    """Decorator to require Supabase JWT login for a route"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Allow preflight requests
+        if request.method == 'OPTIONS':
+            return f(*args, **kwargs)
+
+        # Check for Authorization header first (for API calls)
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            try:
+                # Basic validation using Supabase client
+                if supabase_handler.enabled:
+                    supabase_handler.client.auth.get_user(token)
+                    return f(*args, **kwargs)
+            except Exception as e:
+                print(f"[Auth API] Invalid token: {e}")
+                return jsonify({'error': 'Unauthorized', 'message': 'Invalid token'}), 401
+
+        # Fallback to session check for traditional web routes
+        # Your frontend should manage the token securely or pass it in headers
         if not session.get('logged_in'):
-            return redirect(url_for('login'))
+            return redirect('/login')  # Assuming your React/Frontend handles /login
         return f(*args, **kwargs)
     return decorated_function
 
@@ -495,12 +510,10 @@ def get_cached_weather():
     # No cache at all — fetch synchronously so the first request gets real data
     # Use lock to prevent scheduler + user request from fetching simultaneously
     if not _weather_fetch_lock.acquire(blocking=False):
-        # Another thread is already fetching — wait for it to finish then use cache
-        print("[Cache] Another fetch in progress, waiting...")
-        _weather_fetch_lock.acquire()
-        _weather_fetch_lock.release()
-        if cache['weather_data']:
-            return cache['weather_data']
+        # Startup preload (or another request) is already fetching.
+        # Instead of blocking the Flask worker, return empty immediately.
+        # The SSE weather_update event will push fresh data when preload finishes.
+        print("[Cache] Preload in progress — returning empty immediately (SSE will push update)")
         return _ensure_all_cities_present([])
 
     cache_stats['cache_misses'] += 1
@@ -652,28 +665,51 @@ def send_alert_webhooks(alerts_list):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page"""
+    """Login page — authenticated via Supabase"""
     if session.get('logged_in'):
-        return redirect(url_for('index'))
+        return redirect('/')
 
     if request.method == 'POST':
-        username = request.form.get('username', '')
-        password = request.form.get('password', '')
-        if username == DUMMY_USERNAME and password == DUMMY_PASSWORD:
-            session['logged_in'] = True
-            session['username'] = username
-            return jsonify({'success': True, 'redirect': url_for('index')})
-        else:
-            return jsonify({'success': False, 'message': 'Invalid username or password.'})
+        email = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
 
-    return render_template('login.html', error=None)
+        supabase_url = app.config.get('SUPABASE_URL', '')
+        supabase_key = app.config.get('SUPABASE_KEY', '')
+
+        if not supabase_url or not supabase_key:
+            return jsonify({'success': False, 'message': 'Authentication service unavailable. Check Supabase configuration.'})
+
+        try:
+            auth_response = requests.post(
+                f"{supabase_url}/auth/v1/token?grant_type=password",
+                headers={
+                    'apikey': supabase_key,
+                    'Content-Type': 'application/json'
+                },
+                json={'email': email, 'password': password},
+                timeout=10
+            )
+            data = auth_response.json()
+            if auth_response.status_code == 200 and data.get('access_token'):
+                session['logged_in'] = True
+                session['user_email'] = data.get('user', {}).get('email', email)
+                session.permanent = True
+                return jsonify({'success': True, 'redirect': '/'})
+            else:
+                msg = data.get('error_description') or data.get('msg') or 'Invalid email or password.'
+                return jsonify({'success': False, 'message': msg})
+        except Exception as e:
+            print(f"[Auth] Login error: {e}")
+            return jsonify({'success': False, 'message': 'Could not reach authentication service. Please try again.'})
+
+    return render_template('login.html')
 
 
 @app.route('/logout')
 def logout():
     """Logout and redirect to login"""
     session.clear()
-    return redirect(url_for('login'))
+    return redirect('/login')
 
 
 @app.route('/')
@@ -681,17 +717,14 @@ def logout():
 def index():
     """Main dashboard page"""
     # Generate cache version based on file modification time for cache busting
-    import os
+    import hashlib
     from pathlib import Path
     cache_version = 'dev'
     try:
         static_dir = Path(__file__).parent / 'static'
-        js_file = static_dir / 'js' / 'dashboard.min.js'
-        css_file = static_dir / 'css' / 'style.min.css'
-        
-        # Use file hash for version if minified files exist
+        # Hash dashboard.js (the actual file served) so changes always bust the cache
+        js_file = static_dir / 'js' / 'dashboard.js'
         if js_file.exists():
-            import hashlib
             with open(js_file, 'rb') as f:
                 cache_version = hashlib.md5(f.read()).hexdigest()[:8]
     except Exception:
@@ -724,6 +757,8 @@ def get_dashboard_init():
             c.get('temperature') is not None for c in cities_weather
         )
         if not has_live_data:
+            # Server is warming up — tell the client so it can show a helpful message
+            warming_up = _weather_fetch_lock.locked()
             return jsonify({
                 'status': 'success',
                 'data': {
@@ -739,7 +774,8 @@ def get_dashboard_init():
                         'day_temp_range': None
                     },
                     'timestamp': None,
-                    'stale': False,
+                    'stale': warming_up,
+                    'warming_up': warming_up,
                     'data_age_seconds': 0
                 }
             })
@@ -1740,6 +1776,106 @@ def get_forecast():
             'days': days
         })
     except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/forecast/year-compare')
+@login_required
+def get_forecast_year_compare():
+    """Compare temperature for a selected date and city vs same date last year and 2 years ago.
+    Query: city=<city_id> (required), date=YYYY-MM-DD (default: today)
+    """
+    city_id = request.args.get('city')
+    if not city_id:
+        return jsonify({'status': 'error', 'message': 'City ID required'}), 400
+
+    city_config = next((c for c in Config.CITIES if c['id'] == city_id), None)
+    if not city_config:
+        return jsonify({'status': 'error', 'message': f'Unknown city: {city_id}'}), 404
+
+    date_str = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    try:
+        target_dt = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    today = datetime.now().date()
+    last_year_str = target_dt.replace(year=target_dt.year - 1).strftime('%Y-%m-%d')
+    two_years_ago_str = target_dt.replace(year=target_dt.year - 2).strftime('%Y-%m-%d')
+
+    def get_current_year_temp():
+        """Get temperature for the target date via archive/current/forecast as appropriate"""
+        try:
+            if target_dt < today:
+                return weather_service.get_daily_temp(city_id, date_str)
+            if target_dt == today:
+                current = weather_service.get_current_weather(city_id)
+                if current:
+                    day_t = current.get('day_temp') or current.get('temperature') or 0
+                    night_t = current.get('night_temp') or (current.get('temperature', 0) - 5)
+                    return {
+                        'avg_temp': round((day_t + night_t) / 2, 1),
+                        'day_temp': round(day_t, 1),
+                        'night_temp': round(night_t, 1),
+                    }
+            # Future date — use forecast
+            days_ahead = (target_dt - today).days
+            if days_ahead <= 16:
+                forecast = weather_service.get_forecast(city_id, days=days_ahead + 2)
+                for day in forecast:
+                    if day.get('date') == date_str:
+                        day_t = day.get('day_temp') or 0
+                        night_t = day.get('night_temp') or 0
+                        return {
+                            'avg_temp': round((day_t + night_t) / 2, 1),
+                            'day_temp': round(day_t, 1),
+                            'night_temp': round(night_t, 1),
+                        }
+        except Exception:
+            pass
+        return None
+
+    def compare_temps(curr, hist):
+        if not curr or not hist:
+            return 'unknown'
+        c, h = curr.get('avg_temp'), hist.get('avg_temp')
+        if c is None or h is None:
+            return 'unknown'
+        diff = c - h
+        return 'warmer' if diff > 0.5 else ('cooler' if diff < -0.5 else 'similar')
+
+    try:
+        # Fetch all three dates in parallel using the retry-session-backed method
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_curr = ex.submit(get_current_year_temp)
+            f_ly = ex.submit(weather_service.get_daily_temp, city_id, last_year_str)
+            f_tya = ex.submit(weather_service.get_daily_temp, city_id, two_years_ago_str)
+            current_data = f_curr.result()
+            last_year_data = f_ly.result()
+            two_years_ago_data = f_tya.result()
+
+        def build_hist(hist_data, hist_date_str):
+            if hist_data:
+                return {'date': hist_date_str, **hist_data,
+                        'comparison': compare_temps(current_data, hist_data)}
+            return {'date': hist_date_str, 'comparison': 'unavailable'}
+
+        return jsonify({
+            'status': 'success',
+            'date': date_str,
+            'last_year_date': last_year_str,
+            'two_years_ago_date': two_years_ago_str,
+            'city': {
+                'city_id': city_id,
+                'city_name': city_config['name'],
+                'current': current_data,
+                'last_year': build_hist(last_year_data, last_year_str),
+                'two_years_ago': build_hist(two_years_ago_data, two_years_ago_str),
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
@@ -3512,7 +3648,8 @@ if not app.debug or _os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     # Preload weather cache on startup so first user request is instant
     def _startup_preload():
         """Background preload: fetch weather immediately so users never wait"""
-        time.sleep(2)  # Let Flask finish starting
+        # No sleep — acquire lock immediately to win the race against the first user request.
+        # If a user request comes before us, it will do its own fetch and we'll skip.
         if not _weather_fetch_lock.acquire(blocking=False):
             return  # Another thread already fetching
         try:

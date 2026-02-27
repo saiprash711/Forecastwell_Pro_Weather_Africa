@@ -591,7 +591,53 @@ class WeatherService:
             if city['id'] == city_id:
                 return city
         return None
-    
+
+    def get_daily_temp(self, city_id, date_str):
+        """
+        Get temperature for a specific date from Open-Meteo Archive API.
+        Uses the shared retry session for reliability.
+
+        Args:
+            city_id: City identifier
+            date_str: Date in YYYY-MM-DD format (must be a past date)
+
+        Returns:
+            dict with avg_temp, day_temp, night_temp or None on failure
+        """
+        city = self._get_city_config(city_id)
+        if not city:
+            return None
+        try:
+            params = {
+                'latitude': city['lat'],
+                'longitude': city['lon'],
+                'start_date': date_str,
+                'end_date': date_str,
+                'daily': 'temperature_2m_max,temperature_2m_min,temperature_2m_mean',
+                'timezone': 'Asia/Kolkata'
+            }
+            response = _get_session().get(
+                "https://archive-api.open-meteo.com/v1/archive",
+                params=params,
+                timeout=20
+            )
+            if response.status_code == 200:
+                data = response.json()
+                daily = data.get('daily', {})
+                if daily.get('time'):
+                    day_t = daily['temperature_2m_max'][0]
+                    night_t = daily['temperature_2m_min'][0]
+                    mean_t = (daily.get('temperature_2m_mean') or [None])[0]
+                    if mean_t is None and day_t is not None and night_t is not None:
+                        mean_t = (day_t + night_t) / 2
+                    return {
+                        'avg_temp': round(mean_t, 1) if mean_t is not None else None,
+                        'day_temp': round(day_t, 1) if day_t is not None else None,
+                        'night_temp': round(night_t, 1) if night_t is not None else None,
+                    }
+        except Exception:
+            pass
+        return None
 
     def _fetch_openmeteo_current(self, city):
         """

@@ -27,6 +27,24 @@ class SupabaseHandler:
         else:
             print("[WARNING] Supabase credentials not found. Database features disabled.")
 
+    def _execute_with_retry(self, operation, max_retries=3, delay=1):
+        import time
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                return operation()
+            except Exception as e:
+                last_error = e
+                print(f"[WARNING] Supabase operation failed (Attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    if "10054" in str(e) or "connection" in str(e).lower() or "host" in str(e).lower():
+                        try:
+                            self.client = create_client(self.url, self.key)
+                        except Exception:
+                            pass
+                    time.sleep(delay)
+        raise last_error
+
     def save_weather_log(self, weather_data):
         """
         Save a single weather data record to the database.
@@ -40,8 +58,10 @@ class SupabaseHandler:
         try:
             # Prepare data for insertion matching schema
             record = self._prepare_weather_record(weather_data)
-            data, count = self.client.table("weather_logs").insert(record).execute()
-            return data
+            def _op():
+                return self.client.table("weather_logs").insert(record).execute()
+            response = self._execute_with_retry(_op)
+            return getattr(response, 'data', response[0] if isinstance(response, tuple) else response)
         except Exception as e:
             print(f"[ERROR] Error saving weather log to Supabase: {e}")
             return None
@@ -63,9 +83,11 @@ class SupabaseHandler:
             if not records:
                 return None
                 
-            data, count = self.client.table("weather_logs").insert(records).execute()
+            def _op():
+                return self.client.table("weather_logs").insert(records).execute()
+            response = self._execute_with_retry(_op)
             print(f"[SUCCESS] Batch saved {len(records)} weather logs to Supabase")
-            return data
+            return getattr(response, 'data', response[0] if isinstance(response, tuple) else response)
         except Exception as e:
             print(f"[ERROR] Error batch saving weather logs to Supabase: {e}")
             return None
@@ -110,8 +132,10 @@ class SupabaseHandler:
                 "acknowledged": False
             }
             
-            data, count = self.client.table("alerts").insert(record).execute()
-            return data
+            def _op():
+                return self.client.table("alerts").insert(record).execute()
+            response = self._execute_with_retry(_op)
+            return getattr(response, 'data', response[0] if isinstance(response, tuple) else response)
         except Exception as e:
             print(f"[ERROR] Error saving alert to Supabase: {e}")
             return None
@@ -122,13 +146,15 @@ class SupabaseHandler:
             return []
             
         try:
-            response = self.client.table("weather_logs")\
-                .select("*")\
-                .eq("city_id", city_id)\
-                .order("timestamp", desc=True)\
-                .limit(limit)\
-                .execute()
-            return response.data
+            def _op():
+                return self.client.table("weather_logs")\
+                    .select("*")\
+                    .eq("city_id", city_id)\
+                    .order("timestamp", desc=True)\
+                    .limit(limit)\
+                    .execute()
+            response = self._execute_with_retry(_op)
+            return getattr(response, 'data', response)
         except Exception as e:
             print(f"[ERROR] Error fetching logs from Supabase: {e}")
             return []
@@ -139,12 +165,14 @@ class SupabaseHandler:
             return []
             
         try:
-            response = self.client.table("alerts")\
-                .select("*")\
-                .eq("acknowledged", False)\
-                .order("created_at", desc=True)\
-                .execute()
-            return response.data
+            def _op():
+                return self.client.table("alerts")\
+                    .select("*")\
+                    .eq("acknowledged", False)\
+                    .order("created_at", desc=True)\
+                    .execute()
+            response = self._execute_with_retry(_op)
+            return getattr(response, 'data', response)
         except Exception as e:
             print(f"[ERROR] Error fetching alerts from Supabase: {e}")
             return []
@@ -155,14 +183,16 @@ class SupabaseHandler:
             return None
 
         try:
-            data, count = self.client.table("alerts")\
-                .update({
-                    "acknowledged": True,
-                    "acknowledged_at": datetime.now().isoformat()
-                })\
-                .eq("id", alert_id)\
-                .execute()
-            return data
+            def _op():
+                return self.client.table("alerts")\
+                    .update({
+                        "acknowledged": True,
+                        "acknowledged_at": datetime.now().isoformat()
+                    })\
+                    .eq("id", alert_id)\
+                    .execute()
+            response = self._execute_with_retry(_op)
+            return getattr(response, 'data', response[0] if isinstance(response, tuple) else response)
         except Exception as e:
             print(f"[ERROR] Error acknowledging alert in Supabase: {e}")
             return None
