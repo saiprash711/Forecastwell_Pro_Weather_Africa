@@ -132,20 +132,20 @@ def add_cache_headers(response):
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
 
-    # Weather API endpoints: short cache (3 min) — data refreshes every 10 min
+    # Weather API endpoints: cache 3 hours — data pulled once every 3 hours per client requirement
     if path in ('/api/dashboard-init', '/api/weather/current', '/api/kpis'):
-        response.headers['Cache-Control'] = 'private, max-age=180, stale-while-revalidate=60'
+        response.headers['Cache-Control'] = 'private, max-age=10800'
         return response
 
-    # Slow-changing data: medium cache (10 min)
+    # Slow-changing data: cache 3 hours
     if path in ('/api/dsb-overview', '/api/demand-prediction', '/api/energy-estimates',
                 '/api/service-predictions', '/api/weekly-summary', '/api/insights/simple'):
-        response.headers['Cache-Control'] = 'private, max-age=600, stale-while-revalidate=120'
+        response.headers['Cache-Control'] = 'private, max-age=10800'
         return response
 
-    # Historical/monthly/heatmap data: long cache (1 hour) - rarely changes
+    # Historical/monthly/heatmap/forecast data: cache 3 hours
     if any(path.startswith(p) for p in ['/api/historical', '/api/heatmap', '/api/monthly', '/api/forecast']):
-        response.headers['Cache-Control'] = 'private, max-age=3600, stale-while-revalidate=300'
+        response.headers['Cache-Control'] = 'private, max-age=10800'
         return response
 
     # Default: no cache for other API endpoints
@@ -187,8 +187,9 @@ data_processor = DataProcessor()
 supabase_handler = SupabaseHandler()
 
 # Initialize file-based persistent cache (survives restarts)
-file_cache = FileCache(cache_dir='cache_data', ttl_hours=12)
-print("[FileCache] Persistent cache initialized (TTL=12 hours)")
+# TTL = 3 hours — data is pulled at most once every 3 hours per client requirement
+file_cache = FileCache(cache_dir='cache_data', ttl_hours=3)
+print("[FileCache] Persistent cache initialized (TTL=3 hours)")
 
 # Simple in-memory cache for faster responses
 cache = {
@@ -203,10 +204,10 @@ cache = {
     'forecast_data': {},  # Cache forecast data by city_id
     'forecast_timestamp': {}
 }
-CACHE_TTL = 600  # 10 minutes cache (increased to reduce API calls)
-MONTHLY_CACHE_TTL = 3600  # 1 hour cache for monthly data (changes rarely)
-FORECAST_CACHE_TTL = 1800  # 30 minutes cache for seasonal forecast
-ALERTS_TTL = 300  # refresh alerts every 5 minutes
+CACHE_TTL = 10800  # 3 hours — data pulled at most once every 3 hours per client requirement
+MONTHLY_CACHE_TTL = 10800  # 3 hours cache for monthly data
+FORECAST_CACHE_TTL = 10800  # 3 hours cache for seasonal forecast
+ALERTS_TTL = 10800  # 3 hours — refresh alerts in sync with weather cadence
 
 # Cache monitoring counters
 cache_stats = {
@@ -672,6 +673,22 @@ def login():
     if request.method == 'POST':
         email = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+
+        # ── Dev-mode bypass ──────────────────────────────────────────────────
+        # When FLASK_ENV=development, skip Supabase entirely and use the
+        # credentials defined in .env (DEV_LOGIN_USER / DEV_LOGIN_PASSWORD).
+        if app.config.get('FLASK_ENV') == 'development':
+            dev_user = os.environ.get('DEV_LOGIN_USER', 'admin@test.com')
+            dev_pass = os.environ.get('DEV_LOGIN_PASSWORD', 'admin123')
+            if email == dev_user and password == dev_pass:
+                session['logged_in'] = True
+                session['user_email'] = dev_user
+                session.permanent = True
+                print(f"[Auth] Dev login accepted for '{dev_user}'")
+                return jsonify({'success': True, 'redirect': '/'})
+            else:
+                return jsonify({'success': False, 'message': 'Invalid email or password.'})
+        # ────────────────────────────────────────────────────────────────────
 
         supabase_url = app.config.get('SUPABASE_URL', '')
         supabase_key = app.config.get('SUPABASE_KEY', '')
@@ -3549,7 +3566,7 @@ def supabase_status():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def scheduled_weather_refresh():
-    """Refresh weather data for all cities (runs every 10 min)."""
+    """Refresh weather data for all cities (runs every 3 hours per client requirement)."""
     if not _weather_fetch_lock.acquire(blocking=False):
         print("[Scheduler] Weather fetch already in progress, skipping this cycle")
         return
@@ -3591,7 +3608,7 @@ def scheduled_weather_refresh():
 
 
 def scheduled_alerts_refresh():
-    """Refresh alerts (runs every 5 min)."""
+    """Refresh alerts (runs every 3 hours per client requirement)."""
     try:
         refresh_alerts(force=True)
         notify_sse_clients('alerts_update')
@@ -3600,7 +3617,7 @@ def scheduled_alerts_refresh():
 
 
 def scheduled_forecast_refresh():
-    """Refresh forecasts for key cities (runs every 30 min).
+    """Refresh forecasts for key cities (runs every 3 hours per client requirement).
     Uses get_cached_forecast to avoid duplicate API calls if data is already fresh.
     """
     key_cities = ['mumbai', 'delhi', 'chennai', 'bangalore', 'hyderabad',
@@ -3632,29 +3649,31 @@ def scheduled_forecast_refresh():
 import os as _os
 if not app.debug or _os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     scheduler = BackgroundScheduler(daemon=True)
+    # Client requirement: pull data at most once every 3 hours.
+    # Startup preload handles the immediate first fetch; scheduler takes over from there.
     scheduler.add_job(
         scheduled_weather_refresh,
-        IntervalTrigger(minutes=10),
+        IntervalTrigger(hours=3),
         id='weather_refresh',
         name='Refresh weather data',
-        next_run_time=datetime.now() + timedelta(seconds=90)
+        next_run_time=datetime.now() + timedelta(hours=3)
     )
     scheduler.add_job(
         scheduled_alerts_refresh,
-        IntervalTrigger(minutes=5),
+        IntervalTrigger(hours=3),
         id='alerts_refresh',
         name='Refresh alerts',
-        next_run_time=datetime.now() + timedelta(seconds=60)
+        next_run_time=datetime.now() + timedelta(hours=3)
     )
     scheduler.add_job(
         scheduled_forecast_refresh,
-        IntervalTrigger(minutes=30),
+        IntervalTrigger(hours=3),
         id='forecast_refresh',
         name='Refresh forecasts for key cities',
-        next_run_time=datetime.now() + timedelta(minutes=2)
+        next_run_time=datetime.now() + timedelta(hours=3)
     )
     scheduler.start()
-    print("[Scheduler] Background scheduler started (weather=10m/90s, alerts=5m/60s, forecast=30m/2m)")
+    print("[Scheduler] Background scheduler started (weather=3h, alerts=3h, forecast=3h) — data pulled once every 3 hours")
 
     # Preload weather cache on startup so first user request is instant
     def _startup_preload():

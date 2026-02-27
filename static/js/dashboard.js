@@ -6,7 +6,7 @@
 
 // ========== Configuration ==========
 const API_BASE = '/api';
-const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes (fallback, SSE is primary)
+const REFRESH_INTERVAL = 3 * 60 * 60 * 1000; // 3 hours (fallback poll — data pulled once per 3 hours per client requirement)
 
 // ========== Performance: Lazy Loading for Charts ==========
 // Use Intersection Observer to lazy load charts when they scroll into view
@@ -184,9 +184,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 _clearLoadingFeedbackTimers();
                 hideLoading();
             }
-            // If tab was hidden for more than 2 minutes, do a silent refresh
-            if (idleMs > 2 * 60 * 1000) {
-                console.log(`[Visibility] Tab was hidden for ${Math.round(idleMs/1000)}s — refreshing data`);
+            // If tab was hidden for more than 3 hours, do a silent refresh (aligns with 3-hour data cadence)
+            if (idleMs > 3 * 60 * 60 * 1000) {
+                console.log(`[Visibility] Tab was hidden for ${Math.round(idleMs/1000)}s — refreshing data (3-hour cadence)`);
                 refreshData();
             }
         }
@@ -791,7 +791,7 @@ async function loadDashboardData(showProgress = true) {
             setTimeout(() => refreshData(), 6000);
         } else if (initData.data.stale) {
             const ageMin = Math.round((initData.data.data_age_seconds || 0) / 60);
-            showStaleBanner(`Weather data is ${ageMin} min old. Live refresh in progress...`);
+            showStaleBanner(`Weather data is ${ageMin} min old. Next refresh in ${180 - ageMin} min...`);
         } else {
             hideStaleBanner();
         }
@@ -4076,7 +4076,7 @@ async function fetchDateComparison() {
                         ${diffHtml}
                         <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;background:rgba(99,102,241,0.04);border-radius:8px;font-size:0.7rem;color:var(--text-muted);display:flex;align-items:center;gap:0.4rem;">
                             <i class="fas fa-info-circle" style="color:var(--primary);opacity:0.5"></i>
-                            Data from Open-Meteo ECMWF reanalysis (~11km grid). Values may differ ±2-3°C from actual station readings (IMD/Google).
+                            Data from Open-Meteo ECMWF reanalysis (~11km grid). Values may differ ±2-3°C from actual station readings.
                         </div>
                     </div>
                 `;

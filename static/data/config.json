@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "Weather-based demand forecasting for HVAC and consumer durables",
     "developer": "Hansei Consultancy",
-    "data_source": "India Meteorological Department (IMD)"
+    "data_source": "Open-Meteo"
   },
   "cities": [
     {
@@ -144,6 +144,6 @@
     "Demand index calculation (0-100 scale)",
     "Auto-refresh every 5 minutes",
     "Responsive design for mobile and desktop",
-    "IMD official data integration"
+    "Open-Meteo weather data integration"
   ]
 }

@@ -9,3 +9,10 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: 3.11.0
+      # --- Required: set these in the Render dashboard (Environment tab) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
