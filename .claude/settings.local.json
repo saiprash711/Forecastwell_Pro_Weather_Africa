@@ -5,7 +5,8 @@
       "Bash(pip install:*)",
       "Bash(.venv/Scripts/python:*)",
       "Bash(.venv/Scripts/python -c \"import py_compile; py_compile.compile\\(''utils/weather_service.py'', doraise=True\\); print\\(''weather_service.py OK''\\)\")",
-      "Bash(curl -s http://localhost:5000 -o /dev/null -w \"%{http_code}\")"
+      "Bash(curl -s http://localhost:5000 -o /dev/null -w \"%{http_code}\")",
+      "WebFetch(domain:weather-based-demand-forecasting.onrender.com)"
     ]
   }
 }
