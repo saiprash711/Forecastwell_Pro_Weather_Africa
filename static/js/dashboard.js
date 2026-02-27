@@ -741,10 +741,15 @@ async function loadDashboardData(showProgress = true) {
 
                 // Initialize charts asynchronously (non-blocking, after critical UI is ready)
                 // Use requestIdleCallback for better perceived performance
+                // NOTE: Do NOT call showLoadingWithProgress() inside deferred callbacks —
+                // it re-shows the overlay AFTER initializeDashboard() has already hidden it.
                 const initCharts = () => {
-                    if (showProgress) showLoadingWithProgress(6, 7);
-                    initializeDashboardCharts(weather);
-                    updateWaveSequence(weather);
+                    try {
+                        initializeDashboardCharts(weather);
+                        updateWaveSequence(weather);
+                    } catch (e) {
+                        console.error('⚠ Deferred chart init error:', e);
+                    }
                 };
 
                 if ('requestIdleCallback' in window) {
