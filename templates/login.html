@@ -722,6 +722,9 @@
 </head>
 
 <body>
+    <!-- Ensure success overlay is always reset on page load (prevents cached state bypass) -->
+    <script>document.addEventListener('DOMContentLoaded', function() { var o = document.getElementById('successOverlay'); if (o) o.classList.remove('active'); });</script>
+
     <!-- Background layers -->
     <div class="bg-mesh"></div>
     <div class="orb orb-1"></div>

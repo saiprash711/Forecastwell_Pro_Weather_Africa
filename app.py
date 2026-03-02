@@ -127,6 +127,11 @@ def add_cache_headers(response):
         response.headers['Expires'] = (datetime.now() + timedelta(days=365)).strftime('%a, %d %b %Y %H:%M:%S GMT')
         return response
 
+    # Login page: never cache — prevents overlay state from persisting across page loads
+    if path == '/login':
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        return response
+
     # HTML pages: short cache (5 min) for quick updates
     if path == '/' or path.endswith('.html'):
         response.headers['Cache-Control'] = 'private, max-age=300'
