@@ -4,21 +4,21 @@ import { COLORS, useFade, useSlideUp, useEntrySpring, staggerDelay, SPRING_CONFI
 
 const PAIN_POINTS = [
   {
-    icon: "📊",
-    title: "Blind Inventory Planning",
-    desc: "AC demand swings ±40% with temperature — but most teams plan on gut feel.",
-    color: COLORS.rose,
-  },
-  {
     icon: "🌡️",
-    title: "Missed Heat Waves",
-    desc: "A 2°C spike in night temps triggers demand surges. You're 2 weeks behind.",
+    title: "Night Temp is the Real Driver",
+    desc: "Day temps mislead. Night above 24°C means 12–16 hrs of AC daily. Most teams track the wrong metric and miss the surge window entirely.",
     color: COLORS.amber,
   },
   {
-    icon: "🏭",
-    title: "Production Lag",
-    desc: "Factories need 3–6 week lead time. Without foresight, you lose the season.",
+    icon: "🌊",
+    title: "Wave Sequence Blindness",
+    desc: "Demand hits in 3 waves: NOW, +2 weeks, +6 weeks. Factories need 3–6 week lead time. Miss Wave 1 — lose the entire season.",
+    color: COLORS.rose,
+  },
+  {
+    icon: "🗺️",
+    title: "60 Cities. 9 Demand Zones. No Visibility.",
+    desc: "Delhi RED while Bangalore stays GREEN. One national forecast causes costly stock misallocations across every tier.",
     color: COLORS.blueLight,
   },
 ];
@@ -128,8 +128,9 @@ export function ProblemScene() {
                 margin: 0,
               }}
             >
-              South India's HVAC market is uniquely sensitive to temperature — especially night temperatures.
-              Most companies are flying blind.
+              India's HVAC market spans 60 cities across 9 demand zones — each with its own night temperature profile.
+              <br />
+              <span style={{ color: COLORS.white }}>Most companies are flying blind.</span>
             </p>
           </div>
         </div>
@@ -159,9 +160,9 @@ function PainCard({
   index: number;
 }) {
   const delay = 55 + staggerDelay(index, 25);
-  const spring = useEntrySpring(delay, SPRING_CONFIGS.smooth);
-  const opacity = interpolate(spring, [0, 1], [0, 1]);
-  const x = interpolate(spring, [0, 1], [60, 0]);
+  const sp = useEntrySpring(delay, SPRING_CONFIGS.smooth);
+  const opacity = interpolate(sp, [0, 1], [0, 1]);
+  const x = interpolate(sp, [0, 1], [60, 0]);
 
   return (
     <div
@@ -172,18 +173,18 @@ function PainCard({
         border: `1px solid ${COLORS.navyBorder}`,
         borderLeft: `3px solid ${color}`,
         borderRadius: 16,
-        padding: "28px 32px",
+        padding: "24px 32px",
         display: "flex",
         alignItems: "flex-start",
         gap: 20,
       }}
     >
-      <span style={{ fontSize: 40, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0 }}>{icon}</span>
       <div>
         <div
           style={{
             fontFamily: "system-ui, sans-serif",
-            fontSize: 22,
+            fontSize: 21,
             fontWeight: 700,
             color: COLORS.white,
             marginBottom: 8,
@@ -194,7 +195,7 @@ function PainCard({
         <div
           style={{
             fontFamily: "system-ui, sans-serif",
-            fontSize: 18,
+            fontSize: 17,
             color: COLORS.muted,
             lineHeight: 1.5,
           }}

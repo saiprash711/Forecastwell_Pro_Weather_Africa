@@ -538,22 +538,22 @@
                         </div>
                     </section>
 
-                    <!-- 2-Year Historical Analysis Section -->
+                    <!-- 3-Year Historical Analysis Section -->
                     <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
                         <div class="section-header">
-                            <h2><i class="fas fa-calendar-alt"></i> 2-Year Historical Analysis</h2>
-                            <span class="section-subtitle">Comprehensive data from January 2024 to February 2026</span>
+                            <h2><i class="fas fa-calendar-alt"></i> 3-Year Historical Analysis</h2>
+                            <span class="section-subtitle">Comprehensive data from January 2023 to present — year-over-year comparison</span>
                         </div>
 
                         <!-- Date Range Picker -->
                         <div class="date-range-picker">
                             <div class="date-picker-group">
                                 <label for="startDate">From</label>
-                                <input type="date" id="startDate" min="2024-01-01" max="2026-02-04" value="2024-01-01">
+                                <input type="date" id="startDate" min="2023-01-01" max="2026-12-31" value="2023-01-01">
                             </div>
                             <div class="date-picker-group">
                                 <label for="endDate">To</label>
-                                <input type="date" id="endDate" min="2024-01-01" max="2026-02-04" value="2026-02-04">
+                                <input type="date" id="endDate" min="2023-01-01" max="2026-12-31" value="2026-03-12">
                             </div>
                             <div class="date-picker-group">
                                 <label for="historicalCitySelect">City</label>
@@ -579,9 +579,10 @@
                             <button class="period-btn" data-period="last30">Last 30 Days</button>
                             <button class="period-btn" data-period="last90">Last 90 Days</button>
                             <button class="period-btn" data-period="last6m">Last 6 Months</button>
+                            <button class="period-btn" data-period="2023">Year 2023</button>
                             <button class="period-btn" data-period="2024">Year 2024</button>
                             <button class="period-btn" data-period="2025">Year 2025</button>
-                            <button class="period-btn active" data-period="all">All Data (2 Years)</button>
+                            <button class="period-btn active" data-period="all">All Data (3 Years)</button>
                         </div>
 
                         <!-- Historical Stats Cards -->
@@ -623,6 +624,30 @@
 
                         <!-- Year Comparison Cards -->
                         <div class="year-comparison-grid" id="yearComparisonGrid">
+                            <div class="year-card glass-card year-2023">
+                                <div class="year-header">
+                                    <h3>📅 2023</h3>
+                                    <span class="year-badge complete">Complete</span>
+                                </div>
+                                <div class="year-stats">
+                                    <div class="year-stat">
+                                        <span class="label">Peak Day Temp</span>
+                                        <span class="value" id="avg2023Day">--°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Night Temp</span>
+                                        <span class="value" id="avg2023Night">--°C</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Season</span>
+                                        <span class="value">Apr-Jun</span>
+                                    </div>
+                                    <div class="year-stat">
+                                        <span class="label">Peak Demand</span>
+                                        <span class="value" id="avg2023Demand">--</span>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="year-card glass-card year-2024">
                                 <div class="year-header">
                                     <h3>📅 2024</h3>
@@ -735,7 +760,7 @@
                         <div class="section-header">
                             <h2><i class="fas fa-balance-scale"></i> Year-over-Year Monthly Comparison</h2>
                             <div class="section-header-controls">
-                                <span class="section-subtitle">Compare same month across 2024 vs 2025 vs 2026</span>
+                                <span class="section-subtitle">Compare same month across 2023 vs 2024 vs 2025 vs 2026</span>
                                 <div class="yoy-controls">
                                     <div class="yoy-city-selector">
                                         <label for="yoyCitySelect"><i class="fas fa-city"></i> City:</label>
@@ -889,7 +914,7 @@
                     <!-- YoY Comparison Chart (Analytics) -->
                     <section class="glass-card full-width">
                         <div class="section-header">
-                            <h2><i class="fas fa-balance-scale"></i> Monthly YoY Comparison (2024 vs 2025 vs 2026)</h2>
+                            <h2><i class="fas fa-balance-scale"></i> Monthly YoY Comparison (2023 vs 2024 vs 2025 vs 2026)</h2>
                             <div class="analytics-yoy-controls">
                                 <select id="analyticsYoyCitySelect">
                                     <option value="chennai">Chennai</option>
@@ -952,6 +977,34 @@
                     </div>
                     <div id="yearCompareResults">
                         <p class="year-compare-placeholder">Select a date above to see how temperatures compare across years for all cities.</p>
+                    </div>
+                </section>
+
+                <!-- Branch-wise Stacked Demand Section -->
+                <section class="glass-card" id="branchDemandSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-layer-group"></i> Branch-wise Demand Forecast</h2>
+                        <span class="section-subtitle">All demand zones stacked — 6-month rolling window</span>
+                    </div>
+                    <div class="chart-container large">
+                        <canvas id="branchDemandChart"></canvas>
+                    </div>
+                    <div class="branch-legend" id="branchLegend" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;padding:0 4px;"></div>
+                </section>
+
+                <!-- Model-wise Mix Section -->
+                <section class="glass-card" id="modelMixSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-cubes"></i> AC Model Mix Forecast</h2>
+                        <span class="section-subtitle">Demand-weighted product model portfolio — next 6 months</span>
+                    </div>
+                    <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+                        <div class="chart-container" style="flex:1;min-width:340px;">
+                            <canvas id="modelMixStackedChart"></canvas>
+                        </div>
+                        <div class="chart-container" style="width:260px;flex-shrink:0;">
+                            <canvas id="modelMixDonutChart"></canvas>
+                        </div>
                     </div>
                 </section>
 
@@ -1663,14 +1716,13 @@
                     <span>© 2026 Hansei Consultancy | ForecastWell Pro v2.1</span>
                 </div>
                 <div class="footer-center">
-                    <span class="data-source"><i class="fas fa-database"></i> Data: Open-Meteo | Jan 2024 - Feb
-                        2026</span>
+                    <span class="data-source"><i class="fas fa-database"></i> Data: Open-Meteo | Jan 2023 - Present</span>
                     <span class="separator">|</span>
                     <span class="last-update">Last Update: <span id="lastUpdate">--</span></span>
                 </div>
                 <div class="footer-right">
                     <span class="footer-hint"><i class="fas fa-moon"></i> Night Temp = Primary Demand Driver | <i
-                            class="fas fa-calendar"></i> 2 Years Data</span>
+                            class="fas fa-calendar"></i> 3 Years Historical Data</span>
                 </div>
             </div>
         </footer>

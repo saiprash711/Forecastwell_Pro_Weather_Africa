@@ -1,10 +1,10 @@
 import React from "react";
-import { Composition, Series } from "remotion";
+import { Composition } from "remotion";
 import { HeroScene } from "./scenes/HeroScene";
 import { ProblemScene } from "./scenes/ProblemScene";
 import { DashboardScene } from "./scenes/DashboardScene";
 import { MapScene } from "./scenes/MapScene";
-import { ChartsScene } from "./scenes/ChartsScene";
+import { DemandIntelScene } from "./scenes/DemandIntelScene";
 import { AlertsScene } from "./scenes/AlertsScene";
 import { OutroScene } from "./scenes/OutroScene";
 import { ForecastWellDemo } from "./ForecastWellDemo";
@@ -16,13 +16,13 @@ export const VIDEO_HEIGHT = 1080;
 
 // Scene durations in frames at 30fps
 export const SCENE_DURATIONS = {
-  hero: 240,        // 8s
-  problem: 210,     // 7s
-  dashboard: 240,   // 8s
-  map: 210,         // 7s
-  charts: 240,      // 8s
-  alerts: 210,      // 7s
-  outro: 300,       // 10s
+  hero: 240,         // 8s
+  problem: 210,      // 7s
+  dashboard: 240,    // 8s
+  map: 210,          // 7s
+  demandIntel: 240,  // 8s  ← Night-Priority Index + Wave Sequence
+  alerts: 210,       // 7s
+  outro: 300,        // 10s
 } as const;
 
 export const TOTAL_FRAMES =
@@ -30,7 +30,7 @@ export const TOTAL_FRAMES =
   SCENE_DURATIONS.problem +
   SCENE_DURATIONS.dashboard +
   SCENE_DURATIONS.map +
-  SCENE_DURATIONS.charts +
+  SCENE_DURATIONS.demandIntel +
   SCENE_DURATIONS.alerts +
   SCENE_DURATIONS.outro; // 1650 frames = 55s
 
@@ -79,9 +79,9 @@ export function Root() {
         height={VIDEO_HEIGHT}
       />
       <Composition
-        id="ChartsScene"
-        component={ChartsScene}
-        durationInFrames={SCENE_DURATIONS.charts}
+        id="DemandIntelScene"
+        component={DemandIntelScene}
+        durationInFrames={SCENE_DURATIONS.demandIntel}
         fps={VIDEO_FPS}
         width={VIDEO_WIDTH}
         height={VIDEO_HEIGHT}

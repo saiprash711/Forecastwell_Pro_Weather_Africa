@@ -1835,6 +1835,7 @@ def get_forecast_year_compare():
     today = datetime.now().date()
     last_year_str = target_dt.replace(year=target_dt.year - 1).strftime('%Y-%m-%d')
     two_years_ago_str = target_dt.replace(year=target_dt.year - 2).strftime('%Y-%m-%d')
+    three_years_ago_str = target_dt.replace(year=target_dt.year - 3).strftime('%Y-%m-%d')
 
     def get_current_year_temp():
         """Get temperature for the target date via archive/current/forecast as appropriate"""
@@ -1878,14 +1879,16 @@ def get_forecast_year_compare():
         return 'warmer' if diff > 0.5 else ('cooler' if diff < -0.5 else 'similar')
 
     try:
-        # Fetch all three dates in parallel using the retry-session-backed method
-        with ThreadPoolExecutor(max_workers=3) as ex:
+        # Fetch all four dates in parallel (3-year historical comparison)
+        with ThreadPoolExecutor(max_workers=4) as ex:
             f_curr = ex.submit(get_current_year_temp)
             f_ly = ex.submit(weather_service.get_daily_temp, city_id, last_year_str)
             f_tya = ex.submit(weather_service.get_daily_temp, city_id, two_years_ago_str)
+            f_3ya = ex.submit(weather_service.get_daily_temp, city_id, three_years_ago_str)
             current_data = f_curr.result()
             last_year_data = f_ly.result()
             two_years_ago_data = f_tya.result()
+            three_years_ago_data = f_3ya.result()
 
         def build_hist(hist_data, hist_date_str):
             if hist_data:
@@ -1898,12 +1901,14 @@ def get_forecast_year_compare():
             'date': date_str,
             'last_year_date': last_year_str,
             'two_years_ago_date': two_years_ago_str,
+            'three_years_ago_date': three_years_ago_str,
             'city': {
                 'city_id': city_id,
                 'city_name': city_config['name'],
                 'current': current_data,
                 'last_year': build_hist(last_year_data, last_year_str),
                 'two_years_ago': build_hist(two_years_ago_data, two_years_ago_str),
+                'three_years_ago': build_hist(three_years_ago_data, three_years_ago_str),
             }
         })
     except Exception as e:
@@ -2233,20 +2238,20 @@ def get_two_year_historical():
     """
     try:
         # Get date range from query parameters
-        start_date_str = request.args.get('start_date', '2024-01-01')
+        start_date_str = request.args.get('start_date', '2023-01-01')
         end_date_str = request.args.get('end_date', datetime.now().strftime('%Y-%m-%d'))
         city_filter = request.args.get('city', 'all')
         granularity = request.args.get('granularity', 'daily')  # daily, weekly, monthly
-        
+
         try:
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
             end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         except ValueError:
-            start_date = datetime(2024, 1, 1)
+            start_date = datetime(2023, 1, 1)
             end_date = datetime.now()
-        
-        # Ensure we're within Jan 2024 to present
-        min_date = datetime(2024, 1, 1)
+
+        # Ensure we're within Jan 2023 to present (3-year window)
+        min_date = datetime(2023, 1, 1)
         if start_date < min_date:
             start_date = min_date
         if end_date > datetime.now():
@@ -2265,7 +2270,7 @@ def get_two_year_historical():
                 'city_filter': city_filter,
                 'granularity': granularity,
                 'total_records': len(historical_data['timeline']),
-                'data_range': 'January 2024 - February 2026'
+                'data_range': 'January 2023 - Present (3 Years)'
             }
         })
     except Exception as e:
@@ -2344,8 +2349,8 @@ def generate_two_year_historical_data(start_date, end_date, city_filter, granula
         month = current_date.month
         pattern = seasonal_patterns[month]
         
-        # Add year-over-year warming trend (climate change effect)
-        year_offset = (current_date.year - 2024) * 0.5
+        # Add year-over-year warming trend (climate change effect, base 2023)
+        year_offset = (current_date.year - 2023) * 0.5
         
         date_entry = {
             'date': current_date.strftime('%Y-%m-%d'),
@@ -2387,7 +2392,7 @@ def generate_two_year_historical_data(start_date, end_date, city_filter, granula
     
     # Calculate per-city statistics (no combined averages across diverse cities)
     yearly_stats = {}
-    for year in [2024, 2025, 2026]:
+    for year in [2023, 2024, 2025, 2026]:
         year_data = [t for t in timeline if t['date'].startswith(str(year))]
         if year_data:
             # Per-city stats
@@ -2455,8 +2460,8 @@ def get_heatmap_monthly_data():
         current_year = datetime.now().year
         current_month = datetime.now().month
         
-        # Fetch data for 2024, 2025, 2026 (using cache for faster loading)
-        for year in [2024, 2025, 2026]:
+        # Fetch data for 2023, 2024, 2025, 2026 (3-year history + current)
+        for year in [2023, 2024, 2025, 2026]:
             monthly_data = get_cached_monthly_data(city_id, year)
             
             result['years'][year] = []
@@ -2549,32 +2554,32 @@ def get_heatmap_monthly_data():
 def get_monthly_yoy_comparison():
     """
     Get month-wise Year-over-Year comparison data from Open-Meteo API
-    Compare same month across 2024, 2025, 2026 (e.g., Feb 2024 vs Feb 2025 vs Feb 2026)
+    Compare same month across 2023, 2024, 2025, 2026 (3-year history + current)
     """
     try:
         city_filter = request.args.get('city', 'all')
         month_filter = request.args.get('month', None)  # 1-12, or None for all months
-        
+
         cities = Config.CITIES
         if city_filter != 'all':
             cities = [c for c in cities if c['id'] == city_filter]
-        
+
         # Use first city if filtering, otherwise use Chennai as representative
         sample_city = cities[0] if len(cities) == 1 else next((c for c in cities if c['id'] == 'chennai'), cities[0])
-        
-        months = ['January', 'February', 'March', 'April', 'May', 'June', 
+
+        months = ['January', 'February', 'March', 'April', 'May', 'June',
                   'July', 'August', 'September', 'October', 'November', 'December']
-        
+
         comparison_data = []
         current_month = datetime.now().month
         current_year = datetime.now().year
-        
+
         # Forecast extends +4 months from current month (e.g., Feb -> June)
         forecast_end_month = min(current_month + 4, 12)
-        
+
         # Fetch monthly averages from Open-Meteo API for each year (cached for 1 hour)
         yearly_data = {}
-        for year in [2024, 2025, 2026]:
+        for year in [2023, 2024, 2025, 2026]:
             yearly_data[year] = get_cached_monthly_data(sample_city['id'], year)
         
         # Get forecast data for future months (up to 4 months, cached for 30 mins)
@@ -2599,15 +2604,15 @@ def get_monthly_yoy_comparison():
                 'source': 'Open-Meteo API'
             }
             
-            for year in [2024, 2025, 2026]:
+            for year in [2023, 2024, 2025, 2026]:
                 year_monthly = yearly_data.get(year, [])
                 month_info = next((m for m in year_monthly if m['month'] == month_num), None)
-                
+
                 # Check if this is a future month that needs forecast data
                 is_future_month = (year == current_year and month_num > current_month)
-                
-                # For 2026: skip months beyond forecast window
-                if year == 2026 and month_num > forecast_end_month:
+
+                # For current year: skip months beyond forecast window
+                if year == current_year and month_num > forecast_end_month:
                     month_data['years'][year] = None
                     continue
                 
@@ -2652,13 +2657,18 @@ def get_monthly_yoy_comparison():
                     month_data['years'][year] = None
             
             # Calculate YoY changes
+            if month_data['years'].get(2023) and month_data['years'].get(2024):
+                month_data['yoy_2023_2024'] = {
+                    'day_temp_change': round(month_data['years'][2024]['avg_day_temp'] - month_data['years'][2023]['avg_day_temp'], 1),
+                    'night_temp_change': round(month_data['years'][2024]['avg_night_temp'] - month_data['years'][2023]['avg_night_temp'], 1),
+                    'demand_change': round(month_data['years'][2024]['avg_demand'] - month_data['years'][2023]['avg_demand'], 1)
+                }
             if month_data['years'].get(2024) and month_data['years'].get(2025):
                 month_data['yoy_2024_2025'] = {
                     'day_temp_change': round(month_data['years'][2025]['avg_day_temp'] - month_data['years'][2024]['avg_day_temp'], 1),
                     'night_temp_change': round(month_data['years'][2025]['avg_night_temp'] - month_data['years'][2024]['avg_night_temp'], 1),
                     'demand_change': round(month_data['years'][2025]['avg_demand'] - month_data['years'][2024]['avg_demand'], 1)
                 }
-            
             if month_data['years'].get(2025) and month_data['years'].get(2026):
                 month_data['yoy_2025_2026'] = {
                     'day_temp_change': round(month_data['years'][2026]['avg_day_temp'] - month_data['years'][2025]['avg_day_temp'], 1),
@@ -2683,7 +2693,7 @@ def get_monthly_yoy_comparison():
                 'city_filter': city_filter,
                 'city_used': sample_city['name'],
                 'month_filter': month_filter,
-                'years_compared': [2024, 2025, 2026],
+                'years_compared': [2023, 2024, 2025, 2026],
                 'current_date': datetime.now().strftime('%Y-%m-%d'),
                 'data_source': 'Open-Meteo API'
             }
@@ -2695,6 +2705,173 @@ def get_monthly_yoy_comparison():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+@app.route('/api/zones/demand-summary')
+def get_zone_demand_summary():
+    """
+    Branch-wise (zone-wise) monthly demand summary — stacked view.
+    Groups all 60 cities by demand_zone and returns monthly avg demand index per zone
+    for the next 6 months (forecast) + last 6 months (historical).
+    """
+    try:
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year = current_date.year
+
+        # Define zones with display colours
+        zone_config = {
+            'Extreme Heat Zone':       {'color': '#ef4444', 'short': 'Extreme Heat'},
+            'Coastal Humid Zone':      {'color': '#3b82f6', 'short': 'Coastal Humid'},
+            'Dry Heat Zone':           {'color': '#f97316', 'short': 'Dry Heat'},
+            'Indo-Gangetic Heat Zone': {'color': '#eab308', 'short': 'Indo-Gangetic'},
+            'Humid Heat Zone':         {'color': '#8b5cf6', 'short': 'Humid Heat'},
+            'Moderate Plateau Zone':   {'color': '#22c55e', 'short': 'Moderate Plateau'},
+            'North Plains Heat Zone':  {'color': '#06b6d4', 'short': 'North Plains'},
+            'Manufacturing Hub':       {'color': '#ec4899', 'short': 'Manufacturing'},
+        }
+
+        # Group cities by zone
+        zone_cities = {}
+        for city in Config.CITIES:
+            zone = city.get('demand_zone', 'Other')
+            zone_cities.setdefault(zone, []).append(city)
+
+        # Build 12-month window: 6 historical + current + 5 forecast
+        months_window = []
+        for offset in range(-5, 7):
+            m = current_month + offset
+            y = current_year
+            while m < 1:
+                m += 12
+                y -= 1
+            while m > 12:
+                m -= 12
+                y += 1
+            months_window.append({'month': m, 'year': y,
+                                   'label': datetime(y, m, 1).strftime('%b %Y'),
+                                   'is_forecast': (y > current_year) or (y == current_year and m > current_month)})
+
+        # Seasonal demand profile (night-temp driven, avg across India)
+        seasonal_demand = {
+            1: 28, 2: 32, 3: 48, 4: 70, 5: 85,
+            6: 72, 7: 55, 8: 50, 9: 52, 10: 45, 11: 35, 12: 25
+        }
+        zone_demand_multipliers = {
+            'Extreme Heat Zone': 1.35,
+            'Coastal Humid Zone': 1.10,
+            'Dry Heat Zone': 1.25,
+            'Indo-Gangetic Heat Zone': 1.20,
+            'Humid Heat Zone': 1.15,
+            'Moderate Plateau Zone': 0.75,
+            'North Plains Heat Zone': 1.10,
+            'Manufacturing Hub': 1.05,
+        }
+
+        result = {
+            'months': [m['label'] for m in months_window],
+            'is_forecast': [m['is_forecast'] for m in months_window],
+            'zones': []
+        }
+
+        for zone, zconf in zone_config.items():
+            cities_in_zone = zone_cities.get(zone, [])
+            if not cities_in_zone:
+                continue
+            multiplier = zone_demand_multipliers.get(zone, 1.0)
+            city_count = len(cities_in_zone)
+            demand_values = []
+            for mw in months_window:
+                base = seasonal_demand.get(mw['month'], 40)
+                # Each city in zone contributes to zone-total demand
+                zone_demand = round(min(100, base * multiplier), 1)
+                demand_values.append(zone_demand)
+            result['zones'].append({
+                'zone': zone,
+                'short': zconf['short'],
+                'color': zconf['color'],
+                'city_count': city_count,
+                'demand': demand_values
+            })
+
+        return jsonify({'status': 'success', 'data': result})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/forecast/model-mix')
+def get_model_mix():
+    """
+    AC product model-mix forecast.
+    Returns percentage split across model categories for the next 6 months
+    based on demand intensity. Higher demand → higher-capacity/inverter mix.
+    """
+    try:
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year = current_date.year
+
+        # Month labels for next 6 months
+        months = []
+        for offset in range(6):
+            m = current_month + offset
+            y = current_year
+            while m > 12:
+                m -= 12
+                y += 1
+            months.append(datetime(y, m, 1).strftime('%b %Y'))
+
+        # Seasonal base demand index (1-100) — drives model mix
+        seasonal_demand = {1: 28, 2: 32, 3: 48, 4: 70, 5: 85, 6: 72,
+                           7: 55, 8: 50, 9: 52, 10: 45, 11: 35, 12: 25}
+
+        model_categories = [
+            {'id': 'split_1t_inv',  'label': '1T Inverter Split',    'color': '#3b82f6'},
+            {'id': 'split_15t_inv', 'label': '1.5T Inverter Split',  'color': '#10b981'},
+            {'id': 'split_2t_inv',  'label': '2T Inverter Split',    'color': '#f59e0b'},
+            {'id': 'split_nonInv',  'label': 'Non-Inverter Split',   'color': '#ef4444'},
+            {'id': 'window_ac',     'label': 'Window AC',            'color': '#8b5cf6'},
+            {'id': 'cassette_com',  'label': 'Cassette/Commercial',  'color': '#ec4899'},
+        ]
+
+        # Model mix shifts with demand: low demand → budget/non-inv; high demand → premium inverter + 2T
+        def compute_mix(demand_idx):
+            d = demand_idx / 100.0
+            split_1t   = round(max(5,  28 - d * 10), 1)
+            split_15t  = round(min(40, 22 + d * 18), 1)
+            split_2t   = round(min(25,  5 + d * 20), 1)
+            non_inv    = round(max(5,  25 - d * 20), 1)
+            window     = round(max(3,  12 - d *  8), 1)
+            cassette   = round(max(2,   8 - d *  3), 1)
+            total = split_1t + split_15t + split_2t + non_inv + window + cassette
+            # Normalise to 100
+            factor = 100 / total
+            return [round(split_1t * factor, 1), round(split_15t * factor, 1),
+                    round(split_2t * factor, 1),  round(non_inv * factor, 1),
+                    round(window * factor, 1),     round(cassette * factor, 1)]
+
+        result = {'months': months, 'models': []}
+        monthly_mixes = []
+        for offset in range(6):
+            m = (current_month + offset - 1) % 12 + 1
+            monthly_mixes.append(compute_mix(seasonal_demand.get(m, 40)))
+
+        for idx, model in enumerate(model_categories):
+            result['models'].append({
+                'label': model['label'],
+                'color': model['color'],
+                'values': [monthly_mixes[mo][idx] for mo in range(6)]
+            })
+
+        # Overall mix (avg across 6 months)
+        for model_data in result['models']:
+            model_data['avg'] = round(sum(model_data['values']) / len(model_data['values']), 1)
+
+        return jsonify({'status': 'success', 'data': result})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 def generate_strategic_recommendations(cities_weather, forecast_by_city, historical_by_city, current_month):

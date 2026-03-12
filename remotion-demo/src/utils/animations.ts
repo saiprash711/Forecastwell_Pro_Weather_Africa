@@ -15,6 +15,8 @@ export const COLORS = {
   emeraldLight: "#34D399",
   rose: "#F43F5E",
   roseLight: "#FB7185",
+  purple: "#A855F7",
+  purpleLight: "#C084FC",
   white: "#F8FAFC",
   muted: "#94A3B8",
   dimmed: "#475569",

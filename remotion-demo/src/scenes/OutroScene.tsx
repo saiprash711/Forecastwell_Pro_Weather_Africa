@@ -3,10 +3,12 @@ import { AbsoluteFill, useCurrentFrame, interpolate } from "remotion";
 import { COLORS, useFade, useSlideUp, useEntrySpring, SPRING_CONFIGS, staggerDelay } from "../utils/animations";
 
 const FEATURE_RECAP = [
-  { icon: "🗺️", label: "Live South India Map", sub: "6 cities, real-time IMD data" },
-  { icon: "📈", label: "Temperature Trend Charts", sub: "Actual + 10-day forecast" },
-  { icon: "🔔", label: "Intelligent Alert Engine", sub: "Threshold triggers + AI actions" },
-  { icon: "📦", label: "Inventory Recommendations", sub: "Stock & production planning" },
+  { icon: "🗺️", label: "60 Cities · All India",         sub: "Open-Meteo data · 9 demand zones" },
+  { icon: "🌊", label: "Wave Sequence Analysis",         sub: "Wave 1 NOW → +2 wks → +6 wks" },
+  { icon: "🔔", label: "6-Level Smart Alerts",           sub: "Blue → Green → Yellow → Orange → Red → Kerala Purple" },
+  { icon: "🔧", label: "HVAC Service Predictions",       sub: "Compressor · Gas refills · Warranty · Installs" },
+  { icon: "📊", label: "8 Intelligence Pages",           sub: "Dashboard · Analytics · Forecasting · Insights · Demand Intel + more" },
+  { icon: "📤", label: "Export & Reports",               sub: "PDF · Excel · Alert reports · Forecast reports" },
 ];
 
 /**
@@ -96,7 +98,7 @@ export function OutroScene() {
       </div>
 
       {/* Sub-headline */}
-      <div style={{ opacity: subOpacity, transform: `translateY(${subY}px)`, textAlign: "center", marginBottom: 48, maxWidth: 900 }}>
+      <div style={{ opacity: subOpacity, transform: `translateY(${subY}px)`, textAlign: "center", marginBottom: 32, maxWidth: 1000 }}>
         <p
           style={{
             fontFamily: "system-ui, sans-serif",
@@ -107,8 +109,8 @@ export function OutroScene() {
           }}
         >
           ForecastWell gives your HVAC sales team a{" "}
-          <span style={{ color: COLORS.white, fontWeight: 600 }}>12-day planning advantage</span>{" "}
-          over competitors still using gut feel.
+          <span style={{ color: COLORS.white, fontWeight: 600 }}>12-day Wave Sequence advantage</span>{" "}
+          across 60 cities — from Jammu to Kanyakumari.
         </p>
       </div>
 
@@ -118,11 +120,11 @@ export function OutroScene() {
           opacity: recapOpacity,
           transform: `translateY(${recapY}px)`,
           display: "flex",
-          gap: 16,
+          gap: 12,
           flexWrap: "wrap",
           justifyContent: "center",
-          marginBottom: 56,
-          maxWidth: 1100,
+          marginBottom: 44,
+          maxWidth: 1400,
         }}
       >
         {FEATURE_RECAP.map((f, i) => (
@@ -197,7 +199,7 @@ export function OutroScene() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.emerald, boxShadow: `0 0 8px ${COLORS.emerald}` }} />
-          <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, color: COLORS.dimmed }}>Real-time IMD Data</span>
+          <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, color: COLORS.dimmed }}>Open-Meteo · Live Data</span>
         </div>
         <div style={{ width: 1, height: 16, background: COLORS.navyBorder }} />
         <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, color: COLORS.dimmed }}>
@@ -205,7 +207,7 @@ export function OutroScene() {
         </span>
         <div style={{ width: 1, height: 16, background: COLORS.navyBorder }} />
         <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, color: COLORS.dimmed }}>
-          HVAC · Consumer Durables · South India
+          HVAC · Consumer Durables · All India · 60 Cities
         </span>
       </div>
     </AbsoluteFill>
@@ -224,17 +226,18 @@ function FeaturePill({ icon, label, sub, delay }: { icon: string; label: string;
         transform: `translateY(${y}px)`,
         display: "flex",
         alignItems: "center",
-        gap: 12,
+        gap: 10,
         background: COLORS.navyCard,
         border: `1px solid ${COLORS.navyBorder}`,
-        borderRadius: 14,
-        padding: "14px 22px",
+        borderRadius: 12,
+        padding: "12px 18px",
+        maxWidth: 380,
       }}
     >
-      <span style={{ fontSize: 26 }}>{icon}</span>
+      <span style={{ fontSize: 22, flexShrink: 0 }}>{icon}</span>
       <div>
-        <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 17, fontWeight: 600, color: COLORS.white }}>{label}</div>
-        <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 14, color: COLORS.muted }}>{sub}</div>
+        <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, fontWeight: 600, color: COLORS.white }}>{label}</div>
+        <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: COLORS.muted, lineHeight: 1.4 }}>{sub}</div>
       </div>
     </div>
   );

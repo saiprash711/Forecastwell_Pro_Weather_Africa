@@ -2106,6 +2106,178 @@ async function loadForecastPage() {
 
     generatePredictions();
     setupYearCompare();
+    loadBranchDemandChart();
+    loadModelMixCharts();
+}
+
+// ========== Branch-wise Stacked Demand Chart ==========
+
+let branchDemandChart = null;
+
+async function loadBranchDemandChart() {
+    try {
+        const res = await fetch('/api/zones/demand-summary');
+        const result = await res.json();
+        if (result.status === 'success') {
+            renderBranchDemandChart(result.data);
+        }
+    } catch (e) {
+        console.error('Branch demand chart error:', e);
+    }
+}
+
+function renderBranchDemandChart(data) {
+    const canvas = document.getElementById('branchDemandChart');
+    if (!canvas) return;
+    if (branchDemandChart) branchDemandChart.destroy();
+
+    const theme = getChartTheme();
+    const datasets = data.zones.map(z => ({
+        label: z.short,
+        data: z.demand,
+        backgroundColor: z.color + 'cc',
+        borderColor: z.color,
+        borderWidth: 1,
+        borderRadius: { topLeft: 2, topRight: 2 }
+    }));
+
+    // Build legend
+    const legendEl = document.getElementById('branchLegend');
+    if (legendEl) {
+        legendEl.innerHTML = data.zones.map(z =>
+            `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:100px;background:${z.color}18;border:1px solid ${z.color}40;color:${z.color}">
+                <span style="width:8px;height:8px;border-radius:50%;background:${z.color};flex-shrink:0"></span>
+                ${z.short} (${z.city_count})
+            </span>`
+        ).join('');
+    }
+
+    branchDemandChart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: data.months, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: theme.tooltipBg,
+                    titleColor: theme.tooltipText,
+                    bodyColor: theme.tooltipText,
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+                        footer: ctxArr => {
+                            const total = ctxArr.reduce((s, c) => s + (c.parsed.y || 0), 0);
+                            return `Total Zone Demand: ${total.toFixed(0)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: { color: theme.textColor, font: { size: 11 } }
+                },
+                y: {
+                    stacked: true,
+                    title: { display: true, text: 'Demand Index (stacked zones)', color: theme.textColor },
+                    grid: { color: theme.gridColor },
+                    ticks: { color: theme.textColor }
+                }
+            }
+        }
+    });
+}
+
+// ========== Model Mix Charts ==========
+
+let modelMixStackedChart = null;
+let modelMixDonutChart = null;
+
+async function loadModelMixCharts() {
+    try {
+        const res = await fetch('/api/forecast/model-mix');
+        const result = await res.json();
+        if (result.status === 'success') {
+            renderModelMixStackedChart(result.data);
+            renderModelMixDonutChart(result.data);
+        }
+    } catch (e) {
+        console.error('Model mix chart error:', e);
+    }
+}
+
+function renderModelMixStackedChart(data) {
+    const canvas = document.getElementById('modelMixStackedChart');
+    if (!canvas) return;
+    if (modelMixStackedChart) modelMixStackedChart.destroy();
+
+    const theme = getChartTheme();
+    const datasets = data.models.map(m => ({
+        label: m.label,
+        data: m.values,
+        backgroundColor: m.color + 'bb',
+        borderColor: m.color,
+        borderWidth: 1
+    }));
+
+    modelMixStackedChart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: data.months, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
+                tooltip: {
+                    backgroundColor: theme.tooltipBg,
+                    callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%` }
+                }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { color: theme.textColor, font: { size: 11 } } },
+                y: {
+                    stacked: true,
+                    max: 100,
+                    title: { display: true, text: 'Model Mix (%)', color: theme.textColor },
+                    ticks: { color: theme.textColor, callback: v => v + '%' },
+                    grid: { color: theme.gridColor }
+                }
+            }
+        }
+    });
+}
+
+function renderModelMixDonutChart(data) {
+    const canvas = document.getElementById('modelMixDonutChart');
+    if (!canvas) return;
+    if (modelMixDonutChart) modelMixDonutChart.destroy();
+
+    const theme = getChartTheme();
+    modelMixDonutChart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: data.models.map(m => m.label),
+            datasets: [{
+                data: data.models.map(m => m.avg),
+                backgroundColor: data.models.map(m => m.color + 'cc'),
+                borderColor: data.models.map(m => m.color),
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 10, font: { size: 10 } } },
+                tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+            },
+            cutout: '65%'
+        }
+    });
 }
 
 // ========== Year-over-Year Comparison ==========
@@ -2157,7 +2329,7 @@ function renderYearComparison(data) {
     const resultsDiv = document.getElementById('yearCompareResults');
     if (!resultsDiv) return;
 
-    const { date, last_year_date, two_years_ago_date, city } = data;
+    const { date, last_year_date, two_years_ago_date, three_years_ago_date, city } = data;
 
     const fmtDate = d => {
         const [y, m, day] = d.split('-');
@@ -2182,10 +2354,12 @@ function renderYearComparison(data) {
     const curr = city.current;
     const ly = city.last_year;
     const tya = city.two_years_ago;
+    const thrya = city.three_years_ago;
 
     const currYear = date.split('-')[0];
     const lyYear = last_year_date.split('-')[0];
     const tyaYear = two_years_ago_date.split('-')[0];
+    const thryaYear = three_years_ago_date ? three_years_ago_date.split('-')[0] : null;
 
     const currBlock = curr
         ? `<div class="yc-temp-val">${fmtT(curr.day_temp)} / ${fmtT(curr.night_temp)}</div>
@@ -2204,10 +2378,22 @@ function renderYearComparison(data) {
            ${badge(tya.comparison)}`
         : badge(tya ? tya.comparison : 'unavailable');
 
+    const thryaBlock = thrya && thrya.avg_temp != null
+        ? `<div class="yc-temp-val">${fmtT(thrya.day_temp)} / ${fmtT(thrya.night_temp)}</div>
+           <div class="yc-temp-avg">avg ${fmtT(thrya.avg_temp)} ${diffStr(curr, thrya)}</div>
+           ${badge(thrya.comparison)}`
+        : badge(thrya ? thrya.comparison : 'unavailable');
+
+    const thryaCard = thryaYear ? `
+        <div class="yc-arrow">→</div>
+        <div class="yc-year-card yc-card-3ya">
+            <div class="yc-year-label">${thryaYear} <small>(${fmtDate(three_years_ago_date)})</small></div>
+            ${thryaBlock}
+        </div>` : '';
+
     resultsDiv.innerHTML = `
     <div class="year-compare-date-header">
-        <strong>${city.city_name}</strong> &mdash;
-        ${fmtDate(date)} compared with ${fmtDate(last_year_date)} and ${fmtDate(two_years_ago_date)}
+        <strong>${city.city_name}</strong> &mdash; 3-year comparison for ${fmtDate(date)}
     </div>
     <div class="yc-cards-row">
         <div class="yc-year-card yc-card-current">
@@ -2224,6 +2410,7 @@ function renderYearComparison(data) {
             <div class="yc-year-label">${tyaYear} <small>(${fmtDate(two_years_ago_date)})</small></div>
             ${tyaBlock}
         </div>
+        ${thryaCard}
     </div>`;
 }
 
@@ -4255,7 +4442,7 @@ function handleQuickPeriodSelect(period) {
     if (!startDateInput || !endDateInput) return;
 
     const today = new Date();
-    let startDate = new Date('2024-01-01');
+    let startDate = new Date('2023-01-01');
     let endDate = today;
 
     switch (period) {
@@ -4271,6 +4458,10 @@ function handleQuickPeriodSelect(period) {
             startDate = new Date(today);
             startDate.setMonth(today.getMonth() - 6);
             break;
+        case '2023':
+            startDate = new Date('2023-01-01');
+            endDate = new Date('2023-12-31');
+            break;
         case '2024':
             startDate = new Date('2024-01-01');
             endDate = new Date('2024-12-31');
@@ -4281,7 +4472,7 @@ function handleQuickPeriodSelect(period) {
             break;
         case 'all':
         default:
-            startDate = new Date('2024-01-01');
+            startDate = new Date('2023-01-01');
             endDate = today;
             break;
     }
@@ -4293,8 +4484,8 @@ function handleQuickPeriodSelect(period) {
 }
 
 async function loadTwoYearHistoricalData() {
-    const startDate = document.getElementById('startDate')?.value || '2024-01-01';
-    const endDate = document.getElementById('endDate')?.value || '2026-02-04';
+    const startDate = document.getElementById('startDate')?.value || '2023-01-01';
+    const endDate = document.getElementById('endDate')?.value || new Date().toISOString().split('T')[0];
     const city = document.getElementById('historicalCitySelect')?.value || 'all';
     const granularity = document.getElementById('granularitySelect')?.value || 'weekly';
 
@@ -4355,80 +4546,93 @@ function renderTwoYearHistoricalChart(data) {
         twoYearHistoricalChart.destroy();
     }
 
-    const labels = data.timeline.map(entry => {
-        const date = new Date(entry.date);
-        return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+    // ── Year-overlay chart: Jan–Dec on x-axis, one line per year ──
+    // Group timeline entries by (year, month) and compute avg night temp across cities
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Aggregate: for each (year, month) compute avg night temp & avg demand
+    const yearMonthData = {}; // { 2023: { 1: [temps...], 2: [temps...] }, ... }
+    data.timeline.forEach(entry => {
+        const d = new Date(entry.date);
+        const yr = d.getFullYear();
+        const mo = d.getMonth() + 1;
+        if (!yearMonthData[yr]) yearMonthData[yr] = {};
+        if (!yearMonthData[yr][mo]) yearMonthData[yr][mo] = { nightTemps: [], demands: [] };
+        Object.values(entry.cities).forEach(c => {
+            if (c.night_temp != null) yearMonthData[yr][mo].nightTemps.push(c.night_temp);
+            if (c.demand_index != null) yearMonthData[yr][mo].demands.push(c.demand_index);
+        });
     });
 
-    // Per-city night temperature lines (no combined averages)
-    const cityIds = data.cities ? data.cities.map(c => c.id) : Object.keys(data.timeline[0]?.cities || {});
-    const cityNames = {};
-    if (data.cities) {
-        data.cities.forEach(c => { cityNames[c.id] = c.name; });
-    }
+    const yearColors = { 2023: '#94a3b8', 2024: '#3b82f6', 2025: '#10b981', 2026: '#f97316' };
+    const yearDash   = { 2023: [6, 3],    2024: [],         2025: [],         2026: [4, 4] };
 
-    const cityColors = [
-        '#f97316', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6',
-        '#ec4899', '#14b8a6', '#f59e0b'
-    ];
-
-    const datasets = [];
-    cityIds.forEach((cityId, i) => {
-        const color = cityColors[i % cityColors.length];
-        const nightTemps = data.timeline.map(entry => {
-            return entry.cities[cityId]?.night_temp || null;
+    const years = Object.keys(yearMonthData).map(Number).sort();
+    const datasets = years.map(yr => {
+        const monthlyAvg = monthLabels.map((_, idx) => {
+            const mo = idx + 1;
+            const temps = yearMonthData[yr]?.[mo]?.nightTemps || [];
+            if (!temps.length) return null;
+            return parseFloat((temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1));
         });
-        datasets.push({
-            label: `${cityNames[cityId] || cityId} Night \u00b0C`,
-            data: nightTemps,
-            borderColor: color,
-            backgroundColor: `${color}1a`,
+        return {
+            label: `${yr} Night Temp`,
+            data: monthlyAvg,
+            borderColor: yearColors[yr] || '#888',
+            backgroundColor: (yearColors[yr] || '#888') + '18',
+            borderDash: yearDash[yr] || [],
             fill: false,
             tension: 0.4,
-            pointRadius: 1,
-            pointHoverRadius: 5,
-            borderWidth: 2,
-            yAxisID: 'y'
+            pointRadius: 4,
+            pointHoverRadius: 7,
+            borderWidth: yr === 2026 ? 2 : 2.5,
+            spanGaps: true
+        };
+    });
+
+    // Also add demand index dataset on secondary axis using 2025 data as reference
+    const demandDatasets = years.filter(yr => yr >= 2023).map(yr => {
+        const monthlyDemand = monthLabels.map((_, idx) => {
+            const mo = idx + 1;
+            const demands = yearMonthData[yr]?.[mo]?.demands || [];
+            if (!demands.length) return null;
+            return Math.round(demands.reduce((a, b) => a + b, 0) / demands.length);
         });
+        return {
+            label: `${yr} Demand Idx`,
+            data: monthlyDemand,
+            type: 'bar',
+            backgroundColor: (yearColors[yr] || '#888') + '30',
+            borderColor: (yearColors[yr] || '#888') + '80',
+            borderWidth: 1,
+            yAxisID: 'y2',
+            spanGaps: true
+        };
     });
 
     twoYearHistoricalChart = new Chart(canvas, {
         type: 'line',
-        data: {
-            labels: labels,
-            datasets: datasets
-        },
+        data: { labels: monthLabels, datasets: [...datasets, ...demandDatasets] },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: {
                     position: 'top',
-                    labels: {
-                        usePointStyle: true,
-                        padding: 20,
-                        font: { size: 12 }
-                    }
+                    labels: { usePointStyle: true, padding: 18, font: { size: 12 } }
                 },
                 tooltip: {
-                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                    padding: 15,
-                    titleFont: { size: 14, weight: 'bold' },
-                    bodyFont: { size: 12 },
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    padding: 14,
                     callbacks: {
-                        title: function (context) {
-                            return `📅 ${context[0].label}`;
-                        },
-                        label: function (context) {
-                            const value = context.parsed.y.toFixed(1);
-                            if (context.dataset.label.includes('Demand')) {
-                                return `${context.dataset.label}: ${value}`;
+                        title: ctx => `📅 ${ctx[0].label}`,
+                        label: ctx => {
+                            if (ctx.dataset.label.includes('Demand')) {
+                                return `${ctx.dataset.label}: ${ctx.parsed.y}`;
                             }
-                            return `${context.dataset.label}: ${value}°C`;
+                            return `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}°C`;
                         }
                     }
                 }
@@ -4436,33 +4640,24 @@ function renderTwoYearHistoricalChart(data) {
             scales: {
                 x: {
                     display: true,
-                    title: {
-                        display: true,
-                        text: 'Time Period (Jan 2024 - Feb 2026)',
-                        font: { size: 12, weight: 'bold' }
-                    },
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        maxTicksLimit: 24,
-                        font: { size: 10 }
-                    }
+                    title: { display: true, text: 'Month (Jan–Dec)', font: { size: 12 } },
+                    grid: { display: false }
                 },
                 y: {
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Night Temperature (°C)',
-                        font: { size: 12 }
-                    },
-                    min: 15,
-                    max: 40,
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    }
+                    title: { display: true, text: 'Night Temperature (°C)', font: { size: 12 } },
+                    min: 14, max: 38,
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                y2: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: { display: true, text: 'Demand Index', font: { size: 11 } },
+                    min: 0, max: 100,
+                    grid: { drawOnChartArea: false }
                 }
             }
         }
@@ -4473,7 +4668,7 @@ function updateYearComparisonCards(yearlyStats) {
     if (!yearlyStats) return;
 
     // Update year cards with per-city hottest data (no combined averages)
-    [2024, 2025, 2026].forEach(year => {
+    [2023, 2024, 2025, 2026].forEach(year => {
         if (!yearlyStats[year]) return;
         const ys = yearlyStats[year];
 
@@ -4666,10 +4861,12 @@ function renderYoYChart(data, selectedMonth) {
     }
 
     const months = data.map(d => d.month.substring(0, 3));
+    const data2023 = data.map(d => d.years[2023]?.avg_day_temp || null);
     const data2024 = data.map(d => d.years[2024]?.avg_day_temp || null);
     const data2025 = data.map(d => d.years[2025]?.avg_day_temp || null);
     const data2026 = data.map(d => d.years[2026]?.avg_day_temp || null);
 
+    const night2023 = data.map(d => d.years[2023]?.avg_night_temp || null);
     const night2024 = data.map(d => d.years[2024]?.avg_night_temp || null);
     const night2025 = data.map(d => d.years[2025]?.avg_night_temp || null);
     const night2026 = data.map(d => d.years[2026]?.avg_night_temp || null);
@@ -4679,6 +4876,13 @@ function renderYoYChart(data, selectedMonth) {
         data: {
             labels: months,
             datasets: [
+                {
+                    label: '2023 Day',
+                    data: data2023,
+                    backgroundColor: 'rgba(148, 163, 184, 0.6)',
+                    borderColor: '#94a3b8',
+                    borderWidth: 1
+                },
                 {
                     label: '2024 Day',
                     data: data2024,
@@ -4699,6 +4903,17 @@ function renderYoYChart(data, selectedMonth) {
                     backgroundColor: 'rgba(249, 115, 22, 0.7)',
                     borderColor: '#f97316',
                     borderWidth: 1
+                },
+                {
+                    label: '2023 Night',
+                    data: night2023,
+                    type: 'line',
+                    borderColor: '#94a3b8',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 3,
+                    tension: 0.3
                 },
                 {
                     label: '2024 Night',
@@ -4781,31 +4996,44 @@ function renderYoYTable(data, selectedMonth) {
             <thead>
                 <tr>
                     <th>Month</th>
+                    <th>2023 Day/Night</th>
                     <th>2024 Day/Night</th>
                     <th>2025 Day/Night</th>
                     <th>2026 Day/Night</th>
-                    <th>YoY Change (24→25)</th>
-                    <th>YoY Change (25→26)</th>
+                    <th>YoY (23→24)</th>
+                    <th>YoY (24→25)</th>
+                    <th>YoY (25→26)</th>
                 </tr>
             </thead>
             <tbody>
     `;
 
     data.forEach(month => {
+        const y2023 = month.years[2023];
         const y2024 = month.years[2024];
         const y2025 = month.years[2025];
         const y2026 = month.years[2026];
 
+        const change2324 = month.yoy_2023_2024;
         const change2425 = month.yoy_2024_2025;
         const change2526 = month.yoy_2025_2026;
 
-        // Check if this month is forecasted
         const isForecast = month.is_forecast || false;
         const forecastBadge = isForecast ? '<span class="forecast-indicator" title="Forecasted">📊</span>' : '';
+
+        const fmtYoY = (change, key) => {
+            if (!change) return '--';
+            const val = change[key];
+            const cls = val > 0 ? 'positive' : val < 0 ? 'negative' : 'neutral';
+            return `<span class="yoy-change ${cls}">${val > 0 ? '+' : ''}${val}°C</span>`;
+        };
 
         html += `
             <tr class="${isForecast ? 'forecast-row' : ''}">
                 <td><strong>${month.month}</strong>${forecastBadge}</td>
+                <td class="year-2023">
+                    ${y2023 ? `${y2023.avg_day_temp}°C / ${y2023.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
+                </td>
                 <td class="year-2024">
                     ${y2024 ? `${y2024.avg_day_temp}°C / ${y2024.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
                 </td>
@@ -4815,20 +5043,9 @@ function renderYoYTable(data, selectedMonth) {
                 <td class="year-2026 ${isForecast ? 'forecast-data' : ''}">
                     ${y2026 ? `${y2026.avg_day_temp}°C / ${y2026.avg_night_temp}°C` : '<span class="yoy-no-data">--</span>'}
                 </td>
-                <td>
-                    ${change2425 ? `
-                        <span class="yoy-change ${change2425.day_temp_change > 0 ? 'positive' : change2425.day_temp_change < 0 ? 'negative' : 'neutral'}">
-                            ${change2425.day_temp_change > 0 ? '+' : ''}${change2425.day_temp_change}°C
-                        </span>
-                    ` : '--'}
-                </td>
-                <td>
-                    ${change2526 ? `
-                        <span class="yoy-change ${change2526.day_temp_change > 0 ? 'positive' : change2526.day_temp_change < 0 ? 'negative' : 'neutral'}">
-                            ${change2526.day_temp_change > 0 ? '+' : ''}${change2526.day_temp_change}°C
-                        </span>
-                    ` : '<span class="yoy-no-data">Future</span>'}
-                </td>
+                <td>${fmtYoY(change2324, 'day_temp_change')}</td>
+                <td>${fmtYoY(change2425, 'day_temp_change')}</td>
+                <td>${isForecast ? '<span class="yoy-no-data">Forecast</span>' : fmtYoY(change2526, 'day_temp_change')}</td>
             </tr>
         `;
     });
@@ -4949,6 +5166,7 @@ function renderAnalyticsYoYChart(data, metric) {
 
     const selectedMetric = metricMap[metric] || metricMap['day_temp'];
 
+    const data2023 = data.map(d => d.years[2023]?.[selectedMetric.key] || null);
     const data2024 = data.map(d => d.years[2024]?.[selectedMetric.key] || null);
     const data2025 = data.map(d => d.years[2025]?.[selectedMetric.key] || null);
     const data2026 = data.map(d => d.years[2026]?.[selectedMetric.key] || null);
@@ -4958,6 +5176,19 @@ function renderAnalyticsYoYChart(data, metric) {
         data: {
             labels: months,
             datasets: [
+                {
+                    label: '2023',
+                    data: data2023,
+                    borderColor: '#94a3b8',
+                    backgroundColor: 'rgba(148, 163, 184, 0.08)',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    spanGaps: true
+                },
                 {
                     label: '2024',
                     data: data2024,
@@ -4989,7 +5220,8 @@ function renderAnalyticsYoYChart(data, metric) {
                     fill: true,
                     tension: 0.4,
                     pointRadius: 5,
-                    pointHoverRadius: 8
+                    pointHoverRadius: 8,
+                    spanGaps: true
                 }
             ]
         },

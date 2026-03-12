@@ -3,15 +3,15 @@ import { AbsoluteFill, useCurrentFrame, interpolate } from "remotion";
 import { COLORS, useFade, useSlideUp, useEntrySpring, SPRING_CONFIGS, staggerDelay } from "../utils/animations";
 
 const METRICS = [
-  { label: "Avg. Night Temp", value: "28.4°C", delta: "+2.1°C", up: true, color: COLORS.amber },
-  { label: "Demand Index", value: "87/100", delta: "+12 pts", up: true, color: COLORS.emerald },
-  { label: "Cities Monitored", value: "6", delta: "Live", up: true, color: COLORS.blueLight },
-  { label: "Active Alerts", value: "3", delta: "High priority", up: false, color: COLORS.rose },
+  { label: "Cities Monitored", value: "60", delta: "All India", up: true, color: COLORS.blueLight },
+  { label: "Peak Demand Index", value: "94/100", delta: "Delhi + Chennai RED", up: true, color: COLORS.rose },
+  { label: "Wave Status", value: "Wave 1", delta: "Active NOW", up: true, color: COLORS.amber },
+  { label: "Open Alerts", value: "11", delta: "3 critical", up: false, color: COLORS.rose },
 ];
 
 /**
  * Scene 3 — Dashboard Overview (8s / 240 frames)
- * Shows a stylised "browser window" with the dashboard UI animating in.
+ * Stylised browser mockup with 8-page nav and animated KPI cards.
  */
 export function DashboardScene() {
   const frame = useCurrentFrame();
@@ -21,11 +21,9 @@ export function DashboardScene() {
     extrapolateRight: "clamp",
   });
 
-  // Heading
   const headingOpacity = useFade(8, 38);
   const headingY = useSlideUp(8, 60);
 
-  // Browser window springs in
   const browserSpring = useEntrySpring(25, SPRING_CONFIGS.gentle);
   const browserY = interpolate(browserSpring, [0, 1], [80, 0]);
   const browserOpacity = interpolate(browserSpring, [0, 1], [0, 1]);
@@ -40,11 +38,10 @@ export function DashboardScene() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "60px 80px",
-        gap: 40,
+        padding: "55px 80px",
+        gap: 36,
       }}
     >
-      {/* Orbs */}
       <div style={{ position: "absolute", width: 700, height: 700, borderRadius: "50%", background: `radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%)`, top: -200, left: -150, pointerEvents: "none" }} />
       <div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)`, bottom: -100, right: -100, pointerEvents: "none" }} />
 
@@ -53,10 +50,10 @@ export function DashboardScene() {
         <div style={{ display: "inline-flex", gap: 10, alignItems: "center", background: "rgba(37,99,235,0.12)", border: `1px solid rgba(59,130,246,0.3)`, borderRadius: 100, padding: "8px 20px", marginBottom: 16 }}>
           <span style={{ fontSize: 18, fontFamily: "system-ui, sans-serif", color: COLORS.blueLight, fontWeight: 700, letterSpacing: 1 }}>THE SOLUTION</span>
         </div>
-        <h2 style={{ fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 60, fontWeight: 800, color: COLORS.white, margin: 0, letterSpacing: -1 }}>
-          One dashboard. Complete{" "}
+        <h2 style={{ fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 58, fontWeight: 800, color: COLORS.white, margin: 0, letterSpacing: -1 }}>
+          8 intelligence pages.{" "}
           <span style={{ background: `linear-gradient(135deg, ${COLORS.blueLight}, ${COLORS.emerald})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            weather intelligence.
+            One platform.
           </span>
         </h2>
       </div>
@@ -67,7 +64,7 @@ export function DashboardScene() {
           opacity: browserOpacity,
           transform: `translateY(${browserY}px)`,
           width: "100%",
-          maxWidth: 1500,
+          maxWidth: 1600,
           background: COLORS.navyCard,
           borderRadius: 20,
           border: `1px solid ${COLORS.navyBorder}`,
@@ -75,23 +72,18 @@ export function DashboardScene() {
           overflow: "hidden",
         }}
       >
-        {/* Browser chrome */}
         <BrowserChrome />
 
-        {/* Dashboard content */}
-        <div style={{ padding: "28px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
-          {/* Nav bar */}
-          <DashboardNav frame={frame} />
+        <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 20 }}>
+          <DashboardNav />
 
-          {/* Metric cards row */}
-          <div style={{ display: "flex", gap: 20 }}>
+          <div style={{ display: "flex", gap: 18 }}>
             {METRICS.map((m, i) => (
-              <MetricCard key={i} {...m} delay={55 + staggerDelay(i, 18)} />
+              <MetricCard key={i} {...m} delay={50 + staggerDelay(i, 16)} />
             ))}
           </div>
 
-          {/* Chart area placeholder */}
-          <ChartPlaceholder delay={120} frame={frame} />
+          <ChartPlaceholder delay={115} frame={frame} />
         </div>
       </div>
     </AbsoluteFill>
@@ -137,24 +129,28 @@ function BrowserChrome() {
   );
 }
 
-function DashboardNav({ frame }: { frame: number }) {
+function DashboardNav() {
   const opacity = useFade(35, 60);
-  const tabs = ["Overview", "Temperature Trends", "City Details", "Alerts", "Reports"];
+  // The real 8 pages of the ForecastWell app
+  const pages = ["Overview", "Analytics", "Forecasting", "Cities", "Alerts", "Insights", "Demand Intel", "Reports"];
   return (
-    <div style={{ opacity, display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${COLORS.navyBorder}`, paddingBottom: 16 }}>
-      <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 22, fontWeight: 700, color: COLORS.white, marginRight: 16 }}>ForecastWell</span>
-      {tabs.map((t, i) => (
+    <div style={{ opacity, display: "flex", alignItems: "center", gap: 5, borderBottom: `1px solid ${COLORS.navyBorder}`, paddingBottom: 14 }}>
+      <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 19, fontWeight: 700, color: COLORS.white, marginRight: 10, whiteSpace: "nowrap" }}>
+        ForecastWell
+      </span>
+      {pages.map((t, i) => (
         <div
           key={i}
           style={{
-            padding: "8px 18px",
+            padding: "7px 13px",
             borderRadius: 8,
             background: i === 0 ? COLORS.blueSoft : "transparent",
             border: i === 0 ? `1px solid rgba(37,99,235,0.4)` : "none",
             fontFamily: "system-ui, sans-serif",
-            fontSize: 16,
+            fontSize: 14,
             color: i === 0 ? COLORS.blueLight : COLORS.dimmed,
             fontWeight: i === 0 ? 600 : 400,
+            whiteSpace: "nowrap",
           }}
         >
           {t}
@@ -193,13 +189,13 @@ function MetricCard({
         border: `1px solid ${COLORS.navyBorder}`,
         borderTop: `2px solid ${color}`,
         borderRadius: 12,
-        padding: "20px 24px",
+        padding: "18px 22px",
       }}
     >
-      <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 14, color: COLORS.muted, marginBottom: 8, fontWeight: 500 }}>
+      <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: COLORS.muted, marginBottom: 8, fontWeight: 500 }}>
         {label}
       </div>
-      <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 32, fontWeight: 800, color: COLORS.white, marginBottom: 6 }}>
+      <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 30, fontWeight: 800, color: COLORS.white, marginBottom: 6 }}>
         {value}
       </div>
       <div
@@ -208,7 +204,7 @@ function MetricCard({
           alignItems: "center",
           gap: 4,
           fontFamily: "system-ui, sans-serif",
-          fontSize: 14,
+          fontSize: 13,
           color: up ? COLORS.emerald : COLORS.rose,
           fontWeight: 600,
         }}
@@ -224,9 +220,12 @@ function ChartPlaceholder({ delay, frame }: { delay: number; frame: number }) {
   const opacity = interpolate(sp, [0, 1], [0, 1]);
   const y = interpolate(sp, [0, 1], [40, 0]);
 
-  // Animate a simple bar chart inside
-  const barHeights = [40, 55, 48, 62, 70, 58, 75, 68, 82, 90, 78, 95];
-  const barsReveal = interpolate(frame, [delay + 10, delay + 80], [0, 1], {
+  const barHeights = [38, 52, 46, 60, 72, 58, 78, 68, 85, 92, 80, 96];
+  const barsReveal = interpolate(frame, [delay + 10, delay + 75], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const waveOpacity = interpolate(frame, [delay + 60, delay + 85], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -239,39 +238,45 @@ function ChartPlaceholder({ delay, frame }: { delay: number; frame: number }) {
         background: COLORS.navyLight,
         border: `1px solid ${COLORS.navyBorder}`,
         borderRadius: 12,
-        padding: "24px 28px",
-        height: 220,
+        padding: "20px 24px",
+        height: 200,
         display: "flex",
         flexDirection: "column",
-        gap: 16,
+        gap: 12,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 18, fontWeight: 600, color: COLORS.white }}>
-          Night Temperature Trend — Chennai
+        <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 16, fontWeight: 600, color: COLORS.white }}>
+          Demand Index — All India City Ranking (Top 12)
         </span>
-        <div style={{ display: "flex", gap: 16 }}>
-          {[["─── Actual", COLORS.blueLight], ["─── Forecast", COLORS.amber]].map(([label, color]) => (
-            <span key={label as string} style={{ fontFamily: "system-ui, sans-serif", fontSize: 14, color: color as string }}>
-              {label as string}
-            </span>
+        <div style={{ display: "flex", gap: 14 }}>
+          {([[COLORS.rose, "RED Zone"], [COLORS.amber, "AMBER Zone"], [COLORS.emerald, "GREEN Zone"]] as [string, string][]).map(([color, label]) => (
+            <span key={label} style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color }}>■ {label}</span>
           ))}
         </div>
       </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 10, paddingTop: 8 }}>
-        {barHeights.map((h, i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              height: `${h * barsReveal}%`,
-              background: i < 8
-                ? `linear-gradient(to top, ${COLORS.blue}, ${COLORS.blueLight})`
-                : `linear-gradient(to top, rgba(245,158,11,0.4), rgba(245,158,11,0.8))`,
-              borderRadius: "4px 4px 0 0",
-              position: "relative",
-            }}
-          />
+      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 8 }}>
+        {barHeights.map((h, i) => {
+          const barColor = h > 70 ? COLORS.rose : h > 40 ? COLORS.amber : COLORS.emerald;
+          return (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                height: `${h * barsReveal}%`,
+                background: `linear-gradient(to top, ${barColor}60, ${barColor})`,
+                borderRadius: "3px 3px 0 0",
+              }}
+            />
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 20, opacity: waveOpacity }}>
+        {([["Wave 1 — Active NOW", COLORS.rose], ["Wave 2 — +2 Weeks", COLORS.amber], ["Wave 3 — +6 Weeks", COLORS.blueLight]] as [string, string][]).map(([label, color]) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+            <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: COLORS.muted }}>{label}</span>
+          </div>
         ))}
       </div>
     </div>

@@ -240,8 +240,9 @@ export function HeroScene() {
               lineHeight: 1.5,
             }}
           >
-            Weather-driven demand forecasting for{" "}
+            Night-temperature demand forecasting for{" "}
             <span style={{ color: COLORS.white, fontWeight: 600 }}>HVAC & Consumer Durables</span>
+            {" "}across South India
           </p>
         </div>
 
@@ -255,7 +256,7 @@ export function HeroScene() {
             alignItems: "center",
           }}
         >
-          {["6 South India Cities", "Real-time IMD Data", "AI Recommendations"].map((text, i) => (
+          {["6 South India Cities", "Open-Meteo Weather Data", "Wave Sequence Analysis"].map((text, i) => (
             <div
               key={i}
               style={{

@@ -4,7 +4,7 @@ import { HeroScene } from "./scenes/HeroScene";
 import { ProblemScene } from "./scenes/ProblemScene";
 import { DashboardScene } from "./scenes/DashboardScene";
 import { MapScene } from "./scenes/MapScene";
-import { ChartsScene } from "./scenes/ChartsScene";
+import { DemandIntelScene } from "./scenes/DemandIntelScene";
 import { AlertsScene } from "./scenes/AlertsScene";
 import { OutroScene } from "./scenes/OutroScene";
 import { SCENE_DURATIONS } from "./Root";
@@ -13,6 +13,7 @@ const MUSIC_FILE = "background-music.mp3"; // place file in remotion-demo/public
 
 /**
  * Master composition: stitches all 7 scenes together using <Series>.
+ * Scenes: Hero → Problem → Dashboard → Map → DemandIntel → Alerts → Outro
  * Each scene handles its own enter/exit transitions internally.
  */
 export function ForecastWellDemo() {
@@ -57,8 +58,8 @@ export function ForecastWellDemo() {
           <MapScene />
         </Series.Sequence>
 
-        <Series.Sequence durationInFrames={SCENE_DURATIONS.charts}>
-          <ChartsScene />
+        <Series.Sequence durationInFrames={SCENE_DURATIONS.demandIntel}>
+          <DemandIntelScene />
         </Series.Sequence>
 
         <Series.Sequence durationInFrames={SCENE_DURATIONS.alerts}>
