@@ -31,6 +31,11 @@ app = Flask(__name__)
 app.config.from_object(Config)
 CORS(app)
 
+# Unique token generated fresh on every app start.
+# Any session cookie from a previous run won't carry this token,
+# so the user is forced to log in again after the app is restarted.
+BOOT_TOKEN = os.urandom(16).hex()
+
 # Performance timing middleware
 @app.before_request
 def before_request_timing():
@@ -132,14 +137,25 @@ def add_cache_headers(response):
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         return response
 
-    # HTML pages: short cache (5 min) for quick updates
-    if path == '/' or path.endswith('.html'):
+    # Main dashboard: never cache — must always hit the server for login_required check
+    if path == '/':
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        return response
+
+    # Other HTML pages: short cache (5 min) for quick updates
+    if path.endswith('.html'):
         response.headers['Cache-Control'] = 'private, max-age=300'
         return response
 
     # Weather API endpoints: cache 3 hours — data pulled once every 3 hours per client requirement
-    if path in ('/api/dashboard-init', '/api/weather/current', '/api/kpis'):
+    # Note: dashboard-init is NOT cached so the browser immediately detects when the backend is offline
+    if path in ('/api/weather/current', '/api/kpis'):
         response.headers['Cache-Control'] = 'private, max-age=10800'
+        return response
+
+    # dashboard-init must never be served from browser cache — always hit the server
+    if path == '/api/dashboard-init':
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         return response
 
     # Slow-changing data: cache 3 hours
@@ -179,9 +195,10 @@ def login_required(f):
                 return jsonify({'error': 'Unauthorized', 'message': 'Invalid token'}), 401
 
         # Fallback to session check for traditional web routes
-        # Your frontend should manage the token securely or pass it in headers
-        if not session.get('logged_in'):
-            return redirect('/login')  # Assuming your React/Frontend handles /login
+        # Also validate boot token so sessions from previous app runs are rejected
+        if not session.get('logged_in') or session.get('boot_token') != BOOT_TOKEN:
+            session.clear()
+            return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
 
@@ -688,6 +705,7 @@ def login():
             if email == dev_user and password == dev_pass:
                 session['logged_in'] = True
                 session['user_email'] = dev_user
+                session['boot_token'] = BOOT_TOKEN
                 session.permanent = True
                 print(f"[Auth] Dev login accepted for '{dev_user}'")
                 return jsonify({'success': True, 'redirect': '/'})
@@ -715,6 +733,7 @@ def login():
             if auth_response.status_code == 200 and data.get('access_token'):
                 session['logged_in'] = True
                 session['user_email'] = data.get('user', {}).get('email', email)
+                session['boot_token'] = BOOT_TOKEN
                 session.permanent = True
                 return jsonify({'success': True, 'redirect': '/'})
             else:
@@ -1175,15 +1194,19 @@ def export_alert_report():
         
         # Data rows
         for alert in critical_alerts:
+            dsb = alert.get('dsb_zone', '')
+            dsb_label = dsb.get('label', dsb.get('zone', str(dsb))) if isinstance(dsb, dict) else str(dsb)
+            rec = alert.get('recommendation', {})
+            rec_action = rec.get('action', str(rec)) if isinstance(rec, dict) else str(rec)
             ws.append([
-                alert['city'],
-                alert['alert_level'].upper(),
-                f"{alert['night_temp']}°C",
-                f"{alert['day_temp']}°C",
-                alert['demand_index'],
-                alert['dsb_zone'],
-                alert['ac_hours_estimated'],
-                alert['recommendation']['action']
+                alert.get('city', ''),
+                alert.get('alert_level', '').upper(),
+                f"{alert.get('night_temp', '')}°C",
+                f"{alert.get('day_temp', '')}°C",
+                alert.get('demand_index', ''),
+                dsb_label,
+                alert.get('ac_hours_estimated', ''),
+                rec_action
             ])
         
         # Auto-adjust column widths
@@ -1192,8 +1215,9 @@ def export_alert_report():
             column_letter = column[0].column_letter
             for cell in column:
                 try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(cell.value)
+                    cell_len = len(str(cell.value)) if cell.value is not None else 0
+                    if cell_len > max_length:
+                        max_length = cell_len
                 except:
                     pass
             adjusted_width = min(max_length + 2, 50)
@@ -1311,8 +1335,10 @@ def get_city_alert(city_id):
             }), 404
         
         alert = alert_engine.analyze_temperature(
-            current['temperature'],
-            current['city_name']
+            current.get('day_temp', current.get('temperature', 0)),
+            current.get('night_temp', current.get('temperature', 0)),
+            current['city_name'],
+            city_id
         )
         
         return jsonify({
@@ -1812,6 +1838,52 @@ def get_forecast():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/api/forecast/peak')
+@login_required
+def get_forecast_peak():
+    """Find the peak temperature day in the full forecast window for a city.
+    Always scans 120 days regardless of the currently selected forecast range.
+    Query: city=<city_id> (required)
+    Returns: peak date, peak day_temp, days_from_today, night_temp, humidity
+    """
+    city_id = request.args.get('city')
+    if not city_id:
+        return jsonify({'status': 'error', 'message': 'City ID required'}), 400
+
+    try:
+        forecast = get_cached_forecast(city_id, days=120)
+        if not forecast:
+            return jsonify({'status': 'error', 'message': 'No forecast data available'}), 404
+
+        today = datetime.now().date()
+
+        # Find the day with the highest day temperature
+        peak_day = max(forecast, key=lambda d: d.get('day_temp') or d.get('temperature') or 0)
+
+        peak_date_str = peak_day.get('date', '')
+        peak_temp = peak_day.get('day_temp') or peak_day.get('temperature') or 0
+
+        days_from_today = None
+        if peak_date_str:
+            try:
+                peak_date = datetime.strptime(peak_date_str, '%Y-%m-%d').date()
+                days_from_today = (peak_date - today).days
+            except ValueError:
+                pass
+
+        return jsonify({
+            'status': 'success',
+            'city_id': city_id,
+            'peak_date': peak_date_str,
+            'peak_day_temp': round(peak_temp, 1),
+            'peak_night_temp': round(peak_day.get('night_temp') or peak_temp - 5, 1),
+            'peak_humidity': round(peak_day.get('humidity') or 50, 1),
+            'days_from_today': days_from_today
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/forecast/year-compare')
 @login_required
 def get_forecast_year_compare():
@@ -2226,6 +2298,144 @@ def get_date_comparison():
         })
     except ValueError as ve:
         return jsonify({'status': 'error', 'message': f'Invalid date format: {str(ve)}'}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/historical/lookback-compare')
+def get_lookback_compare():
+    """
+    For a selected date and city, return weather for:
+      - the selected date
+      - 7 days before
+      - 14 days before
+      - 1 month before
+    Each entry is compared vs the same date 1 year ago (warmer / cooler / similar).
+    Query params: date (YYYY-MM-DD), city (city_id)
+    """
+    try:
+        date_str = request.args.get('date')
+        city_id = request.args.get('city', 'chennai')
+
+        if not date_str:
+            return jsonify({'status': 'error', 'message': 'date parameter required (YYYY-MM-DD)'}), 400
+
+        from datetime import date as date_type
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        today = datetime.now().date()
+
+        # Build the 4 anchor dates
+        one_month_ago = target_date.replace(
+            year=target_date.year if target_date.month > 1 else target_date.year - 1,
+            month=target_date.month - 1 if target_date.month > 1 else 12
+        )
+        anchor_dates = [
+            ('Selected Date', target_date),
+            ('7 Days Ago',    target_date - timedelta(days=7)),
+            ('14 Days Ago',   target_date - timedelta(days=14)),
+            ('1 Month Ago',   one_month_ago),
+        ]
+
+        cities_match = [c for c in Config.CITIES if c['id'] == city_id]
+        if not cities_match:
+            return jsonify({'status': 'error', 'message': f'City {city_id} not found'}), 404
+        city = cities_match[0]
+
+        def fetch_day(d):
+            """Fetch daily weather for one date from Open-Meteo Archive API."""
+            if d > today:
+                return None
+            try:
+                params = {
+                    'latitude': city['lat'],
+                    'longitude': city['lon'],
+                    'start_date': d.strftime('%Y-%m-%d'),
+                    'end_date':   d.strftime('%Y-%m-%d'),
+                    'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean',
+                    'timezone': 'Asia/Kolkata'
+                }
+                resp = requests.get(
+                    'https://archive-api.open-meteo.com/v1/archive',
+                    params=params, timeout=10
+                )
+                if resp.status_code == 200:
+                    daily = resp.json().get('daily', {})
+                    if daily.get('temperature_2m_max') and daily['temperature_2m_max'][0] is not None:
+                        return {
+                            'date': d.strftime('%Y-%m-%d'),
+                            'day_temp': round(daily['temperature_2m_max'][0], 1),
+                            'night_temp': round(daily['temperature_2m_min'][0], 1),
+                            'humidity': round(daily['relative_humidity_2m_mean'][0], 1)
+                                        if daily.get('relative_humidity_2m_mean') and daily['relative_humidity_2m_mean'][0]
+                                        else None
+                        }
+            except Exception:
+                pass
+            return None
+
+        # Build full list of (label, which, date) to fetch in parallel
+        fetch_tasks = []
+        for label, anchor in anchor_dates:
+            try:
+                prev_year_date = anchor.replace(year=anchor.year - 1)
+            except ValueError:
+                prev_year_date = anchor.replace(year=anchor.year - 1, day=28)
+            fetch_tasks.append((label, 'current',   anchor))
+            fetch_tasks.append((label, 'prev_year', prev_year_date))
+
+        raw = {}
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(fetch_day, d): (lbl, which) for lbl, which, d in fetch_tasks}
+            for future in futures:
+                lbl, which = futures[future]
+                if lbl not in raw:
+                    raw[lbl] = {}
+                raw[lbl][which] = future.result()
+
+        results = []
+        for label, anchor in anchor_dates:
+            try:
+                prev_year_date = anchor.replace(year=anchor.year - 1)
+            except ValueError:
+                prev_year_date = anchor.replace(year=anchor.year - 1, day=28)
+
+            current  = raw.get(label, {}).get('current')
+            prev_yr  = raw.get(label, {}).get('prev_year')
+
+            entry = {
+                'label':          label,
+                'date':           anchor.strftime('%Y-%m-%d'),
+                'prev_year_date': prev_year_date.strftime('%Y-%m-%d'),
+                'current':        current,
+                'prev_year':      prev_yr,
+                'comparison':     None
+            }
+
+            if current and prev_yr:
+                day_diff   = round(current['day_temp']   - prev_yr['day_temp'],   1)
+                night_diff = round(current['night_temp'] - prev_yr['night_temp'], 1)
+                avg_diff   = round((day_diff + night_diff) / 2, 1)
+                trend = 'warmer' if avg_diff > 0.3 else ('cooler' if avg_diff < -0.3 else 'similar')
+                entry['comparison'] = {
+                    'day_diff':    day_diff,
+                    'night_diff':  night_diff,
+                    'avg_diff':    avg_diff,
+                    'trend':       trend,
+                    'day_label':   f'+{day_diff}°C' if day_diff > 0 else f'{day_diff}°C',
+                    'night_label': f'+{night_diff}°C' if night_diff > 0 else f'{night_diff}°C',
+                    'avg_label':   f'+{avg_diff}°C' if avg_diff > 0 else f'{avg_diff}°C',
+                }
+
+            results.append(entry)
+
+        return jsonify({
+            'status': 'success',
+            'city':   {'id': city['id'], 'name': city['name'], 'state': city.get('state', '')},
+            'data':   results
+        })
+
+    except ValueError as ve:
+        return jsonify({'status': 'error', 'message': f'Invalid date: {str(ve)}'}), 400
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -3412,7 +3622,7 @@ def get_dsb_overview():
                 'night_temp': city.get('night_temp'),
                 'ac_hours': round(city.get('ac_hours', 0), 1),
                 'humidity': round(city.get('humidity', 0), 1),
-                'wet_bulb': round(city.get('wet_bulb', 0), 1) if city.get('wet_bulb') is not None else None,
+                'wet_bulb': round(city['wet_bulb']['value'], 1) if isinstance(city.get('wet_bulb'), dict) else (round(city['wet_bulb'], 1) if city.get('wet_bulb') is not None else None),
                 'dsb': dsb,
                 'action': dsb.get('action', 'Monitor'),
             }

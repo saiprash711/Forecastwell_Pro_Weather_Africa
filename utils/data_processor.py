@@ -602,35 +602,49 @@ class DataProcessor:
     
     def calculate_days_to_peak(self, forecast_data=None):
         """
-        Calculate days until peak summer season using actual calendar dates.
-        Peak summer in South India is approximately mid-April to mid-May.
-        Target peak date: April 20.
-        
+        Calculate days until peak temperature day using actual forecast data.
+        Finds the date with the highest day temperature in the forecast.
+        Falls back to calendar-based estimate if no forecast data available.
+
         Args:
-            forecast_data: List of forecast data (unused, kept for API compat)
-            
+            forecast_data: List of forecast dicts with 'date' and 'day_temp'/'max_temp' fields
+
         Returns:
-            int: Days to peak, or 0 if already in peak season
+            int: Days to peak, or 0 if already at/past peak
         """
-        today = datetime.now()
-        month = today.month
-        
-        # If we're in peak season (April-May), return 0
-        if month in (4, 5):
-            return 0
-        
-        # Calculate days to April 20 (approximate peak)
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Use actual forecast data to find the hottest day
+        if forecast_data:
+            peak_temp = -999
+            peak_date = None
+            for entry in forecast_data:
+                # Support multiple field name conventions
+                day_t = entry.get('day_temp') or entry.get('max_temp') or entry.get('temperature_max')
+                date_str = entry.get('date')
+                if day_t is None or date_str is None:
+                    continue
+                try:
+                    entry_date = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+                except (ValueError, TypeError):
+                    continue
+                if entry_date >= today and day_t > peak_temp:
+                    peak_temp = day_t
+                    peak_date = entry_date
+
+            if peak_date is not None:
+                days = (peak_date - today).days
+                return max(0, days)
+
+        # Fallback: calendar-based estimate (May 30 is typical hottest for South India)
         year = today.year
-        peak_date = datetime(year, 4, 20)
-        
+        peak_date = datetime(year, 5, 30)
         if today > peak_date:
-            # Check if still in peak window (before June 1)
-            peak_end = datetime(year, 6, 1)
+            peak_end = datetime(year, 6, 30)
             if today < peak_end:
                 return 0
-            # Past peak, calculate to next year's peak
-            peak_date = datetime(year + 1, 4, 20)
-        
+            peak_date = datetime(year + 1, 5, 30)
+
         days = (peak_date - today).days
         return max(0, days)
     

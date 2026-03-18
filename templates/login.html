@@ -723,7 +723,28 @@
 
 <body>
     <!-- Ensure success overlay is always reset on page load (prevents cached state bypass) -->
-    <script>document.addEventListener('DOMContentLoaded', function() { var o = document.getElementById('successOverlay'); if (o) o.classList.remove('active'); });</script>
+    <script>
+        // Reset on normal load
+        document.addEventListener('DOMContentLoaded', function() {
+            var o = document.getElementById('successOverlay');
+            if (o) o.classList.remove('active');
+            var c = document.getElementById('loginCard');
+            if (c) c.classList.remove('success-exit');
+            var b = document.getElementById('loginBtn');
+            if (b) b.classList.remove('loading');
+        });
+        // Reset on bfcache restore (back/forward navigation)
+        window.addEventListener('pageshow', function(e) {
+            if (e.persisted) {
+                var o = document.getElementById('successOverlay');
+                if (o) o.classList.remove('active');
+                var c = document.getElementById('loginCard');
+                if (c) c.classList.remove('success-exit');
+                var b = document.getElementById('loginBtn');
+                if (b) b.classList.remove('loading');
+            }
+        });
+    </script>
 
     <!-- Background layers -->
     <div class="bg-mesh"></div>

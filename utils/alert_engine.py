@@ -155,18 +155,24 @@ class AlertEngine:
         if not forecast_data:
             return None
             
-        avg_temp = sum(day['temperature'] for day in forecast_data) / len(forecast_data)
-        max_temp = max(day['max_temp'] for day in forecast_data)
-        
-        high_temp_days = sum(1 for day in forecast_data if day['temperature'] >= self.threshold_high)
-        
+        avg_day_temp = sum(day.get('day_temp', day.get('temperature', 0)) for day in forecast_data) / len(forecast_data)
+        avg_night_temp = sum(day.get('night_temp', day.get('min_temp', 0)) for day in forecast_data) / len(forecast_data)
+        max_temp = max(day.get('max_temp', day.get('day_temp', 0)) for day in forecast_data)
+        avg_temp = (avg_day_temp + avg_night_temp) / 2
+
+        hot_night_days = sum(1 for day in forecast_data if day.get('night_temp', 0) >= self.threshold_red_night)
+        high_temp_days = sum(1 for day in forecast_data if day.get('day_temp', day.get('temperature', 0)) >= self.threshold_red_day)
+
         analysis = {
             'city': city_name,
             'period_days': len(forecast_data),
             'avg_temperature': round(avg_temp, 1),
+            'avg_day_temp': round(avg_day_temp, 1),
+            'avg_night_temp': round(avg_night_temp, 1),
             'max_temperature': round(max_temp, 1),
             'high_temp_days': high_temp_days,
-            'demand_trend': self._calculate_demand_trend(avg_temp, high_temp_days, len(forecast_data)),
+            'hot_night_days': hot_night_days,
+            'demand_trend': self._calculate_demand_trend(avg_day_temp, avg_night_temp, hot_night_days, len(forecast_data)),
             'recommendations': []
         }
         

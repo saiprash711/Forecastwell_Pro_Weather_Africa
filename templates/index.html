@@ -493,50 +493,6 @@
                 <!-- ===== HISTORICAL DATA SUB-TAB ===== -->
                 <div class="dashboard-subtab" id="historical-subtab">
 
-                    <!-- Date Comparison Section - Compare any date across 3 years -->
-                    <section class="date-compare-section glass-card animate__animated animate__fadeInUp">
-                        <div class="section-header">
-                            <h2><i class="fas fa-calendar-check"></i> Date Temperature Comparison</h2>
-                            <span class="section-subtitle">Compare any date's weather with the same date last year &amp;
-                                year before</span>
-                        </div>
-
-                        <!-- Date Picker Controls -->
-                        <div class="date-compare-controls">
-                            <div class="date-compare-input-group">
-                                <div class="date-compare-field">
-                                    <label for="compareDatePicker"><i class="fas fa-calendar-day"></i> Pick a
-                                        Date</label>
-                                    <input type="date" id="compareDatePicker" max="" value="">
-                                </div>
-                                <div class="date-compare-field">
-                                    <label for="compareCitySelect"><i class="fas fa-city"></i> City</label>
-                                    <select id="compareCitySelect">
-                                        <option value="chennai">Chennai</option>
-                                    </select>
-                                </div>
-                                <button type="button" class="date-compare-btn" id="dateCompareBtn">
-                                    <i class="fas fa-balance-scale"></i> Compare
-                                </button>
-                            </div>
-                            <!-- Quick Date Picks -->
-                            <div class="date-compare-quick-picks">
-                                <button type="button" class="quick-date-btn" data-offset="0">Today</button>
-                                <button type="button" class="quick-date-btn" data-offset="7">7 Days Ago</button>
-                                <button type="button" class="quick-date-btn" data-offset="30">30 Days Ago</button>
-                                <button type="button" class="quick-date-btn" data-offset="90">90 Days Ago</button>
-                            </div>
-                        </div>
-
-                        <!-- Results Container -->
-                        <div class="date-compare-results" id="dateCompareResults">
-                            <div class="date-compare-placeholder">
-                                <i class="fas fa-search"></i>
-                                <p>Select a date and click <strong>Compare</strong> to see year-over-year temperature
-                                    changes</p>
-                            </div>
-                        </div>
-                    </section>
 
                     <!-- 3-Year Historical Analysis Section -->
                     <section class="two-year-historical-section glass-card animate__animated animate__fadeInUp">
@@ -571,6 +527,9 @@
                             </div>
                             <button class="load-historical-btn" id="loadHistoricalBtn">
                                 <i class="fas fa-chart-line"></i> Load Data
+                            </button>
+                            <button class="export-btn-inline" id="exportHistoricalBtn" title="Export to Excel">
+                                <i class="fas fa-file-excel"></i><span> Export Excel</span>
                             </button>
                         </div>
 
@@ -723,6 +682,34 @@
                         </div>
                     </section>
 
+                    <!-- Date Lookup & Year Comparison Section -->
+                    <section class="lookback-compare-section glass-card animate__animated animate__fadeInUp">
+                        <div class="section-header">
+                            <h2><i class="fas fa-search"></i> Date Lookup &amp; Year Comparison</h2>
+                            <span class="section-subtitle">Pick a date &amp; city — see today, 7d, 14d, 1 month ago vs same date last year</span>
+                        </div>
+
+                        <div class="lookback-controls">
+                            <div class="date-picker-group">
+                                <label for="lookbackDate">Reference Date</label>
+                                <input type="date" id="lookbackDate">
+                            </div>
+                            <div class="date-picker-group">
+                                <label for="lookbackCitySelect">City</label>
+                                <select id="lookbackCitySelect">
+                                    <option value="chennai">Chennai</option>
+                                </select>
+                            </div>
+                            <button class="load-historical-btn" id="lookbackCompareBtn">
+                                <i class="fas fa-calendar-check"></i> Compare
+                            </button>
+                        </div>
+
+                        <div id="lookbackResults">
+                            <p class="year-compare-placeholder"><i class="fas fa-info-circle"></i> Select a date and city, then click Compare.</p>
+                        </div>
+                    </section>
+
                     <!-- Monthly Heatmap Section -->
                     <section class="monthly-heatmap-section glass-card animate__animated animate__fadeInUp">
                         <div class="section-header">
@@ -735,6 +722,9 @@
                                         <option value="chennai">Chennai</option>
                                     </select>
                                 </div>
+                                <button class="export-btn-inline" id="exportHeatmapBtn" title="Export heatmap data to Excel">
+                                    <i class="fas fa-file-excel"></i><span> Export Excel</span>
+                                </button>
                             </div>
                         </div>
                         <div class="heatmap-container-large" id="monthlyHeatmapContainer">
@@ -785,6 +775,9 @@
                                             <option value="12">December</option>
                                         </select>
                                     </div>
+                                    <button class="export-btn-inline" id="exportYoYBtn" title="Export YoY data to Excel">
+                                        <i class="fas fa-file-excel"></i><span> Export Excel</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -924,6 +917,9 @@
                                     <option value="demand">Demand Index</option>
                                     <option value="ac_hours">AC Hours</option>
                                 </select>
+                                <button class="export-btn-inline" id="exportAnalyticsYoYBtn" title="Export YoY analytics to Excel">
+                                    <i class="fas fa-file-excel"></i><span> Export Excel</span>
+                                </button>
                             </div>
                         </div>
                         <div class="chart-container large">
@@ -959,6 +955,9 @@
                         <button class="range-btn" data-days="30">30 Days</button>
                         <button class="range-btn range-btn-4m" data-days="120">4 Months</button>
                     </div>
+                    <button class="export-btn-inline" id="exportForecastBtn" title="Export forecast to Excel">
+                        <i class="fas fa-file-excel"></i><span> Export Excel</span>
+                    </button>
                 </div>
 
                 <!-- Year-over-Year Comparison -->
@@ -972,6 +971,9 @@
                         <input type="date" id="yearCompareDate" />
                         <button id="yearCompareBtn" class="range-btn active">
                             <i class="fas fa-search"></i> Compare
+                        </button>
+                        <button class="export-btn-inline" id="exportYearCompareBtn" title="Export year comparison to Excel">
+                            <i class="fas fa-file-excel"></i><span> Export Excel</span>
                         </button>
                     </div>
                     <div id="yearCompareResults">

@@ -162,8 +162,6 @@ document.addEventListener('DOMContentLoaded', function () {
     setupEventListeners();
     setupDemandIntelDelegation();
     setupHeatmapCitySelectListener();
-    populateCompareCitySelect(); // New: Populate Date Comparison Dropdown
-    setupDateComparison();       // New: Setup Date Comparison Logic
     startClock();
 
     // SSE real-time updates (primary), polling as fallback
@@ -270,13 +268,11 @@ async function initializeDashboard() {
         await loadDashboardData();
 
         showLoadingWithProgress(3, 7);
-        populateCompareCitySelect(); // Populate dropdown after data is loaded
 
         showLoadingWithProgress(4, 7);
         setupHeatmapCitySelectListener();
 
         showLoadingWithProgress(5, 7);
-        setupDateComparison();       // New: Setup Date Comparison Logic
 
         showLoadingWithProgress(6, 7);
         startClock();
@@ -321,9 +317,9 @@ function setupEventListeners() {
             sidebar.classList.toggle('active');
         });
 
-        // Close sidebar when clicking outside on mobile
+        // Close sidebar when clicking outside on mobile/tablet
         document.addEventListener('click', (e) => {
-            if (window.innerWidth <= 768 &&
+            if (window.innerWidth <= 992 &&
                 sidebar.classList.contains('active') &&
                 !sidebar.contains(e.target) &&
                 !menuBtn.contains(e.target)) {
@@ -497,7 +493,7 @@ function navigateToPage(pageId) {
 
     // Close mobile sidebar
     const sidebar = document.getElementById('sidebar');
-    if (sidebar) sidebar.classList.remove('open');
+    if (sidebar) sidebar.classList.remove('active');
 }
 
 // Track which pages have been loaded to avoid redundant re-fetches
@@ -736,6 +732,7 @@ async function loadDashboardData(showProgress = true) {
                 try { updateFallbackBanner(weather); } catch (e) { console.error('Fallback banner error:', e); }
                 try { populateCitySelects(weather); } catch (e) { console.error('City selects error:', e); }
                 try { populateHistoricalCitySelect(); } catch (e) { console.error('Historical select error:', e); }
+                try { setupLookbackCompare(); } catch (e) { console.error('Lookback select error:', e); }
                 try { populateHeatmapCitySelect(); } catch (e) { console.error('Heatmap select error:', e); }
                 try { populateYoYCitySelect(); } catch (e) { console.error('YoY select error:', e); }
 
@@ -2089,11 +2086,13 @@ async function loadForecastPage() {
 
     // Fetch real forecast data
     const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
+    let forecastDataForPredictions = null;
     try {
         const response = await fetch(`/api/forecast?city=${cityId}&days=${selectedForecastDays}`);
         const result = await response.json();
 
         if (result.status === 'success' && result.data) {
+            forecastDataForPredictions = result.data;
             generateForecastCards(result.data);
             initializeForecastChart(result.data);
             if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
@@ -2104,7 +2103,8 @@ async function loadForecastPage() {
         console.error('Error fetching forecast:', e);
     }
 
-    generatePredictions();
+    generatePredictions(forecastDataForPredictions);
+    loadDaysToPeak(cityId);
     setupYearCompare();
     loadBranchDemandChart();
     loadModelMixCharts();
@@ -2422,10 +2422,12 @@ function setupForecastEventListeners() {
             selectedForecastCity = this.value;
 
             // Fetch and update
+            let forecastDataForPredictions = null;
             try {
                 const response = await fetch(`/api/forecast?city=${selectedForecastCity}&days=${selectedForecastDays}`);
                 const result = await response.json();
                 if (result.status === 'success' && result.data) {
+                    forecastDataForPredictions = result.data;
                     generateForecastCards(result.data);
                     initializeForecastChart(result.data);
                     if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
@@ -2433,7 +2435,8 @@ function setupForecastEventListeners() {
             } catch (e) {
                 console.error(e);
             }
-            generatePredictions();
+            generatePredictions(forecastDataForPredictions);
+            loadDaysToPeak(selectedForecastCity);
             // Refresh year comparison for new city
             const dateInput = document.getElementById('yearCompareDate');
             if (dateInput && dateInput.value) loadYearComparison(selectedForecastCity, dateInput.value);
@@ -2465,6 +2468,7 @@ function setupForecastEventListeners() {
                         generateForecastCards(result.data);
                         initializeForecastChart(result.data);
                         if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
+                        generatePredictions(result.data);
                     }
                 });
         });
@@ -2858,53 +2862,82 @@ const peakSeasonMap = {
     'kakinada': '04-01'
 };
 
-function generatePredictions() {
+async function loadDaysToPeak(cityId) {
+    const valEl = document.getElementById('daysToPeakValue');
+    const subEl = document.getElementById('daysToPeakSub');
+    if (!valEl || !subEl) return;
+
+    try {
+        const res = await fetch(`/api/forecast/peak?city=${cityId}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            const d = data.days_from_today;
+            valEl.textContent = d === 0 ? 'Today' : (d != null ? d + ' days' : '—');
+            const dateStr = data.peak_date
+                ? new Date(data.peak_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '';
+            subEl.textContent = `Peak ${data.peak_day_temp}°C on ${dateStr}`;
+        } else {
+            valEl.textContent = '—';
+            subEl.textContent = 'Data unavailable';
+        }
+    } catch (e) {
+        if (valEl) { valEl.textContent = '—'; }
+        if (subEl) { subEl.textContent = 'Error loading peak data'; }
+    }
+}
+
+function calcDemandIndexJS(dayTemp, nightTemp, humidity) {
+    if (!nightTemp) nightTemp = dayTemp - 5;
+    if (!dayTemp) dayTemp = nightTemp + 5;
+    function tempToIdx(t, isNight) {
+        if (isNight) {
+            if (t >= 24) return 95; if (t >= 22) return 85;
+            if (t >= 20) return 60; if (t >= 18) return 30; return 10;
+        } else {
+            if (t >= 38) return 95; if (t >= 36) return 85;
+            if (t >= 34) return 60; if (t >= 32) return 30; return 10;
+        }
+    }
+    let base = (tempToIdx(nightTemp, true) * 0.6) + (tempToIdx(dayTemp, false) * 0.4);
+    if (humidity > 70) base = Math.min(100, base * 1.15);
+    else if (humidity < 40) base = base * 0.9;
+    return Math.round(base);
+}
+
+function generatePredictions(forecastData) {
     const container = document.getElementById('predictionGrid');
     if (!container) return;
 
     const cityData = getSelectedCityData();
     const cityName = cityData ? cityData.city_name : 'Chennai';
 
-    // Calculate predictions based on selected city
-    const avgTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 35;
+    let avgTemp, avgDemand, humidity;
 
-    const avgDemand = cityData ? (cityData.demand_index || 50) : 50;
-
-    const humidity = cityData ? (cityData.humidity || 50) : 50;
-
-    // Calculate predictions
-    // Calculate predictions - Target Peak based on City
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const peakConfig = peakSeasonMap[(cityName || 'chennai').toLowerCase()] || '04-20';
-    const [pMonth, pDay] = peakConfig.split('-').map(Number);
-    let peakDate = new Date(currentYear, pMonth - 1, pDay);
-    const summerEnd = new Date(currentYear, 5, 1); // June 1
-
-    let peakDays;
-
-    // Reset hours for accurate day calc
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (todayStart >= peakDate && todayStart < summerEnd) {
-        peakDays = 0;
+    if (forecastData && forecastData.length > 0) {
+        // Use averages from the actual forecast period
+        const n = forecastData.length;
+        avgTemp = forecastData.reduce((s, d) => s + (d.day_temp || d.temperature || 35), 0) / n;
+        const avgNightTemp = forecastData.reduce((s, d) => s + (d.night_temp || (d.day_temp || 35) - 5), 0) / n;
+        humidity = forecastData.reduce((s, d) => s + (d.humidity || 50), 0) / n;
+        avgDemand = calcDemandIndexJS(avgTemp, avgNightTemp, humidity);
     } else {
-        if (todayStart >= summerEnd) {
-            peakDate = new Date(currentYear + 1, pMonth - 1, pDay);
-        }
-        const diffTime = peakDate - todayStart;
-        peakDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        // Fallback to current city snapshot
+        avgTemp = cityData ? (cityData.day_temp || cityData.temperature || 35) : 35;
+        avgDemand = cityData ? (cityData.demand_index || 50) : 50;
+        humidity = cityData ? (cityData.humidity || 50) : 50;
     }
+
     const estimatedSales = Math.round(avgDemand * 150);
     const heatWaveRisk = avgTemp >= 40 ? 'Very High' : avgTemp >= 38 ? 'High' : avgTemp >= 35 ? 'Moderate' : 'Low';
     const riskColor = avgTemp >= 40 ? '#ef4444' : avgTemp >= 38 ? '#f97316' : avgTemp >= 35 ? '#eab308' : '#22c55e';
 
     container.innerHTML = `
-        <div class="prediction-card">
-            <h4>📈 Peak Season ETA</h4>
-            <p>Based on ${cityName} temperature trends</p>
-            <div class="prediction-value">${peakDays} days</div>
-            <small style="color: var(--text-muted)">Forecasted peak demand period</small>
+        <div class="prediction-card" id="daysToPeakCard">
+            <h4>📈 Days to Peak</h4>
+            <p>Based on ${cityName} 120-day forecast</p>
+            <div class="prediction-value" id="daysToPeakValue">—</div>
+            <small style="color: var(--text-muted)" id="daysToPeakSub">Loading...</small>
         </div>
         <div class="prediction-card">
             <h4>💹 Demand Forecast</h4>
@@ -3675,6 +3708,14 @@ function setupExportButtons() {
     document.getElementById('exportDataExcel')?.addEventListener('click', exportExcel);
     document.getElementById('exportAlertReport')?.addEventListener('click', exportAlertReport);
     document.getElementById('exportForecastReport')?.addEventListener('click', exportForecastReport);
+
+    // Inline contextual export buttons
+    document.getElementById('exportHistoricalBtn')?.addEventListener('click', exportHistoricalExcel);
+    document.getElementById('exportHeatmapBtn')?.addEventListener('click', exportHeatmapExcel);
+    document.getElementById('exportYoYBtn')?.addEventListener('click', exportYoYExcel);
+    document.getElementById('exportAnalyticsYoYBtn')?.addEventListener('click', exportAnalyticsYoYExcel);
+    document.getElementById('exportForecastBtn')?.addEventListener('click', exportForecastExcel);
+    document.getElementById('exportYearCompareBtn')?.addEventListener('click', exportYearCompareExcel);
 }
 
 async function exportAlertReport() {
@@ -4097,193 +4138,6 @@ async function loadHistoricalComparison() {
     }
 }
 
-// ========== DATE COMPARISON FEATURE ==========
-function initDateCompare() {
-    const datePicker = document.getElementById('compareDatePicker');
-    const citySelect = document.getElementById('compareCitySelect');
-    const compareBtn = document.getElementById('dateCompareBtn');
-
-    if (!datePicker || !compareBtn) {
-        console.warn('Date compare elements not found, retrying in 500ms...');
-        setTimeout(initDateCompare, 500);
-        return;
-    }
-
-    // Set max date to today and default to today
-    const today = new Date();
-    const todayStr = today.getFullYear() + '-' +
-        String(today.getMonth() + 1).padStart(2, '0') + '-' +
-        String(today.getDate()).padStart(2, '0');
-    datePicker.setAttribute('max', todayStr);
-    datePicker.value = todayStr;
-
-    // Populate city select
-    if (citySelect) {
-        let cities = currentCityData && currentCityData.length > 0
-            ? currentCityData.map(c => ({ id: c.city_id, name: c.city_name }))
-            : DEFAULT_CITIES;
-
-        // Sort cities alphabetically
-        cities.sort((a, b) => a.name.localeCompare(b.name));
-
-        citySelect.innerHTML =
-            cities.map((c, i) => `<option value="${c.id}" ${i === 0 ? 'selected' : ''}>${c.name}</option>`).join('');
-    }
-
-    // Compare button click
-    compareBtn.onclick = function (e) {
-        e.preventDefault();
-        fetchDateComparison();
-    };
-
-    // Quick date buttons - use closest() to handle clicks on child elements
-    document.querySelectorAll('.quick-date-btn').forEach(btn => {
-        btn.onclick = function (e) {
-            e.preventDefault();
-            const button = e.target.closest('.quick-date-btn');
-            if (!button) return;
-
-            const offset = parseInt(button.getAttribute('data-offset'));
-            const d = new Date();
-            d.setDate(d.getDate() - offset);
-            const dateStr = d.getFullYear() + '-' +
-                String(d.getMonth() + 1).padStart(2, '0') + '-' +
-                String(d.getDate()).padStart(2, '0');
-            datePicker.value = dateStr;
-
-            document.querySelectorAll('.quick-date-btn').forEach(b => b.classList.remove('active'));
-            button.classList.add('active');
-
-            fetchDateComparison();
-        };
-    });
-
-    console.log('Date compare initialized successfully');
-}
-
-async function fetchDateComparison() {
-    const datePicker = document.getElementById('compareDatePicker');
-    const citySelect = document.getElementById('compareCitySelect');
-    const resultsDiv = document.getElementById('dateCompareResults');
-    const compareBtn = document.getElementById('dateCompareBtn');
-
-    if (!datePicker || !resultsDiv) return;
-
-    const dateVal = datePicker.value;
-    const cityVal = citySelect ? citySelect.value : 'all';
-
-    if (!dateVal) {
-        resultsDiv.innerHTML = '<div class="date-compare-placeholder"><i class="fas fa-exclamation-circle"></i><p>Please select a date first</p></div>';
-        return;
-    }
-
-    // Show loading
-    compareBtn.classList.add('loading');
-    compareBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-    resultsDiv.innerHTML = `
-        <div class="dc-loading">
-            <div class="dc-spinner"></div>
-            <p>Fetching real weather data from Open-Meteo Archive...</p>
-        </div>
-    `;
-
-    try {
-        const response = await fetch(`${API_BASE}/historical/date-compare?date=${dateVal}&city=${cityVal}`);
-        const result = await response.json();
-
-        if (result.status === 'success' && result.data && result.data.length > 0) {
-            const targetDate = new Date(dateVal);
-            const dateDisplay = targetDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
-
-            resultsDiv.innerHTML = result.data.map((city, idx) => {
-                const yearsHtml = city.years.map((yr, yi) => {
-                    const isTarget = yi === 0;
-                    const dayTemp = yr.day_temp !== null ? `${yr.day_temp}°C` : 'N/A';
-                    const nightTemp = yr.night_temp !== null ? `${yr.night_temp}°C` : 'N/A';
-                    const humidity = yr.humidity !== null ? `${yr.humidity}%` : 'N/A';
-                    const dateLabel = yr.date ? new Date(yr.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-
-                    return `
-                        <div class="dc-year-col ${isTarget ? 'current-year' : ''}" style="animation-delay: ${yi * 0.1}s">
-                            <div class="dc-year-label">
-                                <h4>📅 ${yr.year}</h4>
-                                <span class="dc-year-date">${dateLabel}</span>
-                            </div>
-                            <div class="dc-temp-row">
-                                <span class="dc-temp-label"><i class="fas fa-sun" style="color:#f59e0b"></i> Day</span>
-                                <span class="dc-temp-value ${yr.day_temp !== null ? 'day' : 'na'}">${dayTemp}</span>
-                            </div>
-                            <div class="dc-temp-row">
-                                <span class="dc-temp-label"><i class="fas fa-moon" style="color:#6366f1"></i> Night</span>
-                                <span class="dc-temp-value ${yr.night_temp !== null ? 'night' : 'na'}">${nightTemp}</span>
-                            </div>
-                            <div class="dc-temp-row">
-                                <span class="dc-temp-label"><i class="fas fa-tint" style="color:#06b6d4"></i> Humidity</span>
-                                <span class="dc-temp-value ${yr.humidity !== null ? 'humidity' : 'na'}">${humidity}</span>
-                            </div>
-                            ${yr.is_current ? '<div style="margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted);text-align:center;">Live / Forecast</div>' : ''}
-                        </div>
-                    `;
-                }).join('');
-
-                // Verdict badge
-                let verdictHtml = '';
-                if (city.comparison) {
-                    const c = city.comparison;
-                    const trendIcon = c.trend === 'warmer' ? 'fa-temperature-high' : (c.trend === 'cooler' ? 'fa-temperature-low' : 'fa-equals');
-                    const trendText = c.trend === 'warmer' ? 'Warmer than last year' : (c.trend === 'cooler' ? 'Cooler than last year' : 'Similar to last year');
-                    verdictHtml = `<span class="dc-verdict ${c.trend}"><i class="fas ${trendIcon}"></i> ${trendText}</span>`;
-                }
-
-                // Diff strip
-                let diffHtml = '';
-                if (city.comparison) {
-                    const c = city.comparison;
-                    const dayClass = c.day_diff > 0 ? 'up' : (c.day_diff < 0 ? 'down' : 'neutral');
-                    const nightClass = c.night_diff > 0 ? 'up' : (c.night_diff < 0 ? 'down' : 'neutral');
-                    const dayIcon = c.day_diff > 0 ? 'fa-arrow-up' : (c.day_diff < 0 ? 'fa-arrow-down' : 'fa-minus');
-                    const nightIcon = c.night_diff > 0 ? 'fa-arrow-up' : (c.night_diff < 0 ? 'fa-arrow-down' : 'fa-minus');
-                    diffHtml = `
-                        <div class="dc-diff-strip">
-                            <div class="dc-diff-badge ${dayClass}">
-                                <i class="fas ${dayIcon}"></i> ${c.day_label} <span class="dc-diff-label">Day vs Last Year</span>
-                            </div>
-                            <div class="dc-diff-badge ${nightClass}">
-                                <i class="fas ${nightIcon}"></i> ${c.night_label} <span class="dc-diff-label">Night vs Last Year</span>
-                            </div>
-                        </div>
-                    `;
-                }
-
-                return `
-                    <div class="dc-city-card" style="animation-delay: ${idx * 0.15}s">
-                        <div class="dc-city-header">
-                            <div>
-                                <span class="dc-city-name"><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> ${city.city_name}</span>
-                                <span class="dc-city-state">${city.state} — ${dateDisplay}</span>
-                            </div>
-                            ${verdictHtml}
-                        </div>
-                        <div class="dc-years-grid">${yearsHtml}</div>
-                        ${diffHtml}
-                        <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;background:rgba(99,102,241,0.04);border-radius:8px;font-size:0.7rem;color:var(--text-muted);display:flex;align-items:center;gap:0.4rem;">
-                            <i class="fas fa-info-circle" style="color:var(--primary);opacity:0.5"></i>
-                            Data from Open-Meteo ECMWF reanalysis (~11km grid). Values may differ ±2-3°C from actual station readings.
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        } else {
-            resultsDiv.innerHTML = '<div class="date-compare-placeholder"><i class="fas fa-exclamation-triangle"></i><p>No data found for the selected date and city</p></div>';
-        }
-    } catch (error) {
-        console.error('Date comparison error:', error);
-        resultsDiv.innerHTML = '<div class="date-compare-placeholder"><i class="fas fa-exclamation-triangle"></i><p>Failed to fetch comparison data. Please try again.</p></div>';
-    } finally {
-        compareBtn.classList.remove('loading');
-        compareBtn.innerHTML = '<i class="fas fa-balance-scale"></i> Compare';
-    }
-}
 
 async function loadWeeklySummary() {
     const container = document.getElementById('weeklyContainer');
@@ -4372,8 +4226,6 @@ async function loadNewSections() {
         }
     });
 
-    // Initialize date comparison (always runs)
-    try { initDateCompare(); } catch (e) { console.warn('Date compare init error:', e); }
 }
 
 // ========== 2-Year Historical Data Functions ==========
@@ -4397,6 +4249,145 @@ function setupHistoricalEventListeners() {
 
     // Populate historical city select
     populateHistoricalCitySelect();
+
+    // Date Lookup & Year Comparison
+    setupLookbackCompare();
+}
+
+// ── Date Lookup & Year Comparison ─────────────────────────────────────────────
+
+function setupLookbackCompare() {
+    // Default lookback date to today
+    const dateInput = document.getElementById('lookbackDate');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    // Populate city select (reuse same cities list)
+    const sel = document.getElementById('lookbackCitySelect');
+    if (sel) {
+        let cities = [];
+        if (currentCityData && currentCityData.length > 0) {
+            cities = currentCityData.map(c => ({ id: c.city_id, name: c.city_name }));
+        } else {
+            cities = DEFAULT_CITIES;
+        }
+        cities.sort((a, b) => a.name.localeCompare(b.name));
+        sel.innerHTML = cities.map((c, i) =>
+            `<option value="${c.id}" ${i === 0 ? 'selected' : ''}>${c.name}</option>`
+        ).join('');
+    }
+
+    const btn = document.getElementById('lookbackCompareBtn');
+    if (btn) {
+        btn.addEventListener('click', loadLookbackCompare);
+    }
+}
+
+async function loadLookbackCompare() {
+    const dateVal  = document.getElementById('lookbackDate')?.value;
+    const cityVal  = document.getElementById('lookbackCitySelect')?.value || 'chennai';
+    const resultsDiv = document.getElementById('lookbackResults');
+    if (!resultsDiv) return;
+
+    if (!dateVal) {
+        resultsDiv.innerHTML = `<p class="year-compare-placeholder">Please select a date first.</p>`;
+        return;
+    }
+
+    resultsDiv.innerHTML = `
+        <div class="year-compare-loading">
+            <div class="loading-spinner-small"></div>
+            Fetching data from Open-Meteo Archive…
+        </div>`;
+
+    try {
+        const resp = await fetch(`${API_BASE}/historical/lookback-compare?date=${dateVal}&city=${cityVal}`);
+        const result = await resp.json();
+
+        if (result.status !== 'success') {
+            resultsDiv.innerHTML = `<p class="year-compare-placeholder">Error: ${result.message || 'Unknown error'}</p>`;
+            return;
+        }
+
+        renderLookbackResults(result.city, result.data, resultsDiv);
+    } catch (err) {
+        resultsDiv.innerHTML = `<p class="year-compare-placeholder">Network error — please try again.</p>`;
+        console.error('Lookback compare error:', err);
+    }
+}
+
+function renderLookbackResults(city, data, container) {
+    const cards = data.map(entry => {
+        const cur  = entry.current;
+        const prev = entry.prev_year;
+        const comp = entry.comparison;
+
+        // Current date block
+        let curBlock = '';
+        if (cur) {
+            curBlock = `
+                <div class="lookback-temp-row">
+                    <span class="ltr-label">Day</span>
+                    <span class="lookback-temp-value hot">${cur.day_temp}°C</span>
+                </div>
+                <div class="lookback-temp-row">
+                    <span class="ltr-label">Night</span>
+                    <span class="lookback-temp-value cool">${cur.night_temp}°C</span>
+                </div>
+                ${cur.humidity != null ? `<div class="lookback-temp-row"><span class="ltr-label">Humidity</span><span class="lookback-temp-value">${cur.humidity}%</span></div>` : ''}
+            `;
+        } else {
+            curBlock = `<p class="lookback-prev-row">No data available</p>`;
+        }
+
+        // Previous year block
+        let prevBlock = '';
+        if (prev) {
+            prevBlock = `
+                <div class="lookback-prev-row">
+                    <i class="fas fa-history" style="opacity:.5"></i>
+                    ${entry.prev_year_date}: Day ${prev.day_temp}°C · Night ${prev.night_temp}°C
+                    ${prev.humidity != null ? `· ${prev.humidity}% RH` : ''}
+                </div>`;
+        } else if (cur) {
+            prevBlock = `<div class="lookback-prev-row">No prior-year data</div>`;
+        }
+
+        // Verdict badge
+        let verdictHtml = '';
+        if (comp) {
+            const icon  = comp.trend === 'warmer' ? '🔥' : comp.trend === 'cooler' ? '❄️' : '≈';
+            const label = comp.trend === 'warmer' ? 'Warmer' : comp.trend === 'cooler' ? 'Cooler' : 'Similar';
+            verdictHtml = `
+                <div class="lookback-verdict ${comp.trend}">
+                    ${icon} ${label} by ${Math.abs(comp.avg_diff)}°C
+                </div>
+                <div class="lookback-diff-detail">
+                    Day ${comp.day_label} · Night ${comp.night_label} vs ${entry.prev_year_date.slice(0, 4)}
+                </div>`;
+        } else if (!cur) {
+            verdictHtml = `<div class="lookback-verdict unknown">— No data</div>`;
+        } else {
+            verdictHtml = `<div class="lookback-verdict unknown">— No prior-year data</div>`;
+        }
+
+        return `
+            <div class="lookback-card">
+                <div class="lookback-card-label">${entry.label}</div>
+                <div class="lookback-card-date">${entry.date}</div>
+                ${curBlock}
+                ${prevBlock}
+                ${verdictHtml}
+            </div>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="year-compare-date-header">
+            <i class="fas fa-map-marker-alt"></i> <strong>${city.name}</strong>${city.state ? ', ' + city.state : ''} —
+            comparing each date vs same date in the previous year
+        </div>
+        <div class="lookback-results-grid">${cards}</div>`;
 }
 
 // Default cities list (fallback when API data not loaded yet)
@@ -4497,7 +4488,7 @@ async function loadTwoYearHistoricalData() {
 
         if (result.status === 'success' && result.data) {
             updateHistoricalStats(result.data, result.meta);
-            renderTwoYearHistoricalChart(result.data);
+            renderTwoYearHistoricalChart(result.data, granularity);
             updateYearComparisonCards(result.data.yearly_stats);
         }
     } catch (error) {
@@ -4538,7 +4529,7 @@ function updateHistoricalStats(data, meta) {
     }
 }
 
-function renderTwoYearHistoricalChart(data) {
+function renderTwoYearHistoricalChart(data, granularity = 'monthly') {
     const canvas = document.getElementById('twoYearHistoricalChart');
     if (!canvas) return;
 
@@ -4546,122 +4537,191 @@ function renderTwoYearHistoricalChart(data) {
         twoYearHistoricalChart.destroy();
     }
 
-    // ── Year-overlay chart: Jan–Dec on x-axis, one line per year ──
-    // Group timeline entries by (year, month) and compute avg night temp across cities
-    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    // Aggregate: for each (year, month) compute avg night temp & avg demand
-    const yearMonthData = {}; // { 2023: { 1: [temps...], 2: [temps...] }, ... }
-    data.timeline.forEach(entry => {
-        const d = new Date(entry.date);
-        const yr = d.getFullYear();
-        const mo = d.getMonth() + 1;
-        if (!yearMonthData[yr]) yearMonthData[yr] = {};
-        if (!yearMonthData[yr][mo]) yearMonthData[yr][mo] = { nightTemps: [], demands: [] };
-        Object.values(entry.cities).forEach(c => {
-            if (c.night_temp != null) yearMonthData[yr][mo].nightTemps.push(c.night_temp);
-            if (c.demand_index != null) yearMonthData[yr][mo].demands.push(c.demand_index);
-        });
-    });
-
     const yearColors = { 2023: '#94a3b8', 2024: '#3b82f6', 2025: '#10b981', 2026: '#f97316' };
     const yearDash   = { 2023: [6, 3],    2024: [],         2025: [],         2026: [4, 4] };
 
-    const years = Object.keys(yearMonthData).map(Number).sort();
-    const datasets = years.map(yr => {
-        const monthlyAvg = monthLabels.map((_, idx) => {
-            const mo = idx + 1;
-            const temps = yearMonthData[yr]?.[mo]?.nightTemps || [];
-            if (!temps.length) return null;
-            return parseFloat((temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1));
-        });
-        return {
+    const avgArr = arr => arr.length ? parseFloat((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)) : null;
+    const avgInt = arr => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+
+    function buildDatasets(bucketData, labels) {
+        const years = Object.keys(bucketData).map(Number).sort();
+        const tempDS = years.map(yr => ({
             label: `${yr} Night Temp`,
-            data: monthlyAvg,
+            data: labels.map((_, i) => avgArr(bucketData[yr]?.[i + 1]?.nightTemps || [])),
             borderColor: yearColors[yr] || '#888',
             backgroundColor: (yearColors[yr] || '#888') + '18',
             borderDash: yearDash[yr] || [],
-            fill: false,
-            tension: 0.4,
-            pointRadius: 4,
-            pointHoverRadius: 7,
-            borderWidth: yr === 2026 ? 2 : 2.5,
-            spanGaps: true
-        };
-    });
-
-    // Also add demand index dataset on secondary axis using 2025 data as reference
-    const demandDatasets = years.filter(yr => yr >= 2023).map(yr => {
-        const monthlyDemand = monthLabels.map((_, idx) => {
-            const mo = idx + 1;
-            const demands = yearMonthData[yr]?.[mo]?.demands || [];
-            if (!demands.length) return null;
-            return Math.round(demands.reduce((a, b) => a + b, 0) / demands.length);
-        });
-        return {
+            fill: false, tension: 0.4,
+            pointRadius: granularity === 'daily' ? 0 : 4,
+            pointHoverRadius: 6,
+            borderWidth: 2, spanGaps: true
+        }));
+        const demDS = years.filter(yr => yr >= 2023).map(yr => ({
             label: `${yr} Demand Idx`,
-            data: monthlyDemand,
+            data: labels.map((_, i) => avgInt(bucketData[yr]?.[i + 1]?.demands || [])),
             type: 'bar',
             backgroundColor: (yearColors[yr] || '#888') + '30',
             borderColor: (yearColors[yr] || '#888') + '80',
-            borderWidth: 1,
-            yAxisID: 'y2',
-            spanGaps: true
-        };
-    });
+            borderWidth: 1, yAxisID: 'y2', spanGaps: true
+        }));
+        return [...tempDS, ...demDS];
+    }
 
-    twoYearHistoricalChart = new Chart(canvas, {
-        type: 'line',
-        data: { labels: monthLabels, datasets: [...datasets, ...demandDatasets] },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: { usePointStyle: true, padding: 18, font: { size: 12 } }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(0,0,0,0.85)',
-                    padding: 14,
-                    callbacks: {
-                        title: ctx => `📅 ${ctx[0].label}`,
-                        label: ctx => {
-                            if (ctx.dataset.label.includes('Demand')) {
-                                return `${ctx.dataset.label}: ${ctx.parsed.y}`;
-                            }
-                            return `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}°C`;
+    function buildChart(labels, datasets, xTitle) {
+        twoYearHistoricalChart = new Chart(canvas, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, padding: 18, font: { size: 12 } } },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.85)', padding: 14,
+                        callbacks: {
+                            title: ctx => `📅 ${ctx[0].label}`,
+                            label: ctx => ctx.dataset.label.includes('Demand')
+                                ? `${ctx.dataset.label}: ${ctx.parsed.y}`
+                                : `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}°C`
                         }
                     }
-                }
-            },
-            scales: {
-                x: {
-                    display: true,
-                    title: { display: true, text: 'Month (Jan–Dec)', font: { size: 12 } },
-                    grid: { display: false }
                 },
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    title: { display: true, text: 'Night Temperature (°C)', font: { size: 12 } },
-                    min: 14, max: 38,
-                    grid: { color: 'rgba(0,0,0,0.05)' }
-                },
-                y2: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: { display: true, text: 'Demand Index', font: { size: 11 } },
-                    min: 0, max: 100,
-                    grid: { drawOnChartArea: false }
+                scales: {
+                    x: {
+                        display: true,
+                        title: { display: true, text: xTitle, font: { size: 12 } },
+                        grid: { display: false },
+                        ticks: granularity === 'weekly'
+                            ? { maxTicksLimit: 13, callback: (_, i) => (i % 4 === 0) ? labels[i] : '' }
+                            : {}
+                    },
+                    y: {
+                        type: 'linear', display: true, position: 'left',
+                        title: { display: true, text: 'Night Temperature (°C)', font: { size: 12 } },
+                        min: 14, max: 38, grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    y2: {
+                        type: 'linear', display: true, position: 'right',
+                        title: { display: true, text: 'Demand Index', font: { size: 11 } },
+                        min: 0, max: 100, grid: { drawOnChartArea: false }
+                    }
                 }
             }
-        }
-    });
+        });
+    }
+
+    if (granularity === 'weekly') {
+        // ── Week-overlay: W01–W52 on x-axis, one line per year ──
+        const weekLabels = Array.from({ length: 52 }, (_, i) => `W${String(i + 1).padStart(2, '0')}`);
+        const yearWeekData = {};
+        data.timeline.forEach(entry => {
+            const d = new Date(entry.date);
+            const yr = d.getFullYear();
+            const startOfYear = new Date(yr, 0, 1);
+            const wk = Math.min(Math.max(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7), 1), 52);
+            if (!yearWeekData[yr]) yearWeekData[yr] = {};
+            if (!yearWeekData[yr][wk]) yearWeekData[yr][wk] = { nightTemps: [], demands: [] };
+            Object.values(entry.cities).forEach(c => {
+                if (c.night_temp != null) yearWeekData[yr][wk].nightTemps.push(c.night_temp);
+                if (c.demand_index != null) yearWeekData[yr][wk].demands.push(c.demand_index);
+            });
+        });
+        buildChart(weekLabels, buildDatasets(yearWeekData, weekLabels), 'Week of Year (W01–W52)');
+
+    } else if (granularity === 'daily') {
+        // ── Daily continuous timeline: actual dates on x-axis ──
+        // Collect all unique dates sorted, compute avg across cities per date per year
+        const dateMap = {}; // { 'YYYY-MM-DD': { nightTemps: [], demands: [] } }
+        data.timeline.forEach(entry => {
+            if (!dateMap[entry.date]) dateMap[entry.date] = { nightTemps: [], demands: [] };
+            Object.values(entry.cities).forEach(c => {
+                if (c.night_temp != null) dateMap[entry.date].nightTemps.push(c.night_temp);
+                if (c.demand_index != null) dateMap[entry.date].demands.push(c.demand_index);
+            });
+        });
+        const sortedDates = Object.keys(dateMap).sort();
+        const labels = sortedDates.map(d => {
+            const dt = new Date(d);
+            return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+        });
+        const tempData = sortedDates.map(d => avgArr(dateMap[d].nightTemps));
+        const demData  = sortedDates.map(d => avgInt(dateMap[d].demands));
+
+        twoYearHistoricalChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Night Temp (All Cities Avg)',
+                        data: tempData,
+                        borderColor: '#3b82f6', backgroundColor: '#3b82f620',
+                        fill: false, tension: 0.3, pointRadius: 0, pointHoverRadius: 4,
+                        borderWidth: 1.5, spanGaps: true
+                    },
+                    {
+                        label: 'Demand Index (All Cities Avg)',
+                        data: demData,
+                        type: 'bar',
+                        backgroundColor: '#10b98130', borderColor: '#10b98180',
+                        borderWidth: 1, yAxisID: 'y2', spanGaps: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, padding: 18, font: { size: 12 } } },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.85)', padding: 14,
+                        callbacks: {
+                            title: ctx => `📅 ${ctx[0].label}`,
+                            label: ctx => ctx.dataset.label.includes('Demand')
+                                ? `${ctx.dataset.label}: ${ctx.parsed.y}`
+                                : `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}°C`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: { display: true, text: 'Date (Jan 2023 – Present)', font: { size: 12 } },
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 18, maxRotation: 45 }
+                    },
+                    y: {
+                        type: 'linear', display: true, position: 'left',
+                        title: { display: true, text: 'Night Temperature (°C)', font: { size: 12 } },
+                        min: 14, max: 38, grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    y2: {
+                        type: 'linear', display: true, position: 'right',
+                        title: { display: true, text: 'Demand Index', font: { size: 11 } },
+                        min: 0, max: 100, grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+
+    } else {
+        // ── Monthly (default): year-overlay Jan–Dec, one line per year ──
+        const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const yearMonthData = {};
+        data.timeline.forEach(entry => {
+            const d = new Date(entry.date);
+            const yr = d.getFullYear();
+            const mo = d.getMonth() + 1;
+            if (!yearMonthData[yr]) yearMonthData[yr] = {};
+            if (!yearMonthData[yr][mo]) yearMonthData[yr][mo] = { nightTemps: [], demands: [] };
+            Object.values(entry.cities).forEach(c => {
+                if (c.night_temp != null) yearMonthData[yr][mo].nightTemps.push(c.night_temp);
+                if (c.demand_index != null) yearMonthData[yr][mo].demands.push(c.demand_index);
+            });
+        });
+        buildChart(monthLabels, buildDatasets(yearMonthData, monthLabels), 'Month (Jan–Dec)');
+    }
 }
 
 function updateYearComparisonCards(yearlyStats) {
@@ -5686,14 +5746,6 @@ function renderCityInsights(cityInsights) {
     `).join('');
 }
 
-// Ensure date comparison is initialized even if loadNewSections fails
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        if (!document.getElementById('compareDatePicker')?.value) {
-            initDateCompare();
-        }
-    }, 3000);
-});
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -6396,10 +6448,7 @@ function setupIntelExportButtons() {
     const pdfBtn = document.getElementById('intelExportReport');
     const excelBtn = document.getElementById('intelExportExcel');
     if (pdfBtn) pdfBtn.addEventListener('click', () => { showToast('Export PDF: Use Reports page or header Export PDF', 'info'); });
-    if (excelBtn) excelBtn.addEventListener('click', () => {
-        if (typeof exportDemandIntelExcel === 'function') exportDemandIntelExcel();
-        else { showToast('Export Excel: Use header Export Excel from Reports', 'info'); }
-    });
+    if (excelBtn) excelBtn.addEventListener('click', exportDemandIntelExcel);
 }
 
 function updateDemandIntelAlerts(alerts) {
@@ -6731,118 +6780,302 @@ function getDemandColor(value, isBg = false) {
     return isBg ? 'rgba(16, 185, 129, 0.2)' : '#10b981';
 }
 
-// ========== Date Comparison Feature (Preserved) ==========
-function populateCompareCitySelect() {
-    const select = document.getElementById('compareCitySelect');
-    if (!select || !currentCityData || !currentCityData.length) return;
 
-    const currentVal = select.value;
-    select.innerHTML = '<option value="">Select a City</option>';
-    const sortedCities = [...currentCityData].sort((a, b) => a.city_name.localeCompare(b.city_name));
+// ============================================================
+// CONTEXTUAL EXCEL EXPORT FUNCTIONS
+// ============================================================
 
-    sortedCities.forEach(city => {
-        const option = document.createElement('option');
-        option.value = city.city_name;
-        option.textContent = city.city_name;
-        select.appendChild(option);
+/** Helper: trigger a browser download from a Blob */
+function _downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Helper: build and download an XLSX workbook with one or more sheets.
+ *  sheets = [{ name, headers, rows }]  where rows = array of arrays */
+function _exportToXlsx(sheets, filename) {
+    if (typeof XLSX === 'undefined') {
+        showToast('Excel library not loaded yet — please wait and try again', 'error');
+        return;
+    }
+    const wb = XLSX.utils.book_new();
+    sheets.forEach(({ name, headers, rows }) => {
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        // Bold header row
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+            if (ws[cellRef]) ws[cellRef].s = { font: { bold: true } };
+        }
+        XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31));
     });
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    _downloadBlob(new Blob([buf], { type: 'application/octet-stream' }), filename);
+}
 
-    if (currentVal && sortedCities.some(c => c.city_name === currentVal)) {
-        select.value = currentVal;
-    } else {
-        const chennai = sortedCities.find(c => c.city_name.toLowerCase() === 'chennai');
-        if (chennai) select.value = chennai.city_name;
+// ── 1. Historical 3-Year Analysis ──────────────────────────
+async function exportHistoricalExcel() {
+    const btn = document.getElementById('exportHistoricalBtn');
+    const startDate = document.getElementById('startDate')?.value || '2023-01-01';
+    const endDate   = document.getElementById('endDate')?.value   || new Date().toISOString().split('T')[0];
+    const city      = document.getElementById('historicalCitySelect')?.value || 'all';
+    const granularity = document.getElementById('granularitySelect')?.value || 'weekly';
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        const res = await fetch(`${API_BASE}/historical/two-years?start_date=${startDate}&end_date=${endDate}&city=${city}&granularity=${granularity}`);
+        const result = await res.json();
+        if (result.status !== 'success' || !result.data?.timeline?.length) {
+            showToast('No data to export — click Load Data first', 'warning'); return;
+        }
+        const rows = [];
+        result.data.timeline.forEach(entry => {
+            const d = entry.date;
+            Object.entries(entry.cities).forEach(([cityId, cd]) => {
+                rows.push([d, cityId, cd.day_temp ?? '', cd.night_temp ?? '', cd.humidity ?? '', cd.demand_index ?? '', cd.ac_hours ?? '']);
+            });
+        });
+        const cityLabel = city === 'all' ? 'AllCities' : city;
+        _exportToXlsx([{
+            name: 'Historical Data',
+            headers: ['Date', 'City', 'Day Temp (°C)', 'Night Temp (°C)', 'Humidity (%)', 'Demand Index', 'AC Hours'],
+            rows
+        }], `ForecastWell_Historical_${cityLabel}_${startDate}_to_${endDate}.xlsx`);
+        showToast(`Exported ${rows.length} records`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i><span> Export Excel</span>'; }
     }
 }
 
-function setupDateComparison() {
-    const btn = document.getElementById('dateCompareBtn');
-    const dateInput = document.getElementById('compareDatePicker');
+// ── 2. Monthly Heatmap ─────────────────────────────────────
+async function exportHeatmapExcel() {
+    const btn  = document.getElementById('exportHeatmapBtn');
+    const city = document.getElementById('heatmapCitySelect')?.value || 'all';
 
-    if (dateInput && !dateInput.value) {
-        dateInput.valueAsDate = new Date();
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        const res = await fetch(`${API_BASE}/heatmap/monthly?city=${city}`);
+        const result = await res.json();
+        if (result.status !== 'success' || !result.data) {
+            showToast('No heatmap data available', 'warning'); return;
+        }
+        const rows = [];
+        const data = Array.isArray(result.data) ? result.data : Object.values(result.data);
+        data.forEach(entry => {
+            rows.push([entry.year ?? '', entry.month ?? '', entry.month_name ?? '', entry.avg_day_temp ?? '', entry.avg_night_temp ?? '', entry.avg_humidity ?? '', entry.avg_demand ?? '']);
+        });
+        const cityLabel = city === 'all' ? 'AllCities' : city;
+        _exportToXlsx([{
+            name: 'Monthly Heatmap',
+            headers: ['Year', 'Month', 'Month Name', 'Avg Day Temp (°C)', 'Avg Night Temp (°C)', 'Avg Humidity (%)', 'Avg Demand Index'],
+            rows
+        }], `ForecastWell_Heatmap_${cityLabel}.xlsx`);
+        showToast(`Heatmap data exported`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i><span> Export Excel</span>'; }
     }
+}
 
-    if (btn) {
-        btn.addEventListener('click', () => {
-            const cityName = document.getElementById('compareCitySelect').value;
-            const date = document.getElementById('compareDatePicker').value;
+// ── 4. YoY Monthly Comparison (Historical tab) ────────────
+async function exportYoYExcel() {
+    const btn   = document.getElementById('exportYoYBtn');
+    const city  = document.getElementById('yoyCitySelect')?.value || 'all';
+    const month = document.getElementById('yoyMonthSelect')?.value || 'all';
 
-            if (!cityName || !date) {
-                alert('Please select both a city and a date');
-                return;
-            }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        const params = new URLSearchParams();
+        if (city !== 'all') params.append('city', city);
+        if (month !== 'all') params.append('month', month);
+        const res = await fetch(`${API_BASE}/comparison/monthly-yoy?${params}`);
+        const result = await res.json();
+        if (result.status !== 'success' || !result.data?.length) {
+            showToast('No YoY data available', 'warning'); return;
+        }
+        const years = [2023, 2024, 2025, 2026];
+        const headers = ['Month'];
+        years.forEach(y => headers.push(`${y} Day Temp`, `${y} Night Temp`, `${y} Demand`, `${y} AC Hours`));
+        const rows = result.data.map(d => {
+            const row = [d.month];
+            years.forEach(y => {
+                row.push(d.years[y]?.avg_day_temp ?? '', d.years[y]?.avg_night_temp ?? '', d.years[y]?.avg_demand ?? '', d.years[y]?.avg_ac_hours ?? '');
+            });
+            return row;
+        });
+        const cityLabel = city === 'all' ? 'AllCities' : city;
+        const monthLabel = month === 'all' ? 'AllMonths' : month;
+        _exportToXlsx([{
+            name: 'YoY Comparison',
+            headers,
+            rows
+        }], `ForecastWell_YoY_${cityLabel}_Month${monthLabel}.xlsx`);
+        showToast(`YoY comparison exported`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i><span> Export Excel</span>'; }
+    }
+}
 
-            const city = currentCityData.find(c => c.city_name === cityName);
-            if (city) {
-                renderDateComparison(city, date);
+// ── 5. Analytics YoY Chart ────────────────────────────────
+async function exportAnalyticsYoYExcel() {
+    const btn    = document.getElementById('exportAnalyticsYoYBtn');
+    const city   = document.getElementById('analyticsYoyCitySelect')?.value || 'all';
+    const metric = document.getElementById('analyticsYoyMetricSelect')?.value || 'day_temp';
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        const params = new URLSearchParams();
+        if (city !== 'all') params.append('city', city);
+        const res = await fetch(`${API_BASE}/comparison/monthly-yoy?${params}`);
+        const result = await res.json();
+        if (result.status !== 'success' || !result.data?.length) {
+            showToast('No analytics data available', 'warning'); return;
+        }
+        const metricMap = { day_temp: 'avg_day_temp', night_temp: 'avg_night_temp', demand: 'avg_demand', ac_hours: 'avg_ac_hours' };
+        const metricKey = metricMap[metric] || 'avg_day_temp';
+        const metricLabel = document.getElementById('analyticsYoyMetricSelect')?.selectedOptions[0]?.text || metric;
+        const years = [2023, 2024, 2025, 2026];
+        const headers = ['Month', ...years.map(y => `${y} — ${metricLabel}`)];
+        const rows = result.data.map(d => [d.month, ...years.map(y => d.years[y]?.[metricKey] ?? '')]);
+        const cityLabel = city === 'all' ? 'AllCities' : city;
+        _exportToXlsx([{
+            name: 'Analytics YoY',
+            headers,
+            rows
+        }], `ForecastWell_Analytics_YoY_${cityLabel}_${metric}.xlsx`);
+        showToast(`Analytics YoY exported`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i><span> Export Excel</span>'; }
+    }
+}
+
+// ── 6. Forecast (selected city + days) ───────────────────
+async function exportForecastExcel() {
+    const btn    = document.getElementById('exportForecastBtn');
+    const cityId = selectedForecastCity || document.getElementById('forecastCitySelect')?.value || 'chennai';
+    const days   = selectedForecastDays || 7;
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        const res = await fetch(`${API_BASE}/forecast?city=${cityId}&days=${days}`);
+        const result = await res.json();
+        if (result.status !== 'success' || !result.data?.length) {
+            showToast('No forecast data — select a city first', 'warning'); return;
+        }
+        const rows = result.data.map(d => [d.date, d.day_of_week || '', d.day_temp ?? '', d.night_temp ?? '', d.humidity ?? '', d.wind_speed ?? '', d.demand_index ?? '', d.ac_hours ?? '']);
+        const cityName = currentCityData.find(c => c.city_id === cityId)?.city_name || cityId;
+        _exportToXlsx([{
+            name: `Forecast_${cityName}`.substring(0, 31),
+            headers: ['Date', 'Day', 'Day Temp (°C)', 'Night Temp (°C)', 'Humidity (%)', 'Wind Speed', 'Demand Index', 'AC Hours'],
+            rows
+        }], `ForecastWell_Forecast_${cityName}_${days}days.xlsx`);
+        showToast(`${days}-day forecast exported for ${cityName}`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i><span> Export Excel</span>'; }
+    }
+}
+
+// ── 7. Year-over-Year Date Comparison (Forecast tab) ──────
+async function exportYearCompareExcel() {
+    const btn    = document.getElementById('exportYearCompareBtn');
+    const dateVal = document.getElementById('yearCompareDate')?.value;
+    const cityId  = selectedForecastCity || document.getElementById('forecastCitySelect')?.value || 'chennai';
+
+    if (!dateVal) { showToast('Select a date and click Compare first', 'warning'); return; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        const res = await fetch(`${API_BASE}/forecast/year-compare?date=${dateVal}&city=${cityId}`);
+        const result = await res.json();
+        if (result.status !== 'success' || !result.data) {
+            showToast('No comparison data — click Compare first', 'warning'); return;
+        }
+        const data = result.data;
+        const rows = [];
+        const cityName = currentCityData.find(c => c.city_id === cityId)?.city_name || cityId;
+        // data may be array of cities or single city
+        const entries = Array.isArray(data) ? data : [data];
+        entries.forEach(entry => {
+            const name = entry.city_name || entry.city || cityName;
+            if (entry.years && Array.isArray(entry.years)) {
+                entry.years.forEach(yr => {
+                    rows.push([name, yr.year, yr.date || '', yr.day_temp ?? '', yr.night_temp ?? '', yr.demand_index ?? '']);
+                });
+            } else {
+                // flat year fields: year_current, year_last, year_two
+                ['current', 'last', 'two'].forEach(k => {
+                    if (entry[`year_${k}`]) {
+                        const y = entry[`year_${k}`];
+                        rows.push([name, y.year || k, y.date || '', y.day_temp ?? '', y.night_temp ?? '', y.demand_index ?? '']);
+                    }
+                });
             }
         });
+        _exportToXlsx([{
+            name: 'Year Comparison',
+            headers: ['City', 'Year', 'Date', 'Day Temp (°C)', 'Night Temp (°C)', 'Demand Index'],
+            rows
+        }], `ForecastWell_YearCompare_${cityName}_${dateVal}.xlsx`);
+        showToast(`Year comparison exported`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i><span> Export Excel</span>'; }
     }
+}
 
-    const quickPickBtns = document.querySelectorAll('.quick-date-btn');
-    quickPickBtns.forEach(b => {
-        b.addEventListener('click', (e) => {
-            const offset = parseInt(e.target.dataset.offset || 0);
-            const d = new Date();
-            d.setDate(d.getDate() - offset);
-            const yyyy = d.getFullYear();
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-
-            if (dateInput) {
-                dateInput.value = `${yyyy}-${mm}-${dd}`;
-                if (document.getElementById('compareCitySelect').value) {
-                    btn.click();
-                }
-            }
+// ── 8. Demand Intel City Table (the missing TODO function) ─
+function exportDemandIntelExcel() {
+    const btn = document.getElementById('intelExportExcel');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    try {
+        if (!currentCityData || !currentCityData.length) {
+            showToast('No data loaded yet', 'warning'); return;
+        }
+        const rows = currentCityData.map(city => {
+            const zoneClass = city.dsb_zone_color || city.zone_color || 'green';
+            const zoneLabel = zoneClass === 'red' ? 'Critical' : (zoneClass === 'amber' ? 'Accelerate' : 'Monitor');
+            const risk = getRiskLevel(city);
+            const driver = getDemandDriver(city);
+            return [
+                city.city_name || city.name || '',
+                city.state || '',
+                city.demand_zone || '',
+                city.day_temp ?? '',
+                city.night_temp ?? '',
+                city.humidity ?? '',
+                city.demand_index ?? '',
+                city.ac_hours ?? '',
+                zoneLabel,
+                risk.label,
+                driver,
+                getAllocationPct(zoneClass)
+            ];
         });
-    });
-}
-
-function renderDateComparison(city, date) {
-    const baseTemp = city.day_temp || city.temperature || 32;
-    const t2025 = Math.round((baseTemp - (Math.random() * 2 - 0.5)) * 10) / 10;
-    const t2024 = Math.round((baseTemp - (Math.random() * 3 - 1)) * 10) / 10;
-
-    const resultsContainer = document.getElementById('dateCompareResults');
-    if (resultsContainer) {
-        const diff25 = (baseTemp - t2025).toFixed(1);
-        const diff24 = (baseTemp - t2024).toFixed(1);
-        const d25Class = diff25 > 0 ? 'warmer' : diff25 < 0 ? 'cooler' : 'same';
-        const d24Class = diff24 > 0 ? 'warmer' : diff24 < 0 ? 'cooler' : 'same';
-
-        resultsContainer.innerHTML = `
-            <div class="dc-years-grid">
-                <div class="dc-year-col current-year">
-                    <div class="dc-year-label">
-                        <h4>2026 (Forecast)</h4>
-                        <span class="dc-year-date">${new Date(date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-                    </div>
-                    <div class="dc-temp-row">
-                        <span class="dc-temp-label"><i class="fas fa-sun"></i> Day Temp</span>
-                        <span class="dc-temp-value day">${baseTemp}°C</span>
-                    </div>
-                     <div class="dc-temp-row">
-                        <span class="dc-temp-label"><i class="fas fa-moon"></i> Night Temp</span>
-                        <span class="dc-temp-value night">${(baseTemp - 8 + Math.random()).toFixed(1)}°C</span>
-                    </div>
-                </div>
-                <!-- Logic similar to before for historical columns -->
-                 <div class="dc-year-col">
-                    <div class="dc-year-label">
-                        <h4>2025 (Historical)</h4>
-                    </div>
-                     <div class="dc-temp-row">
-                        <span class="dc-temp-value day">${t2025}°C</span>
-                    </div>
-                     <div class="dc-verdict ${d25Class}">
-                        ${d25Class === 'warmer' ? 'Current is Warmer' : 'Current is Cooler'}
-                    </div>
-                </div>
-            </div>
-        `;
+        _exportToXlsx([{
+            name: 'Demand Intel',
+            headers: ['City', 'State', 'Demand Zone', 'Day Temp (°C)', 'Night Temp (°C)', 'Humidity (%)', 'Demand Index', 'AC Hours (Daily)', 'DSB Action', 'Risk Level', 'Demand Driver', 'Stock Allocation %'],
+            rows
+        }], `ForecastWell_DemandIntel_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        showToast(`Demand Intel exported — ${rows.length} cities`, 'success');
+    } catch (e) {
+        showToast('Export failed — ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-excel"></i> Export Excel'; }
     }
 }
-
 
