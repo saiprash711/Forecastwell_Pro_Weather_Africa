@@ -2084,27 +2084,41 @@ async function loadForecastPage() {
     setupForecastEventListeners();
     updateForecastSubtitle(selectedForecastDays);
 
-    // Fetch real forecast data
+    // Fetch forecast data and peak data in parallel
     const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
     let forecastDataForPredictions = null;
-    try {
-        const response = await fetch(`/api/forecast?city=${cityId}&days=${selectedForecastDays}`);
-        const result = await response.json();
+    const [forecastRes, peakRes] = await Promise.allSettled([
+        fetch(`/api/forecast?city=${cityId}&days=${selectedForecastDays}`),
+        fetch(`/api/forecast/peak?city=${cityId}`)
+    ]);
 
-        if (result.status === 'success' && result.data) {
-            forecastDataForPredictions = result.data;
-            generateForecastCards(result.data);
-            initializeForecastChart(result.data);
-            if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
-        } else {
-            console.error('Failed to load forecast', result);
+    try {
+        if (forecastRes.status === 'fulfilled') {
+            const result = await forecastRes.value.json();
+            if (result.status === 'success' && result.data) {
+                forecastDataForPredictions = result.data;
+                generateForecastCards(result.data);
+                initializeForecastChart(result.data);
+                if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
+            } else {
+                console.error('Failed to load forecast', result);
+            }
         }
     } catch (e) {
         console.error('Error fetching forecast:', e);
     }
 
     generatePredictions(forecastDataForPredictions);
-    loadDaysToPeak(cityId);
+
+    // Populate Days to Peak from already-resolved parallel fetch
+    try {
+        if (peakRes.status === 'fulfilled') {
+            const peakData = await peakRes.value.json();
+            _applyDaysToPeak(peakData);
+        }
+    } catch (e) {
+        console.error('Error fetching peak:', e);
+    }
     setupYearCompare();
     loadBranchDemandChart();
     loadModelMixCharts();
@@ -2862,28 +2876,30 @@ const peakSeasonMap = {
     'kakinada': '04-01'
 };
 
-async function loadDaysToPeak(cityId) {
+function _applyDaysToPeak(data) {
     const valEl = document.getElementById('daysToPeakValue');
     const subEl = document.getElementById('daysToPeakSub');
     if (!valEl || !subEl) return;
+    if (data && data.status === 'success') {
+        const d = data.days_from_today;
+        valEl.textContent = d === 0 ? 'Today' : (d != null ? d + ' days' : '—');
+        const dateStr = data.peak_date
+            ? new Date(data.peak_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '';
+        subEl.textContent = `Peak ${data.peak_day_temp}°C on ${dateStr}`;
+    } else {
+        valEl.textContent = '—';
+        subEl.textContent = 'Data unavailable';
+    }
+}
 
+async function loadDaysToPeak(cityId) {
     try {
         const res = await fetch(`/api/forecast/peak?city=${cityId}`);
         const data = await res.json();
-        if (data.status === 'success') {
-            const d = data.days_from_today;
-            valEl.textContent = d === 0 ? 'Today' : (d != null ? d + ' days' : '—');
-            const dateStr = data.peak_date
-                ? new Date(data.peak_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                : '';
-            subEl.textContent = `Peak ${data.peak_day_temp}°C on ${dateStr}`;
-        } else {
-            valEl.textContent = '—';
-            subEl.textContent = 'Data unavailable';
-        }
+        _applyDaysToPeak(data);
     } catch (e) {
-        if (valEl) { valEl.textContent = '—'; }
-        if (subEl) { subEl.textContent = 'Error loading peak data'; }
+        _applyDaysToPeak(null);
     }
 }
 
