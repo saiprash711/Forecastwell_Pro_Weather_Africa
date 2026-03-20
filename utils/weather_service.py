@@ -90,11 +90,19 @@ class WeatherService:
             if forecast:
                 return forecast
         else:
-            # For longer forecasts (up to 4+ months), use Seasonal Forecast API
-            forecast = self._fetch_openmeteo_seasonal_forecast(city, days)
-            if forecast:
-                return forecast
-        
+            # Try Seasonal Forecast API first; fall back to standard API + climate extension
+            try:
+                forecast = self._fetch_openmeteo_seasonal_forecast(city, days)
+                if forecast:
+                    return forecast
+            except Exception:
+                pass
+
+            # Fallback: 16-day standard forecast extended with climate normals
+            base = self._fetch_openmeteo_forecast(city, 16)
+            if base:
+                return self._extend_with_climate_normals(base, days)
+
         # CRITICAL: API failed - raise error instead of returning empty list
         raise Exception(f"Forecast API failed for {city['name']}")
     
@@ -206,6 +214,34 @@ class WeatherService:
                 pass  # Log other errors if needed
             raise
     
+    def _extend_with_climate_normals(self, forecast, target_days):
+        """Extend a forecast list to target_days using India-wide monthly climate normals."""
+        monthly_climate = {
+            1: (29, 15), 2: (32, 17), 3: (36, 21), 4: (39, 25),
+            5: (41, 27), 6: (36, 25), 7: (32, 24), 8: (32, 23),
+            9: (33, 23), 10: (33, 21), 11: (30, 17), 12: (28, 14)
+        }
+        last_date = datetime.strptime(forecast[-1]['date'], '%Y-%m-%d')
+        for i in range(1, target_days - len(forecast) + 1):
+            extra_date = last_date + timedelta(days=i)
+            m = extra_date.month
+            avg_day, avg_night = monthly_climate.get(m, (32, 22))
+            forecast.append({
+                'date': extra_date.strftime('%Y-%m-%d'),
+                'day': extra_date.strftime('%A'),
+                'temperature': round((avg_day + avg_night) / 2, 1),
+                'day_temp': round(float(avg_day), 1),
+                'night_temp': round(float(avg_night), 1),
+                'min_temp': round(float(avg_night), 1),
+                'max_temp': round(float(avg_day), 1),
+                'humidity': 65,
+                'wind_speed': 10,
+                'source': 'Climate Normal Estimate',
+                'is_forecast': True,
+                'is_climate_estimate': True
+            })
+        return forecast
+
     def _fetch_openmeteo_forecast(self, city, days):
         """
         Fetch forecast from Open-Meteo API
