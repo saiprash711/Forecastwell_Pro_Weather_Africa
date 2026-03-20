@@ -2947,9 +2947,9 @@ def get_zone_demand_summary():
             zone = city.get('demand_zone', 'Other')
             zone_cities.setdefault(zone, []).append(city)
 
-        # Build 12-month window: 6 historical + current + 5 forecast
+        # Build 17-month window: 6 historical + current + 10 forecast = 11 months forward
         months_window = []
-        for offset in range(-5, 7):
+        for offset in range(-5, 12):
             m = current_month + offset
             y = current_year
             while m < 1:
@@ -3015,7 +3015,7 @@ def get_zone_demand_summary():
 def get_model_mix():
     """
     AC product model-mix forecast.
-    Returns percentage split across model categories for the next 6 months
+    Returns percentage split across model categories for the next 11 months
     based on demand intensity. Higher demand → higher-capacity/inverter mix.
     """
     try:
@@ -3023,9 +3023,9 @@ def get_model_mix():
         current_month = current_date.month
         current_year = current_date.year
 
-        # Month labels for next 6 months
+        # Month labels for next 11 months
         months = []
-        for offset in range(6):
+        for offset in range(11):
             m = current_month + offset
             y = current_year
             while m > 12:
@@ -3064,7 +3064,7 @@ def get_model_mix():
 
         result = {'months': months, 'models': []}
         monthly_mixes = []
-        for offset in range(6):
+        for offset in range(11):
             m = (current_month + offset - 1) % 12 + 1
             monthly_mixes.append(compute_mix(seasonal_demand.get(m, 40)))
 
@@ -3072,7 +3072,7 @@ def get_model_mix():
             result['models'].append({
                 'label': model['label'],
                 'color': model['color'],
-                'values': [monthly_mixes[mo][idx] for mo in range(6)]
+                'values': [monthly_mixes[mo][idx] for mo in range(11)]
             })
 
         # Overall mix (avg across 6 months)

@@ -2066,7 +2066,10 @@ let selectedForecastDays = 7;
 function updateForecastSubtitle(days) {
     const subtitle = document.getElementById('forecastHeaderSubtitle');
     const loaderSubtext = document.getElementById('forecastLoaderSubtext');
-    if (days === 120) {
+    if (days === 330) {
+        if (subtitle) subtitle.textContent = '11-Month forecast with monthly demand outlook (ECMWF SEAS5 + climate normals)';
+        if (loaderSubtext) loaderSubtext.textContent = 'Loading 11-month seasonal forecast...';
+    } else if (days === 120) {
         if (subtitle) subtitle.textContent = '4-Month forecast with monthly demand outlook (ECMWF SEAS5)';
         if (loaderSubtext) loaderSubtext.textContent = 'Loading 4-month seasonal forecast...';
     } else {
@@ -2099,7 +2102,7 @@ async function loadForecastPage() {
                 forecastDataForPredictions = result.data;
                 generateForecastCards(result.data);
                 initializeForecastChart(result.data);
-                if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
+                if (selectedForecastDays >= 120) generateFourMonthBreakdown(result.data);
             } else {
                 console.error('Failed to load forecast', result);
             }
@@ -2444,7 +2447,7 @@ function setupForecastEventListeners() {
                     forecastDataForPredictions = result.data;
                     generateForecastCards(result.data);
                     initializeForecastChart(result.data);
-                    if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
+                    if (selectedForecastDays >= 120) generateFourMonthBreakdown(result.data);
                 }
             } catch (e) {
                 console.error(e);
@@ -2469,9 +2472,9 @@ function setupForecastEventListeners() {
             selectedForecastDays = parseInt(this.dataset.days);
             updateForecastSubtitle(selectedForecastDays);
 
-            // Toggle 4-month breakdown section visibility
+            // Toggle monthly breakdown section visibility
             const breakdownSection = document.getElementById('fourMonthBreakdown');
-            if (breakdownSection) breakdownSection.style.display = selectedForecastDays === 120 ? '' : 'none';
+            if (breakdownSection) breakdownSection.style.display = selectedForecastDays >= 120 ? '' : 'none';
 
             // Fetch and update
             const cityId = selectedForecastCity || (currentCityData.length > 0 ? currentCityData[0].city_id : 'chennai');
@@ -2481,7 +2484,7 @@ function setupForecastEventListeners() {
                     if (result.status === 'success') {
                         generateForecastCards(result.data);
                         initializeForecastChart(result.data);
-                        if (selectedForecastDays === 120) generateFourMonthBreakdown(result.data);
+                        if (selectedForecastDays >= 120) generateFourMonthBreakdown(result.data);
                         generatePredictions(result.data);
                     }
                 });
@@ -2515,8 +2518,8 @@ function generateForecastCards(forecastData) {
     const container = document.getElementById('forecastCarousel');
     if (!container || !forecastData) return;
 
-    // 4-month view: show monthly summary cards instead of daily cards
-    if (selectedForecastDays === 120) {
+    // Monthly view: show monthly summary cards instead of daily cards
+    if (selectedForecastDays >= 120) {
         generateMonthlyForecastCards(forecastData, container);
         return;
     }
@@ -2597,7 +2600,8 @@ function aggregateForecastByMonth(forecastData) {
  * Show 4 monthly summary cards in the carousel area
  */
 function generateMonthlyForecastCards(forecastData, container) {
-    const months = aggregateForecastByMonth(forecastData).slice(0, 4);
+    const numMonths = selectedForecastDays >= 330 ? 11 : 4;
+    const months = aggregateForecastByMonth(forecastData).slice(0, numMonths);
     const monthIcons = ['🌤️', '☀️', '🔥', '🌤️', '⛅', '🌧️', '🌧️', '🌧️', '🌦️', '🌤️', '⛅', '🌥️'];
 
     let html = '<div class="forecast-monthly-cards">';
@@ -2638,7 +2642,10 @@ function generateFourMonthBreakdown(forecastData) {
     if (!section || !grid) return;
 
     section.style.display = '';
-    const months = aggregateForecastByMonth(forecastData).slice(0, 4);
+    const numMonths = selectedForecastDays >= 330 ? 11 : 4;
+    const subtitleEl = document.getElementById('monthlyBreakdownSubtitle');
+    if (subtitleEl) subtitleEl.textContent = `Temperature & demand outlook for the next ${numMonths} months`;
+    const months = aggregateForecastByMonth(forecastData).slice(0, numMonths);
     const monthColors = ['#3b82f6', '#f97316', '#ef4444', '#8b5cf6'];
 
     let html = '';
@@ -2707,10 +2714,10 @@ function initializeForecastChart(forecastData) {
     const dayData = [];
     const nightData = [];
     const demandData = [];
-    const is4Month = selectedForecastDays === 120;
+    const is4Month = selectedForecastDays >= 120;
 
     if (is4Month) {
-        // Aggregate by week for cleaner 4-month chart
+        // Aggregate by week for cleaner multi-month chart
         const weeks = [];
         let weekBuf = { dayTemps: [], nightTemps: [], label: '' };
         let weekNum = 0;
@@ -2751,8 +2758,9 @@ function initializeForecastChart(forecastData) {
         });
     }
 
+    const monthLabel = selectedForecastDays >= 330 ? '11-Month' : '4-Month';
     const titleText = is4Month
-        ? (cityData ? `4-Month Forecast (Weekly Avg) — ${cityData.city_name}` : '4-Month Forecast (Weekly Averages)')
+        ? (cityData ? `${monthLabel} Forecast (Weekly Avg) — ${cityData.city_name}` : `${monthLabel} Forecast (Weekly Averages)`)
         : (cityData ? `${selectedForecastDays}-Day Forecast for ${cityData.city_name}` : `${selectedForecastDays}-Day Average Forecast`);
 
     charts.forecast = new Chart(canvas, {

@@ -8539,12 +8539,31 @@ body:not(.dark-mode) .risk-badge.risk-low {
     color: white;
 }
 
+/* Special 11-month button highlight */
+.range-btn-11m {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fbbf24;
+}
+
+.range-btn-11m:hover,
+.range-btn-11m.active {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    border-color: transparent;
+    color: white;
+}
+
 /* Monthly summary cards in carousel */
 .forecast-monthly-cards {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 1.25rem;
     width: 100%;
+}
+
+/* Span full width when inside the 7-col carousel grid */
+.forecast-carousel > .forecast-monthly-cards {
+    grid-column: 1 / -1;
 }
 
 .forecast-month-card {

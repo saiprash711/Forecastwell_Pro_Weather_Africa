@@ -954,6 +954,7 @@
                         <button class="range-btn" data-days="14">14 Days</button>
                         <button class="range-btn" data-days="30">30 Days</button>
                         <button class="range-btn range-btn-4m" data-days="120">4 Months</button>
+                        <button class="range-btn range-btn-11m" data-days="330">11 Months</button>
                     </div>
                     <button class="export-btn-inline" id="exportForecastBtn" title="Export forecast to Excel">
                         <i class="fas fa-file-excel"></i><span> Export Excel</span>
@@ -985,7 +986,7 @@
                 <section class="glass-card" id="branchDemandSection">
                     <div class="section-header">
                         <h2><i class="fas fa-layer-group"></i> Branch-wise Demand Forecast</h2>
-                        <span class="section-subtitle">All demand zones stacked — 6-month rolling window</span>
+                        <span class="section-subtitle">All demand zones stacked — 11-month rolling window</span>
                     </div>
                     <div class="chart-container large">
                         <canvas id="branchDemandChart"></canvas>
@@ -997,7 +998,7 @@
                 <section class="glass-card" id="modelMixSection">
                     <div class="section-header">
                         <h2><i class="fas fa-cubes"></i> AC Model Mix Forecast</h2>
-                        <span class="section-subtitle">Demand-weighted product model portfolio — next 6 months</span>
+                        <span class="section-subtitle">Demand-weighted product model portfolio — next 11 months</span>
                     </div>
                     <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
                         <div class="chart-container" style="flex:1;min-width:340px;">
@@ -1023,7 +1024,7 @@
                 <section class="glass-card" id="fourMonthBreakdown" style="display:none">
                     <div class="section-header">
                         <h2><i class="fas fa-calendar-alt"></i> Monthly Forecast Breakdown</h2>
-                        <span class="section-subtitle">Temperature & demand outlook for the next 4 months</span>
+                        <span class="section-subtitle" id="monthlyBreakdownSubtitle">Temperature & demand outlook for the next 4 months</span>
                     </div>
                     <div class="four-month-grid" id="fourMonthGrid">
                         <!-- Generated dynamically -->
