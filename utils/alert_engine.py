@@ -31,9 +31,9 @@ class AlertEngine:
         self.threshold_yellow_night = Config.THRESHOLD_YELLOW_NIGHT
         self.threshold_green_night = Config.THRESHOLD_GREEN_NIGHT
         
-        # Kerala special
-        self.kerala_night_threshold = Config.KERALA_NIGHT_THRESHOLD
-        self.kerala_cities = Config.KERALA_CITIES
+        # Tropical coastal special
+        self.tropical_coastal_night_threshold = Config.TROPICAL_COASTAL_NIGHT_THRESHOLD
+        self.tropical_coastal_cities = Config.TROPICAL_COASTAL_CITIES
         
         # Track sent alerts to avoid spam
         self.sent_alerts = set()
@@ -70,7 +70,7 @@ class AlertEngine:
         except Exception as e:
             print(f"⚠️ Failed to send alert notification: {e}")
         
-    def analyze_temperature(self, day_temp, night_temp, city_name, city_id):
+    def analyze_temperature(self, day_temp, night_temp, city_name, city_id, humidity=None):
         """
         Analyze day AND night temperature and generate alerts
         CRITICAL: Night temperature is MORE important than day temperature!
@@ -95,10 +95,10 @@ class AlertEngine:
         alert_level = night_color['level']
         primary_color = night_color['color']
         
-        # Kerala Special: Purple alert for hot nights
-        is_kerala_special = (city_id in self.kerala_cities and 
-                            night_temp >= self.kerala_night_threshold)
-        
+        # Tropical Coastal Special: Purple alert for hot humid nights
+        is_kerala_special = (city_id in self.tropical_coastal_cities and
+                            night_temp >= self.tropical_coastal_night_threshold)
+
         if is_kerala_special:
             primary_color = 'PURPLE'
             alert_level = 'kerala_special'
@@ -106,7 +106,7 @@ class AlertEngine:
         # DSB zone classification
         from utils.data_processor import DataProcessor
         dp = DataProcessor()
-        demand_index = dp.calculate_demand_index(day_temp, night_temp)
+        demand_index = dp.calculate_demand_index(day_temp, night_temp, humidity)
         dsb_zone = dp.get_dsb_zone(demand_index)
         
         # Get city config for demand zone info
@@ -222,7 +222,8 @@ class AlertEngine:
                 day_temp,
                 night_temp,
                 city_data['city_name'],
-                city_data['city_id']
+                city_data['city_id'],
+                humidity=city_data.get('humidity')
             )
             alerts.append(alert)
             
@@ -354,10 +355,10 @@ class AlertEngine:
         """Generate recommendations based on day and night temperatures"""
         if is_kerala_special:
             return {
-                'action': 'KERALA SPECIAL - HOT NIGHTS',
+                'action': 'TROPICAL COASTAL SPECIAL - HOT HUMID NIGHTS',
                 'priority': 'PURPLE',
                 'steps': [
-                    f'🟣 KERALA SPECIAL: {city} experiencing hot coastal nights',
+                    f'🟣 TROPICAL COASTAL: {city} experiencing hot humid nights',
                     f'Estimated {ac_hours} hours AC usage (mostly nighttime!)',
                     'Coastal humidity + hot nights = HIGH overnight demand',
                     'Push premium models with sleep mode features',

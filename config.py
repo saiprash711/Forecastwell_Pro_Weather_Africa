@@ -58,9 +58,9 @@ class Config:
     THRESHOLD_GREEN_NIGHT = 18  # NORMAL - Monitor
     # Below 18°C = BLUE (Cool - Off Season)
     
-    # Kerala Special: Purple alert for hot nights
-    KERALA_NIGHT_THRESHOLD = 24  # Kerala cities with night temp ≥24°C
-    KERALA_CITIES = ['kochi', 'thiruvananthapuram', 'kozhikode']  # Cities eligible for Kerala special alert
+    # Tropical Coastal Special: Purple alert for hot humid nights
+    TROPICAL_COASTAL_NIGHT_THRESHOLD = 24  # Tropical coastal cities with night temp ≥24°C
+    TROPICAL_COASTAL_CITIES = ['lagos', 'abidjan', 'conakry', 'freetown', 'cotonou', 'lome', 'douala', 'libreville', 'luanda', 'mombasa', 'dar_es_salaam', 'mogadishu', 'port_louis', 'monrovia', 'accra']  # Cities eligible for tropical coastal special alert
     
     # Wave Sequence Configuration
     WAVE_1_WEEKS = 0  # NOW - Lead indicators
@@ -81,9 +81,9 @@ class Config:
     WET_BULB_DANGER = 32  # °C (above this, human body cannot cool)
     WET_BULB_CAUTION = 28
     
-    # Monsoon onset/withdrawal typical dates (South India)
-    MONSOON_ONSET = {'month': 6, 'day': 1, 'label': 'Southwest Monsoon Onset'}
-    MONSOON_WITHDRAWAL = {'month': 10, 'day': 15, 'label': 'Monsoon Withdrawal'}
+    # African wet season typical dates (West Africa)
+    MONSOON_ONSET = {'month': 6, 'day': 1, 'label': 'West African Rainy Season Onset'}
+    MONSOON_WITHDRAWAL = {'month': 10, 'day': 1, 'label': 'Rainy Season Withdrawal'}
     
     # Refresh cadence
     REFRESH_WEATHER_HOURS = 24     # Daily weather refresh
@@ -91,674 +91,577 @@ class Config:
     REFRESH_ACCURACY_DAYS = 30     # Monthly accuracy validation
     FORECAST_ACCURACY = 87         # Validated forecast accuracy %
 
-    # Alert webhooks: list of URLs to POST JSON to when Amber/Red/Kerala special alerts are raised
+    # Alert webhooks: list of URLs to POST JSON to when Amber/Red/Tropical Coastal special alerts are raised
     ALERT_WEBHOOK_URLS = []  # e.g. ['https://hooks.example.com/alerts']
     ALERT_WEBHOOK_HEADERS = {}  # optional additional headers
     ALERT_WEBHOOK_TIMEOUT = 5  # seconds per webhook request
     
-    # Cities configuration - Top 60 Indian cities by population/importance
+    # Cities configuration - Major African cities by region
     CITIES = [
-        # ---- Mega Metros (Tier-1) ----
+        # ---- North Africa ----
         {
-            'id': 'mumbai',
-            'name': 'Mumbai',
-            'state': 'Maharashtra',
-            'lat': 19.0760,
-            'lon': 72.8777,
-            'imd_station': 'MUMBAI',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'High humidity, warm nights, coastal metropolis'
-        },
-        {
-            'id': 'delhi',
-            'name': 'Delhi',
-            'state': 'Delhi',
-            'lat': 28.7041,
-            'lon': 77.1025,
-            'imd_station': 'DELHI',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Extreme summers, high AC penetration, peak demand May-Jul'
-        },
-        {
-            'id': 'bangalore',
-            'name': 'Bangalore',
-            'state': 'Karnataka',
-            'lat': 12.9716,
-            'lon': 77.5946,
-            'imd_station': 'BANGALORE',
-            'demand_zone': 'Moderate Plateau Zone',
-            'zone_icon': '🏔️',
-            'zone_traits': 'Pleasant climate, moderate demand, IT hub'
-        },
-        {
-            'id': 'hyderabad',
-            'name': 'Hyderabad',
-            'state': 'Telangana',
-            'lat': 17.3850,
-            'lon': 78.4867,
-            'imd_station': 'HYDERABAD',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Extreme dry heat, high day temps, sharp demand spikes'
-        },
-        {
-            'id': 'chennai',
-            'name': 'Chennai',
-            'state': 'Tamil Nadu',
-            'lat': 13.0827,
-            'lon': 80.2707,
-            'imd_station': 'CHENNAI',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'High humidity, warm nights, coastal influence'
-        },
-        {
-            'id': 'kolkata',
-            'name': 'Kolkata',
-            'state': 'West Bengal',
-            'lat': 22.5726,
-            'lon': 88.3639,
-            'imd_station': 'KOLKATA',
-            'demand_zone': 'Humid Heat Zone',
-            'zone_icon': '💧',
-            'zone_traits': 'High humidity with heat, prolonged summer, delta climate'
-        },
-        # ---- Major Metros (Tier-1) ----
-        {
-            'id': 'ahmedabad',
-            'name': 'Ahmedabad',
-            'state': 'Gujarat',
-            'lat': 23.0225,
-            'lon': 72.5714,
-            'imd_station': 'AHMEDABAD',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Extreme dry heat, 45°C+ summers, high AC demand'
-        },
-        {
-            'id': 'pune',
-            'name': 'Pune',
-            'state': 'Maharashtra',
-            'lat': 18.5204,
-            'lon': 73.8567,
-            'imd_station': 'PUNE',
-            'demand_zone': 'Moderate Plateau Zone',
-            'zone_icon': '🏔️',
-            'zone_traits': 'Western Ghats influence, moderate climate, IT hub'
-        },
-        {
-            'id': 'surat',
-            'name': 'Surat',
-            'state': 'Gujarat',
-            'lat': 21.1702,
-            'lon': 72.8311,
-            'imd_station': 'SURAT',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'Coastal heat, diamond/textile hub, growing demand'
-        },
-        {
-            'id': 'jaipur',
-            'name': 'Jaipur',
-            'state': 'Rajasthan',
-            'lat': 26.9124,
-            'lon': 75.7873,
-            'imd_station': 'JAIPUR',
-            'demand_zone': 'Extreme Heat Zone',
+            'id': 'cairo',
+            'name': 'Cairo',
+            'state': 'Egypt',
+            'lat': 30.0444,
+            'lon': 31.2357,
+            'imd_station': 'CAIRO',
+            'demand_zone': 'Saharan Arid Zone',
             'zone_icon': '🏜️',
-            'zone_traits': 'Desert fringe, extreme dry heat, high diurnal range'
+            'zone_traits': 'Extreme dry heat, 40°C+ summers, very low humidity'
         },
         {
-            'id': 'lucknow',
-            'name': 'Lucknow',
-            'state': 'Uttar Pradesh',
-            'lat': 26.8467,
-            'lon': 80.9462,
-            'imd_station': 'LUCKNOW',
-            'demand_zone': 'Indo-Gangetic Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Gangetic plain heat, humid summers, growing market'
+            'id': 'alexandria',
+            'name': 'Alexandria',
+            'state': 'Egypt',
+            'lat': 31.2001,
+            'lon': 29.9187,
+            'imd_station': 'ALEXANDRIA',
+            'demand_zone': 'Mediterranean Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Mediterranean coast, humid summers, major port city'
         },
         {
-            'id': 'kanpur',
-            'name': 'Kanpur',
-            'state': 'Uttar Pradesh',
-            'lat': 26.4499,
-            'lon': 80.3319,
-            'imd_station': 'KANPUR',
-            'demand_zone': 'Indo-Gangetic Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Industrial city, extreme summer heat, high demand'
+            'id': 'casablanca',
+            'name': 'Casablanca',
+            'state': 'Morocco',
+            'lat': 33.5731,
+            'lon': -7.5898,
+            'imd_station': 'CASABLANCA',
+            'demand_zone': 'Mediterranean Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Atlantic coast, mild climate, commercial capital'
         },
         {
-            'id': 'nagpur',
-            'name': 'Nagpur',
-            'state': 'Maharashtra',
-            'lat': 21.1458,
-            'lon': 79.0882,
-            'imd_station': 'NAGPUR',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Central India heat, one of hottest cities, 45°C+ peaks'
+            'id': 'algiers',
+            'name': 'Algiers',
+            'state': 'Algeria',
+            'lat': 36.7538,
+            'lon': 3.0588,
+            'imd_station': 'ALGIERS',
+            'demand_zone': 'Mediterranean Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Mediterranean climate, hot dry summers, coastal capital'
         },
         {
-            'id': 'indore',
-            'name': 'Indore',
-            'state': 'Madhya Pradesh',
-            'lat': 22.7196,
-            'lon': 75.8577,
-            'imd_station': 'INDORE',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Central plateau, hot dry summers, cleanest city'
+            'id': 'tunis',
+            'name': 'Tunis',
+            'state': 'Tunisia',
+            'lat': 36.8065,
+            'lon': 10.1815,
+            'imd_station': 'TUNIS',
+            'demand_zone': 'Mediterranean Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Mediterranean climate, warm summers, cultural hub'
         },
         {
-            'id': 'bhopal',
-            'name': 'Bhopal',
-            'state': 'Madhya Pradesh',
-            'lat': 23.2599,
-            'lon': 77.4126,
-            'imd_station': 'BHOPAL',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Lake city, central India heat, moderate humidity'
+            'id': 'tripoli',
+            'name': 'Tripoli',
+            'state': 'Libya',
+            'lat': 32.8872,
+            'lon': 13.1913,
+            'imd_station': 'TRIPOLI',
+            'demand_zone': 'Saharan Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Arid coastal, hot dry summers, desert influence'
         },
         {
-            'id': 'visakhapatnam',
-            'name': 'Visakhapatnam',
-            'state': 'Andhra Pradesh',
-            'lat': 17.6868,
-            'lon': 83.2185,
-            'imd_station': 'VISAKHAPATNAM',
+            'id': 'marrakech',
+            'name': 'Marrakech',
+            'state': 'Morocco',
+            'lat': 31.6295,
+            'lon': -7.9811,
+            'imd_station': 'MARRAKECH',
+            'demand_zone': 'Saharan Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Semi-arid, extreme summer heat, tourist hub'
+        },
+        # ---- West Africa ----
+        {
+            'id': 'lagos',
+            'name': 'Lagos',
+            'state': 'Nigeria',
+            'lat': 6.5244,
+            'lon': 3.3792,
+            'imd_station': 'LAGOS',
             'demand_zone': 'Coastal Humid Zone',
             'zone_icon': '🌊',
-            'zone_traits': 'Coastal emerging market, growing demand, tier-2 opportunity'
+            'zone_traits': "Africa's largest city, high humidity, year-round heat"
         },
         {
-            'id': 'patna',
-            'name': 'Patna',
-            'state': 'Bihar',
-            'lat': 25.6093,
-            'lon': 85.1376,
-            'imd_station': 'PATNA',
-            'demand_zone': 'Indo-Gangetic Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Gangetic plain, extreme heat + humidity combo'
+            'id': 'abuja',
+            'name': 'Abuja',
+            'state': 'Nigeria',
+            'lat': 9.0765,
+            'lon': 7.3986,
+            'imd_station': 'ABUJA',
+            'demand_zone': 'Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Guinea savanna, hot dry season, federal capital'
         },
         {
-            'id': 'vadodara',
-            'name': 'Vadodara',
-            'state': 'Gujarat',
-            'lat': 22.3072,
-            'lon': 73.1812,
-            'imd_station': 'VADODARA',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Industrial hub, hot dry summers, growing market'
-        },
-        {
-            'id': 'ghaziabad',
-            'name': 'Ghaziabad',
-            'state': 'Uttar Pradesh',
-            'lat': 28.6692,
-            'lon': 77.4538,
-            'imd_station': 'NEW DELHI',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'NCR extension, extreme summers, high-density demand'
-        },
-        {
-            'id': 'ludhiana',
-            'name': 'Ludhiana',
-            'state': 'Punjab',
-            'lat': 30.9010,
-            'lon': 75.8573,
-            'imd_station': 'LUDHIANA',
-            'demand_zone': 'North Plains Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Punjab plains, hot summers, industrial city'
-        },
-        {
-            'id': 'agra',
-            'name': 'Agra',
-            'state': 'Uttar Pradesh',
-            'lat': 27.1767,
-            'lon': 78.0081,
-            'imd_station': 'AGRA',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Semi-arid, extreme summer heat, tourism city'
-        },
-        {
-            'id': 'nashik',
-            'name': 'Nashik',
-            'state': 'Maharashtra',
-            'lat': 19.9975,
-            'lon': 73.7898,
-            'imd_station': 'NASHIK',
-            'demand_zone': 'Moderate Plateau Zone',
-            'zone_icon': '🏔️',
-            'zone_traits': 'Deccan plateau, moderate climate, wine capital'
-        },
-        # ---- Emerging Tier-2 Cities ----
-        {
-            'id': 'varanasi',
-            'name': 'Varanasi',
-            'state': 'Uttar Pradesh',
-            'lat': 25.3176,
-            'lon': 82.9739,
-            'imd_station': 'VARANASI',
-            'demand_zone': 'Indo-Gangetic Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Holy city, Gangetic heat, high humidity summers'
-        },
-        {
-            'id': 'meerut',
-            'name': 'Meerut',
-            'state': 'Uttar Pradesh',
-            'lat': 28.9845,
-            'lon': 77.7064,
-            'imd_station': 'MEERUT',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Western UP, extreme summers, growing market'
-        },
-        {
-            'id': 'rajkot',
-            'name': 'Rajkot',
-            'state': 'Gujarat',
-            'lat': 22.3039,
-            'lon': 70.8022,
-            'imd_station': 'RAJKOT',
-            'demand_zone': 'Dry Heat Zone',
+            'id': 'kano',
+            'name': 'Kano',
+            'state': 'Nigeria',
+            'lat': 12.0022,
+            'lon': 8.5920,
+            'imd_station': 'KANO',
+            'demand_zone': 'Sahel Semi-Arid Zone',
             'zone_icon': '🏜️',
-            'zone_traits': 'Saurashtra region, hot dry climate, industrial hub'
+            'zone_traits': 'Sahel fringe, extreme dry heat, 42°C+ peaks'
         },
         {
-            'id': 'madurai',
-            'name': 'Madurai',
-            'state': 'Tamil Nadu',
-            'lat': 9.9252,
-            'lon': 78.1198,
-            'imd_station': 'MADURAI',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Interior Tamil Nadu, dry heat, temple city'
+            'id': 'ibadan',
+            'name': 'Ibadan',
+            'state': 'Nigeria',
+            'lat': 7.3776,
+            'lon': 3.9470,
+            'imd_station': 'IBADAN',
+            'demand_zone': 'Tropical Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Tropical savanna, hot humid, growing commercial hub'
         },
         {
-            'id': 'coimbatore',
-            'name': 'Coimbatore',
-            'state': 'Tamil Nadu',
-            'lat': 11.0168,
-            'lon': 76.9558,
-            'imd_station': 'COIMBATORE',
-            'demand_zone': 'Manufacturing Hub',
-            'zone_icon': '🏭',
-            'zone_traits': 'Moderate climate, industrial demand, cost-sensitive'
+            'id': 'accra',
+            'name': 'Accra',
+            'state': 'Ghana',
+            'lat': 5.6037,
+            'lon': -0.1870,
+            'imd_station': 'ACCRA',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Coastal Atlantic, hot year-round, economic hub'
         },
         {
-            'id': 'kochi',
-            'name': 'Kochi',
-            'state': 'Kerala',
-            'lat': 9.9312,
-            'lon': 76.2673,
-            'imd_station': 'KOCHI',
+            'id': 'abidjan',
+            'name': 'Abidjan',
+            'state': "Côte d'Ivoire",
+            'lat': 5.3600,
+            'lon': -4.0083,
+            'imd_station': 'ABIDJAN',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Equatorial coast, high humidity, year-round warmth'
+        },
+        {
+            'id': 'dakar',
+            'name': 'Dakar',
+            'state': 'Senegal',
+            'lat': 14.7167,
+            'lon': -17.4677,
+            'imd_station': 'DAKAR',
+            'demand_zone': 'Sahel Semi-Arid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Atlantic Sahel coast, hot dry season, regional hub'
+        },
+        {
+            'id': 'bamako',
+            'name': 'Bamako',
+            'state': 'Mali',
+            'lat': 12.6392,
+            'lon': -8.0029,
+            'imd_station': 'BAMAKO',
+            'demand_zone': 'Sahel Semi-Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Sahel, extreme dry heat, one of hottest capitals'
+        },
+        {
+            'id': 'ouagadougou',
+            'name': 'Ouagadougou',
+            'state': 'Burkina Faso',
+            'lat': 12.3647,
+            'lon': -1.5332,
+            'imd_station': 'OUAGADOUGOU',
+            'demand_zone': 'Sahel Semi-Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Sahel climate, 40°C+ dry season, landlocked capital'
+        },
+        {
+            'id': 'conakry',
+            'name': 'Conakry',
+            'state': 'Guinea',
+            'lat': 9.5370,
+            'lon': -13.6773,
+            'imd_station': 'CONAKRY',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Tropical coastal, extreme humidity, heavy rainfall'
+        },
+        {
+            'id': 'freetown',
+            'name': 'Freetown',
+            'state': 'Sierra Leone',
+            'lat': 8.4840,
+            'lon': -13.2299,
+            'imd_station': 'FREETOWN',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Tropical coast, one of wettest cities, hot and humid'
+        },
+        {
+            'id': 'monrovia',
+            'name': 'Monrovia',
+            'state': 'Liberia',
+            'lat': 6.3005,
+            'lon': -10.7969,
+            'imd_station': 'MONROVIA',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Equatorial coast, tropical humid, high rainfall'
+        },
+        {
+            'id': 'cotonou',
+            'name': 'Cotonou',
+            'state': 'Benin',
+            'lat': 6.3654,
+            'lon': 2.4183,
+            'imd_station': 'COTONOU',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Coastal tropical, hot humid, major port city'
+        },
+        {
+            'id': 'lome',
+            'name': 'Lomé',
+            'state': 'Togo',
+            'lat': 6.1228,
+            'lon': 1.2255,
+            'imd_station': 'LOME',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Atlantic coast, tropical humid, port capital'
+        },
+        {
+            'id': 'niamey',
+            'name': 'Niamey',
+            'state': 'Niger',
+            'lat': 13.5137,
+            'lon': 2.1098,
+            'imd_station': 'NIAMEY',
+            'demand_zone': 'Sahel Semi-Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Sahel, extreme 45°C+ heat, low humidity'
+        },
+        {
+            'id': 'douala',
+            'name': 'Douala',
+            'state': 'Cameroon',
+            'lat': 4.0511,
+            'lon': 9.7679,
+            'imd_station': 'DOUALA',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Equatorial coast, very high humidity, commercial hub'
+        },
+        {
+            'id': 'ndjamena',
+            'name': "N'Djamena",
+            'state': 'Chad',
+            'lat': 12.1048,
+            'lon': 15.0445,
+            'imd_station': 'NDJAMENA',
+            'demand_zone': 'Sahel Semi-Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Sahel, extreme dry heat 45°C+, low humidity capital'
+        },
+        # ---- Central Africa ----
+        {
+            'id': 'kinshasa',
+            'name': 'Kinshasa',
+            'state': 'DR Congo',
+            'lat': -4.4419,
+            'lon': 15.2663,
+            'imd_station': 'KINSHASA',
             'demand_zone': 'Tropical Wet Zone',
             'zone_icon': '🌴',
-            'zone_traits': 'Year-round humidity, monsoon-heavy, dehumidifier demand'
+            'zone_traits': 'Equatorial, hot and humid year-round, megacity'
         },
         {
-            'id': 'thiruvananthapuram',
-            'name': 'Thiruvananthapuram',
-            'state': 'Kerala',
-            'lat': 8.5241,
-            'lon': 76.9366,
-            'imd_station': 'THIRUVANANTHAPURAM',
+            'id': 'brazzaville',
+            'name': 'Brazzaville',
+            'state': 'Congo',
+            'lat': -4.2694,
+            'lon': 15.2714,
+            'imd_station': 'BRAZZAVILLE',
             'demand_zone': 'Tropical Wet Zone',
             'zone_icon': '🌴',
-            'zone_traits': 'Tropical coast, year-round warmth, state capital'
+            'zone_traits': 'Equatorial, high humidity, twin city to Kinshasa'
         },
         {
-            'id': 'kozhikode',
-            'name': 'Kozhikode',
-            'state': 'Kerala',
-            'lat': 11.2588,
-            'lon': 75.7804,
-            'imd_station': 'KOZHIKODE',
+            'id': 'yaounde',
+            'name': 'Yaoundé',
+            'state': 'Cameroon',
+            'lat': 3.8480,
+            'lon': 11.5021,
+            'imd_station': 'YAOUNDE',
             'demand_zone': 'Tropical Wet Zone',
             'zone_icon': '🌴',
-            'zone_traits': 'Malabar coast, high humidity, monsoon-heavy'
+            'zone_traits': 'Equatorial highland, cooler than coast, political capital'
         },
         {
-            'id': 'chandigarh',
-            'name': 'Chandigarh',
-            'state': 'Chandigarh',
-            'lat': 30.7333,
-            'lon': 76.7794,
-            'imd_station': 'CHANDIGARH',
-            'demand_zone': 'North Plains Heat Zone',
-            'zone_icon': '🏙️',
-            'zone_traits': 'Planned city, hot summers, Shivalik foothills'
+            'id': 'libreville',
+            'name': 'Libreville',
+            'state': 'Gabon',
+            'lat': 0.3901,
+            'lon': 9.4544,
+            'imd_station': 'LIBREVILLE',
+            'demand_zone': 'Tropical Wet Zone',
+            'zone_icon': '🌴',
+            'zone_traits': 'Equatorial Atlantic coast, high humidity, oil capital'
         },
         {
-            'id': 'guwahati',
-            'name': 'Guwahati',
-            'state': 'Assam',
-            'lat': 26.1445,
-            'lon': 91.7362,
-            'imd_station': 'GUWAHATI',
-            'demand_zone': 'Humid Heat Zone',
-            'zone_icon': '💧',
-            'zone_traits': 'Northeast gateway, humid subtropical, Brahmaputra valley'
-        },
-        {
-            'id': 'bhubaneswar',
-            'name': 'Bhubaneswar',
-            'state': 'Odisha',
-            'lat': 20.2961,
-            'lon': 85.8245,
-            'imd_station': 'BHUBANESWAR',
+            'id': 'luanda',
+            'name': 'Luanda',
+            'state': 'Angola',
+            'lat': -8.8368,
+            'lon': 13.2343,
+            'imd_station': 'LUANDA',
             'demand_zone': 'Coastal Humid Zone',
             'zone_icon': '🌊',
-            'zone_traits': 'Coastal Odisha, extreme heat + cyclone prone'
+            'zone_traits': 'Atlantic coast, tropical, fastest growing African city'
         },
+        # ---- East Africa ----
         {
-            'id': 'dehradun',
-            'name': 'Dehradun',
-            'state': 'Uttarakhand',
-            'lat': 30.3165,
-            'lon': 78.0322,
-            'imd_station': 'DEHRADUN',
-            'demand_zone': 'Moderate Plateau Zone',
-            'zone_icon': '⛰️',
-            'zone_traits': 'Himalayan foothills, moderate summers, hill capital'
-        },
-        {
-            'id': 'ranchi',
-            'name': 'Ranchi',
-            'state': 'Jharkhand',
-            'lat': 23.3441,
-            'lon': 85.3096,
-            'imd_station': 'RANCHI',
-            'demand_zone': 'Moderate Plateau Zone',
+            'id': 'nairobi',
+            'name': 'Nairobi',
+            'state': 'Kenya',
+            'lat': -1.2921,
+            'lon': 36.8219,
+            'imd_station': 'NAIROBI',
+            'demand_zone': 'Highland Moderate Zone',
             'zone_icon': '🏔️',
-            'zone_traits': 'Chota Nagpur plateau, moderate summers, mining hub'
+            'zone_traits': 'High altitude, mild climate year-round, East Africa hub'
         },
         {
-            'id': 'raipur',
-            'name': 'Raipur',
-            'state': 'Chhattisgarh',
-            'lat': 21.2514,
-            'lon': 81.6296,
-            'imd_station': 'RAIPUR',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Central India, hot summers, steel and power hub'
-        },
-        {
-            'id': 'vijayawada',
-            'name': 'Vijayawada',
-            'state': 'Andhra Pradesh',
-            'lat': 16.5062,
-            'lon': 80.6480,
-            'imd_station': 'VIJAYAWADA',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'Krishna delta, hot + humid, AP commercial hub'
-        },
-        {
-            'id': 'jodhpur',
-            'name': 'Jodhpur',
-            'state': 'Rajasthan',
-            'lat': 26.2389,
-            'lon': 73.0243,
-            'imd_station': 'JODHPUR',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🏜️',
-            'zone_traits': 'Thar Desert edge, extreme dry heat, 48°C+ peaks'
-        },
-        {
-            'id': 'amritsar',
-            'name': 'Amritsar',
-            'state': 'Punjab',
-            'lat': 31.6340,
-            'lon': 74.8723,
-            'imd_station': 'AMRITSAR',
-            'demand_zone': 'North Plains Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Punjab plains, scorching summers, border city'
-        },
-        {
-            'id': 'allahabad',
-            'name': 'Prayagraj',
-            'state': 'Uttar Pradesh',
-            'lat': 25.4358,
-            'lon': 81.8463,
-            'imd_station': 'ALLAHABAD',
-            'demand_zone': 'Indo-Gangetic Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Confluence city, extreme summer heat + humidity'
-        },
-        {
-            'id': 'gwalior',
-            'name': 'Gwalior',
-            'state': 'Madhya Pradesh',
-            'lat': 26.2183,
-            'lon': 78.1828,
-            'imd_station': 'GWALIOR',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'North-central India, extreme summers, historical city'
-        },
-        {
-            'id': 'jabalpur',
-            'name': 'Jabalpur',
-            'state': 'Madhya Pradesh',
-            'lat': 23.1815,
-            'lon': 79.9864,
-            'imd_station': 'JABALPUR',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Central India, hot summers, marble rocks city'
-        },
-        {
-            'id': 'noida',
-            'name': 'Noida',
-            'state': 'Uttar Pradesh',
-            'lat': 28.5355,
-            'lon': 77.3910,
-            'imd_station': 'NEW DELHI',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'NCR hub, extreme summers, IT/corporate demand'
-        },
-        {
-            'id': 'gurugram',
-            'name': 'Gurugram',
-            'state': 'Haryana',
-            'lat': 28.4595,
-            'lon': 77.0266,
-            'imd_station': 'NEW DELHI',
-            'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Millennium city, corporate hub, extreme heat'
-        },
-        {
-            'id': 'tiruchirappalli',
-            'name': 'Tiruchirappalli',
-            'state': 'Tamil Nadu',
-            'lat': 10.7905,
-            'lon': 78.7047,
-            'imd_station': 'TIRUCHIRAPPALLI',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Interior Tamil Nadu, hot dry climate, temple city'
-        },
-        {
-            'id': 'salem',
-            'name': 'Salem',
-            'state': 'Tamil Nadu',
-            'lat': 11.6643,
-            'lon': 78.1460,
-            'imd_station': 'SALEM',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Interior TN, steel city, hot dry summers'
-        },
-        {
-            'id': 'mangalore',
-            'name': 'Mangalore',
-            'state': 'Karnataka',
-            'lat': 12.9141,
-            'lon': 74.8560,
-            'imd_station': 'MANGALORE',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'Coastal Karnataka, humid, heavy monsoon'
-        },
-        {
-            'id': 'mysore',
-            'name': 'Mysore',
-            'state': 'Karnataka',
-            'lat': 12.2958,
-            'lon': 76.6394,
-            'imd_station': 'MYSORE',
-            'demand_zone': 'Moderate Plateau Zone',
+            'id': 'addis_ababa',
+            'name': 'Addis Ababa',
+            'state': 'Ethiopia',
+            'lat': 8.9806,
+            'lon': 38.7578,
+            'imd_station': 'ADDIS ABABA',
+            'demand_zone': 'Highland Moderate Zone',
             'zone_icon': '🏔️',
-            'zone_traits': 'Deccan plateau, pleasant climate, heritage city'
+            'zone_traits': 'High plateau, cool nights, largest highland city in Africa'
         },
         {
-            'id': 'hubli',
-            'name': 'Hubli-Dharwad',
-            'state': 'Karnataka',
-            'lat': 15.3647,
-            'lon': 75.1240,
-            'imd_station': 'HUBLI',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'North Karnataka, dry heat, commercial hub'
-        },
-        {
-            'id': 'aurangabad',
-            'name': 'Chhatrapati Sambhajinagar',
-            'state': 'Maharashtra',
-            'lat': 19.8762,
-            'lon': 75.3433,
-            'imd_station': 'AURANGABAD',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Deccan plateau, hot dry summers, heritage tourism'
-        },
-        {
-            'id': 'solapur',
-            'name': 'Solapur',
-            'state': 'Maharashtra',
-            'lat': 17.6599,
-            'lon': 75.9064,
-            'imd_station': 'SOLAPUR',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Rain shadow region, semi-arid, textile hub'
-        },
-        {
-            'id': 'thane',
-            'name': 'Thane',
-            'state': 'Maharashtra',
-            'lat': 19.2183,
-            'lon': 72.9781,
-            'imd_station': 'MUMBAI',
-            'demand_zone': 'Coastal Humid Zone',
+            'id': 'dar_es_salaam',
+            'name': 'Dar es Salaam',
+            'state': 'Tanzania',
+            'lat': -6.7924,
+            'lon': 39.2083,
+            'imd_station': 'DAR ES SALAAM',
+            'demand_zone': 'Subtropical Coastal Zone',
             'zone_icon': '🌊',
-            'zone_traits': 'Mumbai satellite, humid coastal, high residential demand'
+            'zone_traits': 'Indian Ocean coast, tropical humid, major port'
         },
         {
-            'id': 'navi_mumbai',
-            'name': 'Navi Mumbai',
-            'state': 'Maharashtra',
-            'lat': 19.0330,
-            'lon': 73.0297,
-            'imd_station': 'MUMBAI',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'Planned city, coastal humid, growing IT hub'
+            'id': 'kampala',
+            'name': 'Kampala',
+            'state': 'Uganda',
+            'lat': 0.3476,
+            'lon': 32.5825,
+            'imd_station': 'KAMPALA',
+            'demand_zone': 'Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Equatorial highland, warm year-round, two rainy seasons'
         },
         {
-            'id': 'warangal',
-            'name': 'Warangal',
-            'state': 'Telangana',
-            'lat': 17.9784,
-            'lon': 79.5941,
-            'imd_station': 'HYDERABAD',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🔥',
-            'zone_traits': 'Deccan interior, hot dry climate, heritage city'
-        },
-        {
-            'id': 'jammu',
-            'name': 'Jammu',
-            'state': 'Jammu & Kashmir',
-            'lat': 32.7266,
-            'lon': 74.8570,
-            'imd_station': 'JAMMU',
-            'demand_zone': 'North Plains Heat Zone',
-            'zone_icon': '⛰️',
-            'zone_traits': 'Shivalik foothills, extremely hot summers, winter capital'
-        },
-        {
-            'id': 'cuttack',
-            'name': 'Cuttack',
-            'state': 'Odisha',
-            'lat': 20.4625,
-            'lon': 85.8830,
-            'imd_station': 'CUTTACK',
-            'demand_zone': 'Coastal Humid Zone',
-            'zone_icon': '🌊',
-            'zone_traits': 'Mahanadi delta, hot humid, cyclone-prone'
-        },
-        {
-            'id': 'udaipur',
-            'name': 'Udaipur',
-            'state': 'Rajasthan',
-            'lat': 24.5854,
-            'lon': 73.7125,
-            'imd_station': 'UDAIPUR',
-            'demand_zone': 'Dry Heat Zone',
-            'zone_icon': '🏜️',
-            'zone_traits': 'Aravalli range, hot summers, lake city'
-        },
-        {
-            'id': 'kota',
-            'name': 'Kota',
-            'state': 'Rajasthan',
-            'lat': 25.2138,
-            'lon': 75.8648,
-            'imd_station': 'KOTA',
+            'id': 'khartoum',
+            'name': 'Khartoum',
+            'state': 'Sudan',
+            'lat': 15.5007,
+            'lon': 32.5599,
+            'imd_station': 'KHARTOUM',
             'demand_zone': 'Extreme Heat Zone',
-            'zone_icon': '🏜️',
-            'zone_traits': 'SE Rajasthan, extreme heat, coaching hub'
-        },
-        {
-            'id': 'bareilly',
-            'name': 'Bareilly',
-            'state': 'Uttar Pradesh',
-            'lat': 28.3670,
-            'lon': 79.4304,
-            'imd_station': 'BAREILLY',
-            'demand_zone': 'Indo-Gangetic Heat Zone',
-            'zone_icon': '🌾',
-            'zone_traits': 'Rohilkhand region, hot humid summers'
-        },
-        {
-            'id': 'guntur',
-            'name': 'Guntur',
-            'state': 'Andhra Pradesh',
-            'lat': 16.3067,
-            'lon': 80.4365,
-            'imd_station': 'GUNTUR',
-            'demand_zone': 'Dry Heat Zone',
             'zone_icon': '🔥',
-            'zone_traits': 'AP interior, extreme heat, chili capital'
+            'zone_traits': 'Desert climate, one of hottest capitals, 45°C+ peaks'
+        },
+        {
+            'id': 'mogadishu',
+            'name': 'Mogadishu',
+            'state': 'Somalia',
+            'lat': 2.0469,
+            'lon': 45.3182,
+            'imd_station': 'MOGADISHU',
+            'demand_zone': 'Coastal Humid Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Indian Ocean coast, hot tropical, semi-arid'
+        },
+        {
+            'id': 'mombasa',
+            'name': 'Mombasa',
+            'state': 'Kenya',
+            'lat': -4.0435,
+            'lon': 39.6682,
+            'imd_station': 'MOMBASA',
+            'demand_zone': 'Subtropical Coastal Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Indian Ocean coast, tropical humid, major port'
+        },
+        {
+            'id': 'asmara',
+            'name': 'Asmara',
+            'state': 'Eritrea',
+            'lat': 15.3229,
+            'lon': 38.9251,
+            'imd_station': 'ASMARA',
+            'demand_zone': 'Highland Moderate Zone',
+            'zone_icon': '🏔️',
+            'zone_traits': 'High plateau, mild climate, unique highland capital'
+        },
+        {
+            'id': 'djibouti',
+            'name': 'Djibouti City',
+            'state': 'Djibouti',
+            'lat': 11.8251,
+            'lon': 42.5903,
+            'imd_station': 'DJIBOUTI',
+            'demand_zone': 'Extreme Heat Zone',
+            'zone_icon': '🔥',
+            'zone_traits': 'One of the hottest cities on Earth, 45°C+ summers'
+        },
+        {
+            'id': 'juba',
+            'name': 'Juba',
+            'state': 'South Sudan',
+            'lat': 4.8594,
+            'lon': 31.5713,
+            'imd_station': 'JUBA',
+            'demand_zone': 'Tropical Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Tropical savanna, hot year-round, young capital city'
+        },
+        # ---- Southern Africa ----
+        {
+            'id': 'johannesburg',
+            'name': 'Johannesburg',
+            'state': 'South Africa',
+            'lat': -26.2041,
+            'lon': 28.0473,
+            'imd_station': 'JOHANNESBURG',
+            'demand_zone': 'Highland Moderate Zone',
+            'zone_icon': '🏔️',
+            'zone_traits': 'Highveld plateau, warm summers, cool winters, economic hub'
+        },
+        {
+            'id': 'cape_town',
+            'name': 'Cape Town',
+            'state': 'South Africa',
+            'lat': -33.9249,
+            'lon': 18.4241,
+            'imd_station': 'CAPE TOWN',
+            'demand_zone': 'Mediterranean Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Mediterranean climate, mild year-round, tourism capital'
+        },
+        {
+            'id': 'durban',
+            'name': 'Durban',
+            'state': 'South Africa',
+            'lat': -29.8587,
+            'lon': 31.0218,
+            'imd_station': 'DURBAN',
+            'demand_zone': 'Subtropical Coastal Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Subtropical coast, humid, warm year-round, major port'
+        },
+        {
+            'id': 'pretoria',
+            'name': 'Pretoria',
+            'state': 'South Africa',
+            'lat': -25.7479,
+            'lon': 28.2293,
+            'imd_station': 'PRETORIA',
+            'demand_zone': 'Highland Moderate Zone',
+            'zone_icon': '🏔️',
+            'zone_traits': 'Highveld, warm summers, administrative capital'
+        },
+        {
+            'id': 'harare',
+            'name': 'Harare',
+            'state': 'Zimbabwe',
+            'lat': -17.8292,
+            'lon': 31.0522,
+            'imd_station': 'HARARE',
+            'demand_zone': 'Highland Moderate Zone',
+            'zone_icon': '🏔️',
+            'zone_traits': 'Subtropical highland, mild climate, Zimbabwe capital'
+        },
+        {
+            'id': 'lusaka',
+            'name': 'Lusaka',
+            'state': 'Zambia',
+            'lat': -15.3875,
+            'lon': 28.3228,
+            'imd_station': 'LUSAKA',
+            'demand_zone': 'Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Subtropical plateau, warm dry season, landlocked capital'
+        },
+        {
+            'id': 'maputo',
+            'name': 'Maputo',
+            'state': 'Mozambique',
+            'lat': -25.9692,
+            'lon': 32.5732,
+            'imd_station': 'MAPUTO',
+            'demand_zone': 'Subtropical Coastal Zone',
+            'zone_icon': '🌊',
+            'zone_traits': 'Indian Ocean coast, subtropical, Mozambique capital'
+        },
+        {
+            'id': 'antananarivo',
+            'name': 'Antananarivo',
+            'state': 'Madagascar',
+            'lat': -18.8792,
+            'lon': 47.5079,
+            'imd_station': 'ANTANANARIVO',
+            'demand_zone': 'Highland Moderate Zone',
+            'zone_icon': '🏔️',
+            'zone_traits': 'Central highland, mild climate, Indian Ocean island capital'
+        },
+        {
+            'id': 'lilongwe',
+            'name': 'Lilongwe',
+            'state': 'Malawi',
+            'lat': -13.9626,
+            'lon': 33.7741,
+            'imd_station': 'LILONGWE',
+            'demand_zone': 'Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Tropical highland, warm wet season, landlocked capital'
+        },
+        {
+            'id': 'windhoek',
+            'name': 'Windhoek',
+            'state': 'Namibia',
+            'lat': -22.5597,
+            'lon': 17.0832,
+            'imd_station': 'WINDHOEK',
+            'demand_zone': 'Saharan Arid Zone',
+            'zone_icon': '🏜️',
+            'zone_traits': 'Semi-arid plateau, hot dry summers, cool nights'
+        },
+        {
+            'id': 'gaborone',
+            'name': 'Gaborone',
+            'state': 'Botswana',
+            'lat': -24.6282,
+            'lon': 25.9231,
+            'imd_station': 'GABORONE',
+            'demand_zone': 'Savanna Zone',
+            'zone_icon': '🌿',
+            'zone_traits': 'Semi-arid savanna, hot summers, diamond-rich economy'
+        },
+        {
+            'id': 'port_louis',
+            'name': 'Port Louis',
+            'state': 'Mauritius',
+            'lat': -20.1609,
+            'lon': 57.4989,
+            'imd_station': 'PORT LOUIS',
+            'demand_zone': 'Island Tropical Zone',
+            'zone_icon': '🌴',
+            'zone_traits': 'Tropical island, high humidity, Indian Ocean cyclone risk'
         },
     ]

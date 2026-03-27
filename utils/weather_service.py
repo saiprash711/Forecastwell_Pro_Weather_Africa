@@ -120,7 +120,7 @@ class WeatherService:
                 'latitude': city['lat'],
                 'longitude': city['lon'],
                 'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,wind_speed_10m_max',
-                'timezone': 'Asia/Kolkata',
+                'timezone': 'auto',
                 'forecast_days': forecast_days
             }
             
@@ -152,6 +152,7 @@ class WeatherService:
                         continue
                     
                     humidity = daily.get('relative_humidity_2m_mean', [65])[i] if i < len(daily.get('relative_humidity_2m_mean', [])) else 65
+                    humidity = max(0, min(100, humidity)) if humidity is not None else 65
                     wind = daily.get('wind_speed_10m_max', [10])[i] if i < len(daily.get('wind_speed_10m_max', [])) else 10
                     
                     forecast.append({
@@ -164,19 +165,47 @@ class WeatherService:
                         'max_temp': round(day_temp, 1),
                         'humidity': round(humidity, 1) if humidity else 65,
                         'wind_speed': round(wind, 1) if wind else 10,
-                        'source': 'Open-Meteo Seasonal (ECMWF SEAS5)',
+                        'source': 'Open-Meteo Seasonal (ECMWF SEAS5, 7-day smoothed)',
                         'is_forecast': True
                     })
                 
                 if forecast:
+                    # Apply 7-day centered rolling average to temperature and humidity for
+                    # seasonal forecasts. ECMWF SEAS5 at 7+ month lead time has low daily
+                    # skill and can spike individual days (e.g. convective events) that would
+                    # create false demand signals for Daikin's planning. Smoothing preserves
+                    # genuine heat-wave trends while removing single-day model artifacts.
+                    # Applied to: humidity (15% weight), day_temp (25%), night_temp (60%).
+                    n = len(forecast)
+
+                    def _rolling7(values):
+                        result = []
+                        for idx in range(n):
+                            lo = max(0, idx - 3)
+                            hi = min(n, idx + 4)
+                            result.append(round(sum(values[lo:hi]) / (hi - lo), 1))
+                        return result
+
+                    smoothed_hum   = _rolling7([f['humidity']    for f in forecast])
+                    smoothed_day   = _rolling7([f['day_temp']    for f in forecast])
+                    smoothed_night = _rolling7([f['night_temp']  for f in forecast])
+
+                    for idx, f in enumerate(forecast):
+                        f['humidity']    = smoothed_hum[idx]
+                        f['day_temp']    = smoothed_day[idx]
+                        f['max_temp']    = smoothed_day[idx]
+                        f['night_temp']  = smoothed_night[idx]
+                        f['min_temp']    = smoothed_night[idx]
+                        f['temperature'] = round((smoothed_day[idx] + smoothed_night[idx]) / 2, 1)
+
                     # Extend with climate normal estimates if more days requested than API provides
                     if days > len(forecast):
                         from datetime import timedelta
-                        # India-wide monthly climate normals (day_temp, night_temp)
+                        # Africa-wide monthly climate normals (day_temp, night_temp)
                         monthly_climate = {
-                            1: (29, 15), 2: (32, 17), 3: (36, 21), 4: (39, 25),
-                            5: (41, 27), 6: (36, 25), 7: (32, 24), 8: (32, 23),
-                            9: (33, 23), 10: (33, 21), 11: (30, 17), 12: (28, 14)
+                            1: (33, 21), 2: (34, 22), 3: (35, 23), 4: (34, 22),
+                            5: (33, 21), 6: (31, 19), 7: (30, 18), 8: (30, 18),
+                            9: (32, 20), 10: (33, 21), 11: (33, 21), 12: (33, 21)
                         }
                         last_date = datetime.strptime(forecast[-1]['date'], '%Y-%m-%d')
                         for i in range(1, days - len(forecast) + 1):
@@ -215,11 +244,11 @@ class WeatherService:
             raise
     
     def _extend_with_climate_normals(self, forecast, target_days):
-        """Extend a forecast list to target_days using India-wide monthly climate normals."""
+        """Extend a forecast list to target_days using Africa-wide monthly climate normals."""
         monthly_climate = {
-            1: (29, 15), 2: (32, 17), 3: (36, 21), 4: (39, 25),
-            5: (41, 27), 6: (36, 25), 7: (32, 24), 8: (32, 23),
-            9: (33, 23), 10: (33, 21), 11: (30, 17), 12: (28, 14)
+            1: (33, 21), 2: (34, 22), 3: (35, 23), 4: (34, 22),
+            5: (33, 21), 6: (31, 19), 7: (30, 18), 8: (30, 18),
+            9: (32, 20), 10: (33, 21), 11: (33, 21), 12: (33, 21)
         }
         last_date = datetime.strptime(forecast[-1]['date'], '%Y-%m-%d')
         for i in range(1, target_days - len(forecast) + 1):
@@ -251,8 +280,8 @@ class WeatherService:
             params = {
                 'latitude': city['lat'],
                 'longitude': city['lon'],
-                'daily': 'temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,relative_humidity_2m_mean,wind_speed_10m_max',
-                'timezone': 'Asia/Kolkata',
+                'daily': 'temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,relative_humidity_2m_mean,wind_speed_10m_max,sunrise,sunset',
+                'timezone': 'auto',
                 'forecast_days': days
             }
             
@@ -273,6 +302,8 @@ class WeatherService:
                     day_temp = daily['temperature_2m_max'][i]
                     night_temp = daily['temperature_2m_min'][i]
                     
+                    sunrise_raw = daily['sunrise'][i] if daily.get('sunrise') and i < len(daily['sunrise']) else None
+                    sunset_raw = daily['sunset'][i] if daily.get('sunset') and i < len(daily['sunset']) else None
                     forecast.append({
                         'date': date_str,
                         'day': date.strftime('%A'),
@@ -281,8 +312,10 @@ class WeatherService:
                         'night_temp': round(night_temp, 1),
                         'min_temp': round(night_temp, 1),
                         'max_temp': round(day_temp, 1),
-                        'humidity': round(daily['relative_humidity_2m_mean'][i], 1) if daily.get('relative_humidity_2m_mean') else 65,
+                        'humidity': max(0, min(100, round(daily['relative_humidity_2m_mean'][i], 1))) if daily.get('relative_humidity_2m_mean') else 65,
                         'wind_speed': round(daily['wind_speed_10m_max'][i], 1) if daily.get('wind_speed_10m_max') else 10,
+                        'sunrise': sunrise_raw.split('T')[1] if sunrise_raw else None,
+                        'sunset': sunset_raw.split('T')[1] if sunset_raw else None,
                         'source': 'Open-Meteo API',
                         'is_forecast': True
                     })
@@ -343,8 +376,8 @@ class WeatherService:
                 'longitude': city['lon'],
                 'start_date': start_date.strftime('%Y-%m-%d'),
                 'end_date': end_date.strftime('%Y-%m-%d'),
-                'daily': 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,relative_humidity_2m_mean',
-                'timezone': 'Asia/Kolkata'
+                'daily': 'temperature_2m_max,temperature_2m_min,temperature_2m_mean,relative_humidity_2m_mean,wind_speed_10m_max',
+                'timezone': 'auto'
             }
             
             # Use retry session
@@ -371,7 +404,8 @@ class WeatherService:
                         'night_temp': round(night_temp, 1),
                         'min_temp': round(night_temp, 1),
                         'max_temp': round(day_temp, 1),
-                        'humidity': round(daily['relative_humidity_2m_mean'][i], 1) if daily.get('relative_humidity_2m_mean') else 65,
+                        'humidity': max(0, min(100, round(daily['relative_humidity_2m_mean'][i], 1))) if daily.get('relative_humidity_2m_mean') else 65,
+                        'wind_speed': round(daily['wind_speed_10m_max'][i], 1) if daily.get('wind_speed_10m_max') and daily['wind_speed_10m_max'][i] is not None else None,
                         'source': 'Open-Meteo Archive'
                     })
                 
@@ -441,7 +475,7 @@ class WeatherService:
                 'start_date': start_date,
                 'end_date': end_date,
                 'daily': 'temperature_2m_max,temperature_2m_min',
-                'timezone': 'Asia/Kolkata'
+                'timezone': 'auto'
             }
             
             # Use retry session
@@ -579,8 +613,8 @@ class WeatherService:
                 'latitude': lats,
                 'longitude': lons,
                 'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
-                'daily': 'temperature_2m_max,temperature_2m_min',
-                'timezone': 'Asia/Kolkata',
+                'daily': 'temperature_2m_max,temperature_2m_min,sunrise,sunset',
+                'timezone': 'auto',
                 'forecast_days': 1
             }
 
@@ -624,6 +658,8 @@ class WeatherService:
                     if current_temp is None:
                         continue
 
+                    sunrise_raw = daily.get('sunrise', [None])[0]
+                    sunset_raw = daily.get('sunset', [None])[0]
                     cities_data.append({
                         'city_id': city['id'],
                         'city_name': city['name'],
@@ -636,6 +672,8 @@ class WeatherService:
                         'humidity': round(current.get('relative_humidity_2m', 60), 1),
                         'feels_like': round(current.get('apparent_temperature', current_temp), 1),
                         'wind_speed': round(current.get('wind_speed_10m', 0), 1),
+                        'sunrise': sunrise_raw.split('T')[1] if sunrise_raw else None,
+                        'sunset': sunset_raw.split('T')[1] if sunset_raw else None,
                         'timestamp': datetime.now().isoformat(),
                         'source': 'Open-Meteo'
                     })
@@ -649,6 +687,57 @@ class WeatherService:
             print(f"[Weather] Batch API error: {e}")
             return None
     
+    def get_all_solar_times(self):
+        """
+        Fetch today's sunrise & sunset for all 60 cities in a single batch Open-Meteo call.
+        Returns list of dicts: {city_id, city_name, state, sunrise, sunset}
+        """
+        cities = Config.CITIES
+        try:
+            lats = ','.join(str(c['lat']) for c in cities)
+            lons = ','.join(str(c['lon']) for c in cities)
+            params = {
+                'latitude': lats,
+                'longitude': lons,
+                'daily': 'sunrise,sunset',
+                'timezone': 'auto',
+                'forecast_days': 1
+            }
+            response = _get_session().get(
+                f"{self.openmeteo_base_url}/forecast",
+                params=params,
+                timeout=30
+            )
+            if response.status_code != 200:
+                print(f"[Solar] Batch API returned {response.status_code}: {response.text[:200]}")
+                return []
+            results = response.json()
+            print(f"[Solar] Batch response type: {type(results).__name__}, len: {len(results) if isinstance(results, list) else 'n/a'}")
+            if isinstance(results, dict) and 'daily' in results:
+                results = [results]
+            if not isinstance(results, list):
+                print(f"[Solar] Unexpected response format: {str(results)[:200]}")
+                return []
+            solar = []
+            for i, data in enumerate(results):
+                if i >= len(cities):
+                    break
+                city = cities[i]
+                daily = data.get('daily', {})
+                sunrise_raw = daily.get('sunrise', [None])[0]
+                sunset_raw = daily.get('sunset', [None])[0]
+                solar.append({
+                    'city_id': city['id'],
+                    'city_name': city['name'],
+                    'state': city.get('state', ''),
+                    'sunrise': sunrise_raw.split('T')[1] if sunrise_raw else None,
+                    'sunset': sunset_raw.split('T')[1] if sunset_raw else None,
+                })
+            return solar
+        except Exception as e:
+            print(f"[Solar] Batch solar times error: {e}")
+            return []
+
     def _get_city_config(self, city_id):
         """Get city configuration by ID"""
         for city in Config.CITIES:
@@ -678,7 +767,7 @@ class WeatherService:
                 'start_date': date_str,
                 'end_date': date_str,
                 'daily': 'temperature_2m_max,temperature_2m_min,temperature_2m_mean',
-                'timezone': 'Asia/Kolkata'
+                'timezone': 'auto'
             }
             response = _get_session().get(
                 "https://archive-api.open-meteo.com/v1/archive",
@@ -720,8 +809,8 @@ class WeatherService:
                     'latitude': city['lat'],
                     'longitude': city['lon'],
                     'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
-                    'daily': 'temperature_2m_max,temperature_2m_min',
-                    'timezone': 'Asia/Kolkata',
+                    'daily': 'temperature_2m_max,temperature_2m_min,sunrise,sunset',
+                    'timezone': 'auto',
                     'forecast_days': 1
                 }
                 if attempt > 0:
@@ -753,6 +842,8 @@ class WeatherService:
                         current_temp = current['temperature_2m']
                         day_temp = daily['temperature_2m_max'][0]
                         night_temp = daily['temperature_2m_min'][0]
+                        sunrise_raw = daily.get('sunrise', [None])[0]
+                        sunset_raw = daily.get('sunset', [None])[0]
                         return {
                             'city_id': city['id'],
                             'city_name': city['name'],
@@ -763,6 +854,8 @@ class WeatherService:
                             'humidity': round(current['relative_humidity_2m'], 1),
                             'feels_like': round(current['apparent_temperature'], 1),
                             'wind_speed': round(current['wind_speed_10m'], 1),
+                            'sunrise': sunrise_raw.split('T')[1] if sunrise_raw else None,
+                            'sunset': sunset_raw.split('T')[1] if sunset_raw else None,
                             'timestamp': datetime.now().isoformat(),
                             'source': 'Open-Meteo'
                         }

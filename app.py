@@ -436,6 +436,8 @@ def _ensure_all_cities_present(cities_weather):
                 'humidity': None,
                 'feels_like': None,
                 'wind_speed': None,
+                'sunrise': None,
+                'sunset': None,
                 'timestamp': None,
                 'source': None,
                 'demand_index': None,
@@ -616,7 +618,7 @@ def refresh_alerts(force=False):
             a_id = f"{a.get('city_id')}_{ts}_{idx}"
             a['id'] = a_id
             a['acknowledged'] = a_id in cache.get('alerts_ack', set())
-            # if webhook configured and this alert is Amber/Red/Kerala special and not sent yet
+            # if webhook configured and this alert is Amber/Red/Tropical Coastal special and not sent yet
             if (a.get('alert_level') in ('red', 'orange', 'kerala_special') and
                 a_id not in cache.get('alerts_webhook_sent', set()) and
                 getattr(Config, 'ALERT_WEBHOOK_URLS', [])):
@@ -953,8 +955,12 @@ def get_city_weather(city_id):
     try:
         current = weather_service.get_current_weather(city_id)
         forecast = weather_service.get_forecast(city_id, days=7)
-        historical = weather_service.get_historical_data(city_id, days=30)
-        
+        try:
+            historical = weather_service.get_historical_data(city_id, days=30)
+        except Exception as hist_err:
+            print(f"[Warning] Historical data unavailable for {city_id}: {hist_err}")
+            historical = []
+
         if not current:
             return jsonify({
                 'status': 'error',
@@ -1638,9 +1644,9 @@ def get_business_insights_page():
                 historical_by_city[city_id][year] = data
         
         # Calculate key metrics
-        # 1. Days to peak (from Chennai as reference)
-        chennai_forecast = forecast_by_city.get('chennai', [])
-        days_to_peak = data_processor.calculate_days_to_peak(chennai_forecast)
+        # 1. Days to peak (from Nairobi as reference)
+        nairobi_forecast = forecast_by_city.get('nairobi', [])
+        days_to_peak = data_processor.calculate_days_to_peak(nairobi_forecast)
         
         # 2. YoY Temperature Change (current month comparison)
         yoy_temp_change = 0
@@ -1690,7 +1696,7 @@ def get_business_insights_page():
             })
         
         city_scores.sort(key=lambda x: x['score'], reverse=True)
-        top_market = city_scores[0] if city_scores else {'city': 'Chennai', 'score': 70, 'night_temp': 25}
+        top_market = city_scores[0] if city_scores else {'city': 'Lagos', 'score': 70, 'night_temp': 25}
         
         # Generate strategic recommendations
         recommendations = generate_strategic_recommendations(
@@ -1989,6 +1995,16 @@ def get_forecast_year_compare():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/api/solar-times')
+def get_solar_times():
+    """Get today's sunrise & sunset for all cities (single batch Open-Meteo call)."""
+    try:
+        data = weather_service.get_all_solar_times()
+        return jsonify({'status': 'success', 'data': data, 'date': datetime.now().strftime('%Y-%m-%d')})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/history')
 def get_history():
     """Get daily historical data. Query: city=<city_id>, days=<int>"""
@@ -1997,9 +2013,13 @@ def get_history():
         days = int(request.args.get('days', 30))
         if not city_id:
              return jsonify({'status': 'error', 'message': 'City ID required'}), 400
-             
-        data = weather_service.get_historical_data(city_id, days=days)
-        
+
+        try:
+            data = weather_service.get_historical_data(city_id, days=days)
+        except Exception as hist_err:
+            print(f"[Warning] Historical data unavailable for {city_id}: {hist_err}")
+            data = []
+
         return jsonify({
             'status': 'success',
             'data': data
@@ -2222,7 +2242,7 @@ def get_date_comparison():
                         'start_date': comp_date.strftime('%Y-%m-%d'),
                         'end_date': comp_date.strftime('%Y-%m-%d'),
                         'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean',
-                        'timezone': 'Asia/Kolkata'
+                        'timezone': 'auto'
                     }
                     resp = requests.get(
                         'https://archive-api.open-meteo.com/v1/archive',
@@ -2352,7 +2372,7 @@ def get_lookback_compare():
                     'start_date': d.strftime('%Y-%m-%d'),
                     'end_date':   d.strftime('%Y-%m-%d'),
                     'daily': 'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean',
-                    'timezone': 'Asia/Kolkata'
+                    'timezone': 'auto'
                 }
                 resp = requests.get(
                     'https://archive-api.open-meteo.com/v1/archive',
@@ -2512,32 +2532,35 @@ def get_historical_summary():
 def generate_two_year_historical_data(start_date, end_date, city_filter, granularity):
     """
     Generate realistic 2-year historical weather data
-    Based on actual South India climate patterns
+    Based on African climate patterns
     """
-    # Seasonal temperature patterns for South India
+    # Seasonal temperature patterns for Africa (sub-Saharan average)
     seasonal_patterns = {
-        1: {'base_day': 30, 'base_night': 20, 'variation': 3},   # January
-        2: {'base_day': 32, 'base_night': 21, 'variation': 3},   # February
-        3: {'base_day': 35, 'base_night': 24, 'variation': 3},   # March
-        4: {'base_day': 38, 'base_night': 27, 'variation': 4},   # April
-        5: {'base_day': 40, 'base_night': 29, 'variation': 4},   # May
-        6: {'base_day': 38, 'base_night': 27, 'variation': 3},   # June
-        7: {'base_day': 34, 'base_night': 25, 'variation': 3},   # July (Monsoon)
-        8: {'base_day': 33, 'base_night': 24, 'variation': 2},   # August
-        9: {'base_day': 33, 'base_night': 24, 'variation': 2},   # September
-        10: {'base_day': 32, 'base_night': 23, 'variation': 2},  # October
-        11: {'base_day': 30, 'base_night': 21, 'variation': 2},  # November
-        12: {'base_day': 29, 'base_night': 19, 'variation': 2},  # December
+        1: {'base_day': 33, 'base_night': 21, 'variation': 3},   # January (hot, dry)
+        2: {'base_day': 34, 'base_night': 22, 'variation': 3},   # February
+        3: {'base_day': 35, 'base_night': 23, 'variation': 3},   # March (hottest)
+        4: {'base_day': 34, 'base_night': 22, 'variation': 4},   # April (rains begin)
+        5: {'base_day': 33, 'base_night': 21, 'variation': 4},   # May
+        6: {'base_day': 31, 'base_night': 19, 'variation': 3},   # June (cooler)
+        7: {'base_day': 30, 'base_night': 18, 'variation': 3},   # July (dry, cooler south)
+        8: {'base_day': 30, 'base_night': 18, 'variation': 2},   # August
+        9: {'base_day': 32, 'base_night': 20, 'variation': 2},   # September
+        10: {'base_day': 33, 'base_night': 21, 'variation': 2},  # October
+        11: {'base_day': 33, 'base_night': 21, 'variation': 2},  # November
+        12: {'base_day': 33, 'base_night': 21, 'variation': 2},  # December
     }
-    
+
     # City-specific temperature offsets
     city_offsets = {
-        'chennai': {'day': 2, 'night': 3},      # Coastal, warmer nights
-        'hyderabad': {'day': 1, 'night': -1},   # Moderate
-        'bangalore': {'day': -3, 'night': -3},  # Cooler highland
-        'visakhapatnam': {'day': 1, 'night': 2},# Coastal
-        'coimbatore': {'day': -2, 'night': -2}, # Cooler
-        'kochi': {'day': 0, 'night': 3},        # Coastal, warm nights
+        'lagos': {'day': 0, 'night': 3},          # Coastal, warm humid nights
+        'nairobi': {'day': -3, 'night': -4},      # Highland, cooler
+        'khartoum': {'day': 5, 'night': 2},       # Extreme desert heat
+        'cairo': {'day': 3, 'night': 0},          # Arid, hot days
+        'cape_town': {'day': -2, 'night': -3},    # Mediterranean, cooler
+        'addis_ababa': {'day': -5, 'night': -5},  # High plateau, much cooler
+        'abidjan': {'day': 0, 'night': 3},        # Coastal equatorial, warm nights
+        'niamey': {'day': 5, 'night': 1},         # Sahel, extreme heat
+        'djibouti': {'day': 7, 'night': 4},       # One of Earth's hottest cities
     }
     
     cities = Config.CITIES if city_filter == 'all' else [
@@ -2774,8 +2797,8 @@ def get_monthly_yoy_comparison():
         if city_filter != 'all':
             cities = [c for c in cities if c['id'] == city_filter]
 
-        # Use first city if filtering, otherwise use Chennai as representative
-        sample_city = cities[0] if len(cities) == 1 else next((c for c in cities if c['id'] == 'chennai'), cities[0])
+        # Use first city if filtering, otherwise use Nairobi as representative
+        sample_city = cities[0] if len(cities) == 1 else next((c for c in cities if c['id'] == 'nairobi'), cities[0])
 
         months = ['January', 'February', 'March', 'April', 'May', 'June',
                   'July', 'August', 'September', 'October', 'November', 'December']
@@ -2962,7 +2985,7 @@ def get_zone_demand_summary():
                                    'label': datetime(y, m, 1).strftime('%b %Y'),
                                    'is_forecast': (y > current_year) or (y == current_year and m > current_month)})
 
-        # Seasonal demand profile (night-temp driven, avg across India)
+        # Seasonal demand profile (night-temp driven, avg across Africa)
         seasonal_demand = {
             1: 28, 2: 32, 3: 48, 4: 70, 5: 85,
             6: 72, 7: 55, 8: 50, 9: 52, 10: 45, 11: 35, 12: 25
@@ -3139,7 +3162,7 @@ def generate_strategic_recommendations(cities_weather, forecast_by_city, histori
         })
     
     # Regional strategy based on data
-    # Identify hottest South Indian cities by night temp
+    # Identify hottest African cities by night temp
     south_hot_cities = []
     for c in cities_weather:
         night_temp = c.get('night_temp') or 0

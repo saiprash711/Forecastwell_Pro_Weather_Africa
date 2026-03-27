@@ -8,7 +8,7 @@ import random
 
 def create_sample_excel():
     # Sample data for the 6 cities
-    cities = ['Chennai', 'Bangalore', 'Hyderabad', 'Kochi', 'Coimbatore', 'Visakhapatnam']
+    cities = ['Nairobi', 'Lagos', 'Cairo', 'Johannesburg', 'Accra', 'Dar es Salaam']
     
     # Generate data for the last 7 days
     dates = [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]

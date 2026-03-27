@@ -458,7 +458,7 @@ class DataProcessor:
                     'Parameter': ['Generated', 'Source', 'Cities', 'Dashboard'],
                     'Value': [
                         datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'IMD (India Meteorological Department)',
+                        'Open-Meteo (Free Weather API)',
                         ', '.join([c['name'] for c in Config.CITIES]),
                         'ForecastWell Dashboard v1.0'
                     ]
@@ -553,28 +553,30 @@ class DataProcessor:
             int: Estimated AC hours per day
         """
         ac_hours = 0
-        
+
         # Daytime AC usage (typically 4-6 hours max in afternoon)
-        if day_temp >= 38:
-            ac_hours += 6
-        elif day_temp >= 36:
-            ac_hours += 5
-        elif day_temp >= 34:
-            ac_hours += 4
-        elif day_temp >= 32:
-            ac_hours += 2
-        
+        if day_temp is not None:
+            if day_temp >= 38:
+                ac_hours += 6
+            elif day_temp >= 36:
+                ac_hours += 5
+            elif day_temp >= 34:
+                ac_hours += 4
+            elif day_temp >= 32:
+                ac_hours += 2
+
         # Nighttime AC usage (can be 8-12 hours!)
         # This is MORE IMPORTANT for total demand
-        if night_temp >= 24:
-            ac_hours += 12  # All night usage!
-        elif night_temp >= 22:
-            ac_hours += 10
-        elif night_temp >= 20:
-            ac_hours += 6
-        elif night_temp >= 18:
-            ac_hours += 3
-        
+        if night_temp is not None:
+            if night_temp >= 24:
+                ac_hours += 12  # All night usage!
+            elif night_temp >= 22:
+                ac_hours += 10
+            elif night_temp >= 20:
+                ac_hours += 6
+            elif night_temp >= 18:
+                ac_hours += 3
+
         return min(ac_hours, 24)  # Cap at 24 hours
     
     def get_season_status(self, avg_day_temp, avg_night_temp):
@@ -636,14 +638,14 @@ class DataProcessor:
                 days = (peak_date - today).days
                 return max(0, days)
 
-        # Fallback: calendar-based estimate (May 30 is typical hottest for South India)
+        # Fallback: calendar-based estimate (March 30 is typical hottest for much of Africa)
         year = today.year
-        peak_date = datetime(year, 5, 30)
+        peak_date = datetime(year, 3, 30)
         if today > peak_date:
-            peak_end = datetime(year, 6, 30)
+            peak_end = datetime(year, 4, 30)
             if today < peak_end:
                 return 0
-            peak_date = datetime(year + 1, 5, 30)
+            peak_date = datetime(year + 1, 3, 30)
 
         days = (peak_date - today).days
         return max(0, days)
@@ -683,7 +685,7 @@ class DataProcessor:
             'summary': {
                 'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'total_cities': len(cities_data),
-                'data_source': 'IMD (India Meteorological Department)'
+                'data_source': 'Open-Meteo (Free Weather API)'
             },
             'cities': cities_data,
             'alerts': alerts_data,
@@ -958,12 +960,12 @@ class DataProcessor:
     def _get_city_id_from_name(self, city_name):
         """Helper method to get city ID from name"""
         city_mapping = {
-            'Chennai': 'chennai',
-            'Bangalore': 'bangalore',
-            'Hyderabad': 'hyderabad',
-            'Kochi': 'kochi',
-            'Coimbatore': 'coimbatore',
-            'Visakhapatnam': 'visakhapatnam'
+            'Nairobi': 'nairobi',
+            'Lagos': 'lagos',
+            'Cairo': 'cairo',
+            'Johannesburg': 'johannesburg',
+            'Accra': 'accra',
+            'Khartoum': 'khartoum'
         }
         return city_mapping.get(city_name.title())
 

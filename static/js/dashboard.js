@@ -147,7 +147,9 @@ let charts = {
     distribution: null,
     correlation: null,
     acHours: null,
-    forecast: null
+    forecast: null,
+    windTrend: null,
+    windForecast: null
 };
 let currentCityData = [];
 let currentWeeklyData = [];
@@ -465,8 +467,10 @@ function setupDashboardSubTabs() {
                 targetContent.classList.add('active');
 
                 // Trigger chart resize for visible charts
-                if (targetTab === 'trends' && charts.temperature) {
-                    setTimeout(() => charts.temperature.resize(), 100);
+                if (targetTab === 'trends') {
+                    if (charts.temperature) setTimeout(() => charts.temperature.resize(), 100);
+                    if (charts.windTrend) { setTimeout(() => charts.windTrend.resize(), 100); }
+                    else { setTimeout(() => updateWindTrend(), 150); }
                 }
                 if (targetTab === 'historical' && charts.twoYearHistorical) {
                     setTimeout(() => charts.twoYearHistorical.resize(), 100);
@@ -850,7 +854,7 @@ function initializeMap() {
     map = L.map('map', {
         zoomControl: true,
         scrollWheelZoom: true
-    }).setView([13.0, 78.0], 6);
+    }).setView([5.0, 20.0], 3);
 
     // Dark style tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -1042,8 +1046,8 @@ function updateHeaderStats(citiesData) {
     else if (hottestNightTemp >= 22) seasonStatus = '📈 High Season';
     else if (hottestNightTemp >= 20) seasonStatus = '🌤️ Building';
 
-    // Days to peak - based on actual South India summer calendar
-    // Peak summer in South India is typically mid-April to mid-May
+    // Days to peak - based on African hot season calendar
+    // Peak heat in Africa varies: Sahel/Sahara peaks Mar-May, East Africa Feb-Mar
     // We calculate days from today to April 20 (approximate peak)
     const today = new Date();
     const currentYear = today.getFullYear();
@@ -1522,7 +1526,7 @@ function initializeDashboardCharts(citiesData) {
 
                     // Set labels from the first valid dataset
                     if (!labelsSet) {
-                        finalLabels = dataPoints.map(dp => dp.x.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+                        finalLabels = dataPoints.map(dp => dp.x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }));
                         labelsSet = true;
                     }
 
@@ -2099,6 +2103,7 @@ async function loadForecastPage() {
                 forecastDataForPredictions = result.data;
                 generateForecastCards(result.data);
                 initializeForecastChart(result.data);
+                initializeWindForecastChart(result.data);
                 if (selectedForecastDays >= 330) generateFourMonthBreakdown(result.data);
             } else {
                 console.error('Failed to load forecast', result);
@@ -2120,6 +2125,8 @@ async function loadForecastPage() {
         console.error('Error fetching peak:', e);
     }
     setupYearCompare();
+    loadWeeklyComparison(cityId);
+    loadMonthlyComparison(cityId);
     loadBranchDemandChart();
     loadModelMixCharts();
 }
@@ -2428,6 +2435,225 @@ function renderYearComparison(data) {
     </div>`;
 }
 
+// ========== Weekly Comparison ==========
+
+let weeklyCompareChart = null;
+
+async function loadWeeklyComparison(cityId) {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 84); // 12 weeks back
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = today.toISOString().split('T')[0];
+
+    try {
+        const res = await fetch(`/api/historical/two-years?granularity=weekly&city=${cityId}&start_date=${startStr}&end_date=${endStr}`);
+        const result = await res.json();
+        if (result.status === 'success') {
+            renderWeeklyComparisonChart(result.data, cityId);
+        }
+    } catch (e) {
+        console.error('Weekly comparison error:', e);
+    }
+}
+
+function renderWeeklyComparisonChart(data, cityId) {
+    const canvas = document.getElementById('weeklyCompareChart');
+    if (!canvas) return;
+
+    // city_data[cityId] is a flat array [{date, day_temp, night_temp, demand_index, ...}]
+    const cityRows = (data.city_data || {})[cityId] || [];
+    const rows = cityRows.slice(-12);
+
+    const labels = rows.map(r => {
+        const d = new Date(r.date);
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    });
+    const dayTemps = rows.map(r => r.day_temp);
+    const nightTemps = rows.map(r => r.night_temp);
+    const demandIdx = rows.map(r => r.demand_index);
+
+    if (weeklyCompareChart) { weeklyCompareChart.destroy(); weeklyCompareChart = null; }
+
+    weeklyCompareChart = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Day Temp (°C)',
+                    data: dayTemps,
+                    backgroundColor: 'rgba(245,158,11,0.6)',
+                    borderColor: '#F59E0B',
+                    borderWidth: 1,
+                    yAxisID: 'yTemp',
+                    order: 2
+                },
+                {
+                    label: 'Night Temp (°C)',
+                    data: nightTemps,
+                    backgroundColor: 'rgba(37,99,235,0.55)',
+                    borderColor: '#2563EB',
+                    borderWidth: 1,
+                    yAxisID: 'yTemp',
+                    order: 2
+                },
+                {
+                    label: 'Demand Index (%)',
+                    data: demandIdx,
+                    type: 'line',
+                    borderColor: '#10B981',
+                    backgroundColor: 'rgba(16,185,129,0.15)',
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    fill: true,
+                    yAxisID: 'yDemand',
+                    tension: 0.3,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { color: '#CBD5E1' } },
+                tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '—'}` } }
+            },
+            scales: {
+                x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                yTemp: {
+                    type: 'linear', position: 'left',
+                    ticks: { color: '#F59E0B', callback: v => `${v}°C` },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    title: { display: true, text: 'Temperature (°C)', color: '#94A3B8' }
+                },
+                yDemand: {
+                    type: 'linear', position: 'right',
+                    min: 0, max: 100,
+                    ticks: { color: '#10B981', callback: v => `${v}%` },
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'Demand Index (%)', color: '#94A3B8' }
+                }
+            }
+        }
+    });
+}
+
+// ========== Monthly Comparison ==========
+
+let monthlyCompareChart = null;
+
+async function loadMonthlyComparison(cityId) {
+    try {
+        const res = await fetch(`/api/comparison/monthly-yoy?city=${cityId}`);
+        const result = await res.json();
+        if (result.status === 'success') {
+            renderMonthlyComparisonChart(result.data);
+            renderYearlyComparisonCards(result.data);
+        }
+    } catch (e) {
+        console.error('Monthly comparison error:', e);
+    }
+}
+
+function renderMonthlyComparisonChart(data) {
+    const canvas = document.getElementById('monthlyCompareChart');
+    if (!canvas || !data) return;
+
+    const months = data.map(d => d.month.slice(0, 3));
+    const years = [2023, 2024, 2025, 2026];
+    const colors = { 2023: '#A855F7', 2024: '#2563EB', 2025: '#F59E0B', 2026: '#F43F5E' };
+    const dashes = { 2023: [6, 3], 2024: [], 2025: [], 2026: [3, 3] };
+
+    const datasets = years.map(year => ({
+        label: String(year),
+        data: data.map(d => {
+            const y = d.years[year];
+            return y ? y.avg_demand : null;
+        }),
+        borderColor: colors[year],
+        backgroundColor: colors[year] + '22',
+        borderWidth: year === 2026 ? 2 : 1.5,
+        borderDash: dashes[year],
+        pointRadius: 3,
+        fill: false,
+        tension: 0.35,
+        spanGaps: true
+    }));
+
+    if (monthlyCompareChart) { monthlyCompareChart.destroy(); monthlyCompareChart = null; }
+
+    monthlyCompareChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels: months, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { color: '#CBD5E1' } },
+                tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(0) + '%' : 'No data'}` } }
+            },
+            scales: {
+                x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: {
+                    min: 0, max: 100,
+                    ticks: { color: '#94A3B8', callback: v => `${v}%` },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    title: { display: true, text: 'Demand Index (%)', color: '#94A3B8' }
+                }
+            }
+        }
+    });
+}
+
+// ========== Yearly Comparison ==========
+
+function renderYearlyComparisonCards(monthlyData) {
+    const container = document.getElementById('yearlyCompareCards');
+    if (!container || !monthlyData) return;
+
+    const years = [2023, 2024, 2025, 2026];
+    const yearColors = { 2023: '#A855F7', 2024: '#2563EB', 2025: '#F59E0B', 2026: '#F43F5E' };
+    const yearLabels = { 2026: 'Projected' };
+
+    const cards = years.map(year => {
+        const validMonths = monthlyData
+            .map(d => d.years[year])
+            .filter(y => y && y.avg_day_temp != null);
+
+        if (!validMonths.length) return '';
+
+        const avgDay = (validMonths.reduce((s, m) => s + m.avg_day_temp, 0) / validMonths.length).toFixed(1);
+        const avgNight = (validMonths.reduce((s, m) => s + m.avg_night_temp, 0) / validMonths.length).toFixed(1);
+        const avgDemand = Math.round(validMonths.reduce((s, m) => s + m.avg_demand, 0) / validMonths.length);
+        const peakMonth = monthlyData.reduce((best, d) => {
+            const y = d.years[year];
+            if (!y) return best;
+            return (!best || y.avg_demand > (monthlyData.find(x => x.month === best)?.years[year]?.avg_demand || 0)) ? d.month : best;
+        }, null);
+
+        const tag = yearLabels[year] ? `<span class="yc-badge warmer" style="font-size:10px;padding:2px 7px;">${yearLabels[year]}</span>` : '';
+        const color = yearColors[year];
+
+        return `<div class="yc-year-card" style="border-top:3px solid ${color};min-width:160px;flex:1;">
+            <div class="yc-year-label" style="color:${color};font-size:1.1rem;">${year} ${tag}</div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+                <div style="font-size:0.82rem;color:#94A3B8;">Avg Day / Night</div>
+                <div class="yc-temp-val">${avgDay}°C / ${avgNight}°C</div>
+                <div style="font-size:0.82rem;color:#94A3B8;margin-top:4px;">Avg Demand Index</div>
+                <div style="font-size:1.3rem;font-weight:700;color:${color};">${avgDemand}%</div>
+                <div style="font-size:0.82rem;color:#94A3B8;margin-top:4px;">Peak Demand Month</div>
+                <div style="font-size:0.9rem;color:#E2E8F0;">${peakMonth || '—'}</div>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = cards.join('');
+}
+
 function setupForecastEventListeners() {
     // City dropdown change event
     const citySelect = document.getElementById('forecastCitySelect');
@@ -2444,6 +2670,7 @@ function setupForecastEventListeners() {
                     forecastDataForPredictions = result.data;
                     generateForecastCards(result.data);
                     initializeForecastChart(result.data);
+                    initializeWindForecastChart(result.data);
                     if (selectedForecastDays >= 330) generateFourMonthBreakdown(result.data);
                 }
             } catch (e) {
@@ -2454,6 +2681,8 @@ function setupForecastEventListeners() {
             // Refresh year comparison for new city
             const dateInput = document.getElementById('yearCompareDate');
             if (dateInput && dateInput.value) loadYearComparison(selectedForecastCity, dateInput.value);
+            loadWeeklyComparison(selectedForecastCity);
+            loadMonthlyComparison(selectedForecastCity);
         });
     }
 
@@ -2481,6 +2710,7 @@ function setupForecastEventListeners() {
                     if (result.status === 'success') {
                         generateForecastCards(result.data);
                         initializeForecastChart(result.data);
+                        initializeWindForecastChart(result.data);
                         if (selectedForecastDays >= 330) generateFourMonthBreakdown(result.data);
                         generatePredictions(result.data);
                     }
@@ -2926,6 +3156,98 @@ function calcDemandIndexJS(dayTemp, nightTemp, humidity) {
     return Math.round(base);
 }
 
+// ========== Wind Speed Forecast Chart ==========
+function initializeWindForecastChart(forecastData) {
+    const canvas = document.getElementById('windForecastChart');
+    if (!canvas || !forecastData) return;
+
+    if (charts.windForecast) charts.windForecast.destroy();
+
+    const theme = getChartTheme();
+    const is4Month = selectedForecastDays >= 330;
+    const headers = [];
+    const windData = [];
+
+    if (is4Month) {
+        // Weekly averages for long range
+        let weekBuf = { winds: [], label: '' };
+        let weekNum = 0;
+        forecastData.forEach((day, i) => {
+            const d = new Date(day.date);
+            if (i % 7 === 0) {
+                if (weekNum > 0 && weekBuf.winds.length) {
+                    headers.push(weekBuf.label);
+                    windData.push(parseFloat((weekBuf.winds.reduce((a, b) => a + b, 0) / weekBuf.winds.length).toFixed(1)));
+                }
+                weekBuf = { winds: [], label: `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}` };
+                weekNum++;
+            }
+            if (day.wind_speed != null) weekBuf.winds.push(day.wind_speed);
+        });
+        if (weekBuf.winds.length) {
+            headers.push(weekBuf.label);
+            windData.push(parseFloat((weekBuf.winds.reduce((a, b) => a + b, 0) / weekBuf.winds.length).toFixed(1)));
+        }
+    } else {
+        forecastData.forEach(day => {
+            const d = new Date(day.date);
+            headers.push(`${d.getDate()}/${d.getMonth() + 1}`);
+            windData.push(day.wind_speed ?? null);
+        });
+    }
+
+    const cityData = getSelectedCityData();
+    const titleText = cityData
+        ? `Wind Speed Forecast — ${cityData.city_name}`
+        : 'Wind Speed Forecast';
+
+    charts.windForecast = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: headers,
+            datasets: [{
+                label: 'Wind Speed (km/h)',
+                data: windData,
+                backgroundColor: windData.map(v => v > 30 ? 'rgba(239,68,68,0.7)' : v > 20 ? 'rgba(249,115,22,0.7)' : 'rgba(6,182,212,0.7)'),
+                borderColor: windData.map(v => v > 30 ? '#ef4444' : v > 20 ? '#f97316' : '#06b6d4'),
+                borderWidth: 1,
+                borderRadius: 4
+            }, {
+                label: 'Trend',
+                data: windData,
+                type: 'line',
+                borderColor: '#a855f7',
+                backgroundColor: 'transparent',
+                tension: 0.4,
+                pointRadius: is4Month ? 3 : 2,
+                borderWidth: 2,
+                borderDash: [4, 3]
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                title: { display: true, text: titleText, color: theme.textColor, font: { size: 13 } },
+                legend: { position: 'top', labels: { usePointStyle: true, padding: 12, color: theme.textColor, font: { size: 11 } } },
+                tooltip: {
+                    backgroundColor: theme.tooltipBg, titleColor: theme.tooltipText, bodyColor: theme.tooltipText,
+                    callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y + ' km/h' : 'N/A'}` }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Wind Speed (km/h)', color: theme.textColor, font: { size: 12 } },
+                    ticks: { color: theme.textColor },
+                    grid: { color: theme.gridColor }
+                },
+                x: { ticks: { color: theme.textColor }, grid: { display: false } }
+            }
+        }
+    });
+}
+
 function generatePredictions(forecastData) {
     const container = document.getElementById('predictionGrid');
     if (!container) return;
@@ -2997,10 +3319,106 @@ function generatePredictions(forecastData) {
     `;
 }
 
+// ========== Sunrise & Sunset Section ==========
+let _sunriseCitiesData = [];
+
+function renderSunriseSunsetSection(citiesData) {
+    const section = document.getElementById('sunriseSunsetSection');
+    const grid = document.getElementById('sunriseSunsetGrid');
+    const dateLabel = document.getElementById('sunriseSunsetDate');
+    if (!section || !grid) return;
+
+    const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    if (dateLabel) dateLabel.textContent = today;
+
+    const hasSolarData = citiesData.some(c => c.sunrise || c.sunset);
+    if (!hasSolarData) {
+        grid.innerHTML = `<p style="color:var(--text-muted);padding:1rem;text-align:center;">
+            <i class="fas fa-sync-alt"></i>&nbsp; Solar times will appear after the next weather data refresh.
+        </p>`;
+        return;
+    }
+
+    _sunriseCitiesData = citiesData;
+
+    // Wire up search input once
+    const searchInput = document.getElementById('sunriseSearch');
+    if (searchInput && !searchInput._bound) {
+        searchInput._bound = true;
+        searchInput.addEventListener('input', () => _renderSunriseCards(searchInput.value.trim().toLowerCase()));
+    }
+
+    _renderSunriseCards(searchInput ? searchInput.value.trim().toLowerCase() : '');
+}
+
+function _renderSunriseCards(filterText) {
+    const grid = document.getElementById('sunriseSunsetGrid');
+    if (!grid) return;
+
+    const visible = filterText
+        ? _sunriseCitiesData.filter(c => c.city_name.toLowerCase().includes(filterText) || (c.state || '').toLowerCase().includes(filterText))
+        : _sunriseCitiesData;
+
+    if (!visible.length) {
+        grid.innerHTML = `<p style="color:var(--text-muted);padding:1rem;text-align:center;">No cities match your search.</p>`;
+        return;
+    }
+
+    grid.innerHTML = visible.map(city => {
+        const sunrise = city.sunrise || '--:--';
+        const sunset = city.sunset || '--:--';
+        // Calculate daylight duration
+        let daylightStr = '';
+        if (city.sunrise && city.sunset) {
+            const [srH, srM] = city.sunrise.split(':').map(Number);
+            const [ssH, ssM] = city.sunset.split(':').map(Number);
+            const totalMins = (ssH * 60 + ssM) - (srH * 60 + srM);
+            if (totalMins > 0) {
+                daylightStr = `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`;
+            }
+        }
+        return `
+        <div class="sunrise-sunset-card glass-card">
+            <div class="ss-city-name">${city.city_name}</div>
+            <div class="ss-state">${city.state || ''}</div>
+            <div class="ss-times">
+                <div class="ss-time-block ss-sunrise">
+                    <i class="fas fa-sun"></i>
+                    <span class="ss-time-value">${sunrise}</span>
+                    <span class="ss-time-label">Sunrise</span>
+                </div>
+                <div class="ss-divider">
+                    ${daylightStr ? `<span class="ss-daylight">${daylightStr}</span>` : ''}
+                    <i class="fas fa-arrows-alt-h"></i>
+                </div>
+                <div class="ss-time-block ss-sunset">
+                    <i class="fas fa-moon"></i>
+                    <span class="ss-time-value">${sunset}</span>
+                    <span class="ss-time-label">Sunset</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 // ========== Cities Detail Page ==========
 function loadCitiesDetailPage() {
     const container = document.getElementById('citiesDetailGrid');
     if (!container || !currentCityData) return;
+
+    // Fetch solar times from dedicated endpoint (independent of weather cache)
+    fetch('/api/solar-times')
+        .then(r => r.json())
+        .then(res => {
+            console.log('[Solar] /api/solar-times response:', res.status, res.data ? res.data.length + ' cities' : 'no data');
+            if (res.status === 'success' && res.data && res.data.length > 0) {
+                renderSunriseSunsetSection(res.data);
+            } else {
+                console.warn('[Solar] No solar data returned:', res);
+                renderSunriseSunsetSection([]);
+            }
+        })
+        .catch(err => { console.error('[Solar] Fetch error:', err); renderSunriseSunsetSection([]); });
 
     container.innerHTML = currentCityData.map(city => `
         <div class="city-detail-card glass-card">
@@ -3198,14 +3616,14 @@ function populateCitySelects(citiesData) {
 
         // Add event listener only once
         if (!trendEventListenersSet) {
-            trendCity.addEventListener('change', () => updateTemperatureTrends());
+            trendCity.addEventListener('change', () => { updateTemperatureTrends(); updateWindTrend(); });
         }
     }
 
     const trendPeriod = document.getElementById('trendPeriod');
     if (trendPeriod && !trendEventListenersSet) {
         // Add event listener only once
-        trendPeriod.addEventListener('change', () => updateTemperatureTrends());
+        trendPeriod.addEventListener('change', () => { updateTemperatureTrends(); updateWindTrend(); });
     }
 
     trendEventListenersSet = true;
@@ -3309,15 +3727,133 @@ async function updateTemperatureTrends() {
             } catch (e) { console.error(e); }
         }
 
-        // Update chart
-        if (charts.temperature && datasets.length > 0) {
-            charts.temperature.data.labels = dateLabels;
-            charts.temperature.data.datasets = datasets;
-            charts.temperature.update('active');
+        // Update or create chart
+        if (datasets.length > 0) {
+            const tempSkeleton = document.getElementById('temperatureChartSkeleton');
+            if (tempSkeleton) tempSkeleton.style.display = 'none';
+            tempCanvas.style.display = '';
+
+            if (charts.temperature) {
+                charts.temperature.data.labels = dateLabels;
+                charts.temperature.data.datasets = datasets;
+                charts.temperature.update('active');
+            } else {
+                charts.temperature = new Chart(tempCanvas, {
+                    type: 'line',
+                    data: { labels: dateLabels, datasets: datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { position: 'top', labels: { usePointStyle: true, padding: 15, font: { size: 11 } } },
+                            tooltip: {
+                                callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}°C` }
+                            }
+                        },
+                        scales: {
+                            y: { beginAtZero: false, title: { display: true, text: 'Temperature (°C)' }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            x: { title: { display: true, text: 'Date' }, grid: { display: false } }
+                        }
+                    }
+                });
+            }
         }
     } catch (error) {
         console.error('Error updating temperature trends:', error);
     }
+}
+
+// ========== Wind Speed Trend Chart ==========
+async function updateWindTrend() {
+    const citySelect = document.getElementById('trendCity');
+    const periodSelect = document.getElementById('trendPeriod');
+    const canvas = document.getElementById('windTrendChart');
+    if (!canvas || !citySelect || !periodSelect) return;
+
+    const selectedCity = citySelect.value;
+    const days = parseInt(periodSelect.value);
+    const theme = getChartTheme();
+
+    let dateLabels = [];
+    let datasets = [];
+
+    if (selectedCity === 'all') {
+        const promises = currentCityData.slice(0, 6).map(city =>
+            fetch(`/api/history?city=${city.city_id}&days=${days}`).then(r => r.json())
+        );
+        const results = await Promise.allSettled(promises);
+        const cityColors = ['#f97316','#3b82f6','#22c55e','#a855f7','#ef4444','#eab308'];
+        results.forEach((res, i) => {
+            if (res.status === 'fulfilled' && res.value.status === 'success' && res.value.data?.length) {
+                const city = currentCityData[i];
+                if (!dateLabels.length) {
+                    dateLabels = res.value.data.map(d => {
+                        const dt = new Date(d.date);
+                        return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                    });
+                }
+                datasets.push({
+                    label: city.city_name,
+                    data: res.value.data.map(d => d.wind_speed ?? null),
+                    borderColor: cityColors[i % cityColors.length],
+                    backgroundColor: cityColors[i % cityColors.length] + '22',
+                    tension: 0.4, fill: false, pointRadius: 3, pointHoverRadius: 5
+                });
+            }
+        });
+    } else {
+        try {
+            const response = await fetch(`/api/history?city=${selectedCity}&days=${days}`);
+            const res = await response.json();
+            if (res.status === 'success' && res.data?.length) {
+                const cityData = currentCityData.find(c => c.city_id === selectedCity);
+                const cityName = cityData ? cityData.city_name : selectedCity;
+                dateLabels = res.data.map(d => {
+                    const dt = new Date(d.date);
+                    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                });
+                datasets = [{
+                    label: `${cityName} - Wind Speed`,
+                    data: res.data.map(d => d.wind_speed ?? null),
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6,182,212,0.15)',
+                    tension: 0.4, fill: true, pointRadius: 4, pointHoverRadius: 6
+                }];
+            }
+        } catch (e) { console.error('Wind trend fetch error:', e); }
+    }
+
+    if (!dateLabels.length || !datasets.length) return;
+
+    if (charts.windTrend) charts.windTrend.destroy();
+    charts.windTrend = new Chart(canvas, {
+        type: 'line',
+        data: { labels: dateLabels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { usePointStyle: true, padding: 15, font: { size: 11 }, color: theme.textColor } },
+                tooltip: {
+                    backgroundColor: theme.tooltipBg, titleColor: theme.tooltipText, bodyColor: theme.tooltipText,
+                    callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y + ' km/h' : 'N/A'}` }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Wind Speed (km/h)', font: { size: 12 }, color: theme.textColor },
+                    ticks: { color: theme.textColor },
+                    grid: { color: theme.gridColor }
+                },
+                x: {
+                    title: { display: true, text: 'Date', font: { size: 12 }, color: theme.textColor },
+                    ticks: { color: theme.textColor },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
 }
 
 function startClock() {

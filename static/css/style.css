@@ -2052,6 +2052,81 @@ section+section {
     margin-top: 0.5rem;
 }
 
+/* ========== Sunrise & Sunset Section ========== */
+.sunrise-sunset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.sunrise-sunset-card {
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.ss-city-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.ss-state {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.ss-times {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.ss-time-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+}
+
+.ss-sunrise i { color: #f59e0b; font-size: 1.1rem; }
+.ss-sunset i { color: #6366f1; font-size: 1rem; }
+
+.ss-time-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
+}
+
+.ss-time-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ss-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.ss-daylight {
+    font-size: 0.65rem;
+    color: #22c55e;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 /* ========== Cities Detail Page ========== */
 .cities-detail-grid {
     display: grid;
@@ -8847,6 +8922,13 @@ body:not(.dark-mode) .risk-badge.risk-low {
         flex-direction: column;
         align-items: flex-start;
     }
+}
+
+/* Yearly comparison grid (4 year summary cards) */
+.yearly-compare-grid {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
 /* Year comparison card row layout */

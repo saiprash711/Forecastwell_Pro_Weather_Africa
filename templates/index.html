@@ -299,7 +299,7 @@
                             <h2><i class="fas fa-chart-area"></i> Temperature Trends</h2>
                             <div class="trend-controls">
                                 <select id="trendCity">
-                                    <option value="chennai">Chennai</option>
+                                    <option value="nairobi">Nairobi</option>
                                 </select>
                                 <select id="trendPeriod">
                                     <option value="7">7 Days</option>
@@ -312,6 +312,17 @@
                             <div class="skeleton-chart" id="temperatureChartSkeleton"><i class="fas fa-chart-line"></i>
                                 Loading trends...</div>
                             <canvas id="temperatureChart" style="display:none"></canvas>
+                        </div>
+                    </section>
+
+                    <!-- Wind Speed Trends -->
+                    <section class="trends-section glass-card">
+                        <div class="section-header">
+                            <h2><i class="fas fa-wind"></i> Wind Speed Trends</h2>
+                            <span class="section-subtitle" id="windTrendSubtitle">Historical wind speed (km/h)</span>
+                        </div>
+                        <div class="chart-container large">
+                            <canvas id="windTrendChart"></canvas>
                         </div>
                     </section>
 
@@ -337,13 +348,15 @@
                                     <option value="all">All Zones</option>
                                     <option value="Coastal Humid Zone">Coastal Humid</option>
                                     <option value="Extreme Heat Zone">Extreme Heat</option>
-                                    <option value="Moderate Plateau Zone">Moderate Plateau</option>
-                                    <option value="Dry Heat Zone">Dry Heat</option>
-                                    <option value="Humid Heat Zone">Humid Heat</option>
-                                    <option value="Indo-Gangetic Heat Zone">Indo-Gangetic</option>
-                                    <option value="North Plains Heat Zone">North Plains</option>
-                                    <option value="Manufacturing Hub">Manufacturing Hub</option>
+                                    <option value="Saharan Arid Zone">Saharan Arid</option>
+                                    <option value="Sahel Semi-Arid Zone">Sahel Semi-Arid</option>
+                                    <option value="Highland Moderate Zone">Highland Moderate</option>
                                     <option value="Tropical Wet Zone">Tropical Wet</option>
+                                    <option value="Mediterranean Zone">Mediterranean</option>
+                                    <option value="Subtropical Coastal Zone">Subtropical Coastal</option>
+                                    <option value="Savanna Zone">Savanna</option>
+                                    <option value="Tropical Savanna Zone">Tropical Savanna</option>
+                                    <option value="Island Tropical Zone">Island Tropical</option>
                                 </select>
                             </div>
                         </div>
@@ -385,13 +398,15 @@
                                     <option value="all">All Zones</option>
                                     <option value="Coastal Humid Zone">Coastal Humid</option>
                                     <option value="Extreme Heat Zone">Extreme Heat</option>
-                                    <option value="Moderate Plateau Zone">Moderate Plateau</option>
-                                    <option value="Dry Heat Zone">Dry Heat</option>
-                                    <option value="Humid Heat Zone">Humid Heat</option>
-                                    <option value="Indo-Gangetic Heat Zone">Indo-Gangetic</option>
-                                    <option value="North Plains Heat Zone">North Plains</option>
-                                    <option value="Manufacturing Hub">Manufacturing Hub</option>
+                                    <option value="Saharan Arid Zone">Saharan Arid</option>
+                                    <option value="Sahel Semi-Arid Zone">Sahel Semi-Arid</option>
+                                    <option value="Highland Moderate Zone">Highland Moderate</option>
                                     <option value="Tropical Wet Zone">Tropical Wet</option>
+                                    <option value="Mediterranean Zone">Mediterranean</option>
+                                    <option value="Subtropical Coastal Zone">Subtropical Coastal</option>
+                                    <option value="Savanna Zone">Savanna</option>
+                                    <option value="Tropical Savanna Zone">Tropical Savanna</option>
+                                    <option value="Island Tropical Zone">Island Tropical</option>
                                 </select>
                             </div>
                         </div>
@@ -514,7 +529,7 @@
                             <div class="date-picker-group">
                                 <label for="historicalCitySelect">City</label>
                                 <select id="historicalCitySelect">
-                                    <option value="chennai">Chennai</option>
+                                    <option value="nairobi">Nairobi</option>
                                 </select>
                             </div>
                             <div class="date-picker-group">
@@ -697,7 +712,7 @@
                             <div class="date-picker-group">
                                 <label for="lookbackCitySelect">City</label>
                                 <select id="lookbackCitySelect">
-                                    <option value="chennai">Chennai</option>
+                                    <option value="nairobi">Nairobi</option>
                                 </select>
                             </div>
                             <button class="load-historical-btn" id="lookbackCompareBtn">
@@ -719,7 +734,7 @@
                                 <div class="heatmap-city-selector">
                                     <label for="heatmapCitySelect"><i class="fas fa-city"></i> City:</label>
                                     <select id="heatmapCitySelect">
-                                        <option value="chennai">Chennai</option>
+                                        <option value="nairobi">Nairobi</option>
                                     </select>
                                 </div>
                                 <button class="export-btn-inline" id="exportHeatmapBtn" title="Export heatmap data to Excel">
@@ -754,7 +769,7 @@
                                     <div class="yoy-city-selector">
                                         <label for="yoyCitySelect"><i class="fas fa-city"></i> City:</label>
                                         <select id="yoyCitySelect">
-                                            <option value="chennai">Chennai</option>
+                                            <option value="nairobi">Nairobi</option>
                                         </select>
                                     </div>
                                     <div class="yoy-month-selector">
@@ -909,7 +924,7 @@
                             <h2><i class="fas fa-balance-scale"></i> Monthly YoY Comparison (2023 vs 2024 vs 2025 vs 2026)</h2>
                             <div class="analytics-yoy-controls">
                                 <select id="analyticsYoyCitySelect">
-                                    <option value="chennai">Chennai</option>
+                                    <option value="nairobi">Nairobi</option>
                                 </select>
                                 <select id="analyticsYoyMetricSelect">
                                     <option value="day_temp">Day Temperature</option>
@@ -959,6 +974,39 @@
                         <i class="fas fa-file-excel"></i><span> Export Excel</span>
                     </button>
                 </div>
+
+                <!-- Weekly Comparison -->
+                <section class="glass-card" id="weeklyCompareSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar-week"></i> Weekly Comparison</h2>
+                        <span class="section-subtitle">Last 12 weeks — day temp, night temp &amp; demand index for selected city</span>
+                    </div>
+                    <div class="chart-container large">
+                        <canvas id="weeklyCompareChart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Monthly Comparison -->
+                <section class="glass-card" id="monthlyCompareSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar-alt"></i> Monthly Comparison</h2>
+                        <span class="section-subtitle">Month-by-month avg night temp &amp; demand across 2023 · 2024 · 2025 · 2026</span>
+                    </div>
+                    <div class="chart-container large">
+                        <canvas id="monthlyCompareChart"></canvas>
+                    </div>
+                </section>
+
+                <!-- Yearly Comparison -->
+                <section class="glass-card" id="yearlyCompareSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-calendar"></i> Yearly Comparison</h2>
+                        <span class="section-subtitle">Annual temperature &amp; demand summary — 2023 to 2026</span>
+                    </div>
+                    <div id="yearlyCompareCards" class="yearly-compare-grid">
+                        <!-- Generated dynamically -->
+                    </div>
+                </section>
 
                 <!-- Year-over-Year Comparison -->
                 <section class="glass-card" id="yearCompareSection">
@@ -1040,6 +1088,17 @@
                     </div>
                 </section>
 
+                <!-- Wind Speed Forecast Chart -->
+                <section class="glass-card">
+                    <div class="section-header">
+                        <h2><i class="fas fa-wind"></i> Wind Speed Forecast</h2>
+                        <span class="section-subtitle">Forecasted wind speed (km/h)</span>
+                    </div>
+                    <div class="chart-container large">
+                        <canvas id="windForecastChart"></canvas>
+                    </div>
+                </section>
+
                 <!-- Demand Prediction -->
                 <section class="glass-card">
                     <div class="section-header">
@@ -1062,6 +1121,23 @@
                     <h1><i class="fas fa-city"></i> City Details</h1>
                     <p>Comprehensive city-wise weather analysis</p>
                 </div>
+
+                <!-- Sunrise & Sunset Section -->
+                <section class="glass-card" id="sunriseSunsetSection">
+                    <div class="section-header">
+                        <h2><i class="fas fa-sun"></i> Today's Sunrise &amp; Sunset — All Cities</h2>
+                        <span class="section-subtitle" id="sunriseSunsetDate">Solar times for today</span>
+                    </div>
+                    <div class="cities-filter-bar" style="margin-bottom:1rem;">
+                        <div class="cities-search">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="sunriseSearch" placeholder="Filter cities...">
+                        </div>
+                    </div>
+                    <div id="sunriseSunsetGrid" class="sunrise-sunset-grid">
+                        <!-- Generated dynamically -->
+                    </div>
+                </section>
 
                 <div class="cities-detail-grid" id="citiesDetailGrid" style="display:none">
                     <!-- Generated dynamically -->
@@ -1699,9 +1775,9 @@
                         <div class="legend-item">
                             <div class="legend-color purple"></div>
                             <div class="legend-info">
-                                <strong>PURPLE - KERALA SPECIAL</strong>
-                                <p>Kerala Night ≥24°C</p>
-                                <span class="legend-action">Hot Coastal Nights</span>
+                                <strong>PURPLE - TROPICAL COASTAL SPECIAL</strong>
+                                <p>Coastal Night ≥24°C</p>
+                                <span class="legend-action">Hot Humid Coastal Nights</span>
                             </div>
                         </div>
                     </div>
